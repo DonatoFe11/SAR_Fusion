@@ -1,0 +1,58 @@
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: Dropout_Fusion-all-60 # name of the logger platform experiment
+  group: Dropout_Probability_Search_all # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+  search: grid
+  # n_trials: 5
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+  seed: &seed [42] # random seed to set
+  task: [detection] # task to perform
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [30]
+
+  train:
+    max_epochs: [10]
+    compile: [False]
+    #initial_lr: [0.00001, 0.000005, 0.000001]
+    initial_lr: [0.000001]
+    optimizer: [AdamW]
+    watch_metric: [map]
+  
+  loss:
+
+  model:
+    name: [fusiondetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.7]
+      
+
+  dataset: # parameters depending on the class you defined for the dataset
+    name: [wisard] 
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["facebook/detr-resnet-50"]
+    #folders: [all, vis, vis_ir, ir, vis_sync_ir_all]
+    folders: [all]
+    single_class: [true]
+    modal_dropout: [True] 
+    modal_dropout_probs: [[0.2, 0.2, 0.60]]
+
+  dataloader:
+    num_workers: [12]
+    batch_size: [1]
+  
+  # train_evaluation: # evaluation during training
+  val_evaluation: # evaluation during validation
+    metrics: # no extra metrics except standard evaluator
+
+other_grids:

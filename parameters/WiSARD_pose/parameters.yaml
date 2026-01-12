@@ -1,0 +1,16 @@
+model:
+  name: vit_classifier
+  params:
+    path: &model_path google/vit-base-patch16-224
+    labels: 
+      - running
+      - walking
+      - laying_down
+      - not_defined
+      - seated
+      - stands
+    pretrained_path: checkpoints/vit_classifier_arbmbcwx.safetensors
+
+preprocessor:
+  path: *model_path
+  do_resize: false

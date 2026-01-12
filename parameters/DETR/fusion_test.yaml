@@ -1,0 +1,58 @@
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: SARTFusion # name of the logger platform experiment
+  group: FusionDETR # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+  search: grid
+  # n_trials: 5
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+  seed: &seed [42] # random seed to set
+  task: [detection] # task to perform
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [30]
+    tags: [[Test]]
+  
+  loss:
+
+  model:
+    name: [fusiondetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.5, 0.6, 0.7, 0.8, 0.9]
+      pretrained_path: [checkpoints/fusiondetr_all_tepn3c4l.safetensors]
+      
+
+  dataset: # parameters depending on the class you defined for the dataset
+    name: [wisard] 
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["facebook/detr-resnet-50"]
+    folders: [vis, ir, all]
+    single_class: [true]
+
+  dataloader:
+    num_workers: [0]
+    batch_size: [1]
+  
+  # train_evaluation: # evaluation during training
+  val_evaluation: # evaluation during validation
+    metrics: # no extra metrics except standard evaluator
+
+other_grids:
+  - model:
+      params:
+        pretrained_path: [checkpoints/fusiondetr_vis-a-ir-s_pffks3s9.safetensors]
+  - model:
+      params:
+        pretrained_path: [checkpoints/fusiondetr_vis-ir_2dm72jvg.safetensors]
+  - model:
+      params:
+        pretrained_path: [checkpoints/fusiondetr_vis-s-ir-a_5jkopgg6.safetensors]

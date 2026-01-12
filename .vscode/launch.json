@@ -1,0 +1,140 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Remote Attach",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "."
+                }
+            ]
+        },
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Preprocess for classification",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "preprocess_classification"
+            ]
+        },
+        {
+            "name": "Train on SARD",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "experiment",
+                "--parameters=parameters/SARD_pose/parameters.yaml"
+            ]
+        },
+        {
+            "name": "Simplify Wisard",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "simplify_wisard"
+            ]
+        },
+        {
+            "name": "Tile Wisard",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "tile_wisard"
+            ]
+        },
+        {
+            "name": "Experiment",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "experiment"
+            ]
+        },
+        {
+            "name": "Test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "experiment",
+                "--parameters",
+                "parameters_test.yaml"
+            ]
+        },
+        {
+            "name": "Yolo",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "experiment",
+                "--yolo",
+                "--parameters",
+                "parameters/YOLO/17.yolov10m-VIS.yaml"
+            ]
+        },
+        {
+            "name": "Effdet",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "effdettrain.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "datasets/WiSARD_COCO",
+                "--workers=0",
+                "--batch-size=2",
+                "--output=test",
+                "--save-images",
+                "--num-classes=3",
+            ]
+        },
+        {
+            "name": "Annotate Wisard",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "annotate_wisard"
+            ]
+        },
+    ]
+}

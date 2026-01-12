@@ -1,0 +1,6 @@
+#!/bin/bash
+
+conda init
+conda activate sarfusion
+export TMPDIR=./tmp
+python main.py yolo $@

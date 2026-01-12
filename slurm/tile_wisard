@@ -1,0 +1,15 @@
+#!/bin/bash
+
+#SBATCH -A IscrC_DELIGHT
+#SBATCH -p boost_usr_prod
+#SBATCH --qos normal
+#SBATCH --time 24:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=123000
+#SBATCH --job-name=tile_wisard
+#SBATCH --out=tile_wisard.out
+#SBATCH --err=tile_wisard.out
+
+srun ./slurm/tile_wisard_exe $@

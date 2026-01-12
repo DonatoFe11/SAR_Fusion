@@ -1,0 +1,35 @@
+experiment:
+  name: Fusion_Test_dropout_model_all-60
+  group: Dropout_Probability_Search_Test_all
+
+seed: 42
+task: detection
+
+tracker:
+  ignored_files: "*.bin,*.safetensors"
+  tags: [Test]
+
+loss: {}
+
+model:
+  name: fusiondetr
+  params:
+    id2label:
+      0: person
+    threshold: 0.7
+    pretrained_path: checkpoints/fusion_dropout_model_all-60.safetensors
+
+dataset:
+  name: wisard
+  root: dataset/WiSARD
+  preprocessor:
+    path: "facebook/detr-resnet-50"
+  folders: ir  
+  single_class: true
+
+dataloader:
+  num_workers: 12
+  batch_size: 1
+
+val_evaluation:
+  metrics: {}
