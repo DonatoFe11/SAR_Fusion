@@ -9,7 +9,7 @@ from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr
+from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -43,13 +43,33 @@ def build_model(params):
     if pretrained_path:
         try:
             weights = torch_dict_load(pretrained_path)
-            model.load_state_dict(weights)
-            print(f"Loaded model from {pretrained_path}")
-        except RuntimeError as e:
-            print(f"Error loading model from {pretrained_path}: trying to remove 'model.'")
-            if list(weights.keys())[0].startswith("model."):
-                weights = {k[6:]: v for k, v in weights.items()}
-                model.load_state_dict(weights)
+            model_state = model.state_dict()
+            new_weights = {}
+
+            print(f"DEBUG: Attempting smart load from {pretrained_path}")
+            
+            # --- LOGICA DI MATCHING PER SUFFISSI ---
+            for k_model in model_state.keys():
+                # Prendiamo la parte finale della chiave (es: 'fusion_projections.0.weight')
+                # Rimuoviamo il prefisso 'model.' se presente nel modello attuale
+                suffix = k_model.replace("model.", "") 
+                
+                for k_ckpt in weights.keys():
+                    # Se la chiave del file finisce esattamente come quella che serve a noi
+                    if k_ckpt.endswith(suffix):
+                        new_weights[k_model] = weights[k_ckpt]
+                        break
+            
+            # Carichiamo i pesi rimappati
+            model.load_state_dict(new_weights, strict=False)
+            print(f"✅ Smart Load Successful: {len(new_weights)}/{len(model_state)} layers matched.")
+            
+            # Se mancano molte chiavi, stampiamo un avviso
+            if len(new_weights) < len(model_state) * 0.9:
+                print(f"⚠️ Warning: only {len(new_weights)} keys matched. Check naming conventions.")
+                
+        except Exception as e:
+            print(f"❌ Error during smart loading: {e}")
     return model
 
 
@@ -141,6 +161,9 @@ def build_yolo_v10(
         model = YOLOv10WiSARD(cfg, task="detect").model
     return model
 
+def build_fusion_rt_detr(threshold=0.9, id2label=None):
+    return FusionRTDetr(threshold=threshold, id2label=id2label)
+
 
 MODEL_REGISTRY = {
     "vit_classifier": build_vit_classifier,
@@ -150,4 +173,5 @@ MODEL_REGISTRY = {
     "defdetr": build_deformable_detr,
     "rtdetr": build_rtdetr,
     "fusiondetr": build_fusion_detr,
+    "fusion_rtdetr": build_fusion_rt_detr,
 }

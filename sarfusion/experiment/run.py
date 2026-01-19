@@ -499,6 +499,8 @@ class Run:
                 **self.val_evaluator.compute(),
                 "loss": avg_loss.compute(),
             }
+            
+            print(f"DEBUG: Metrics computed for {phase}: {metrics_dict}")
 
             self.tracker.log_metrics(
                 metrics=metrics_dict,
@@ -533,7 +535,9 @@ class Run:
             filename = self.tracker.local_dir + "/best/model.safetensors"
             with safe_open(filename, framework="pt") as f:
                 weights = {k: f.get_tensor(k) for k in f.keys()}
-            self.model.load_state_dict(weights)
+            self.model.load_state_dict(weights, strict=False)
+            logger.info(f"✅ Best model restored from {filename}")
+
         except FileNotFoundError:
             logger.warning(f"No best model found in {filename}, ensure you are using a pretrained model")
 

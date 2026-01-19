@@ -1,0 +1,44 @@
+experiment:
+  name: RTDETR_Quick_Check
+  group: RTDETR_Investigation
+  continue_with_errors: False
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [1] # Logghiamo ogni immagine per vedere bene le box
+    tags: [[QuickCheck]]
+
+  loss: {}
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      # Usiamo una soglia bassa ma non estrema per vedere se il mAP si conferma
+      threshold: [0.05]
+      # IL PERCORSO DEL TUO MIGLIOR MODELLO
+      pretrained_path: ["checkpoints/fusion_rtdetr_best.safetensors"] 
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    # Testiamo solo sulla modalità FUSION sincronizzata (la più completa)
+    folders: [vis_ir] 
+    single_class: [true]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [1]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

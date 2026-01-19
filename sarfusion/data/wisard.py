@@ -418,62 +418,77 @@ class WiSARDDataset(Dataset):
 
         if item_type == RGB_ITEM:
             img_path, annotation_path = item
-            img = self._load_rgb(img_path)
-            targets = self._load_annotations(annotation_path, img, idx)
-            inputs = self.transform(img, annotations=targets, return_tensors="pt")
-            img = inputs['pixel_values'][0]
+            img_pil = self._load_rgb(img_path)
+            targets = self._load_annotations(annotation_path, img_pil, idx)
+            inputs = self.transform(img_pil, annotations=targets, return_tensors="pt")
+            img_rgb = inputs['pixel_values'][0]  # [3, H, W]
+            
+            # PADDING: Aggiungiamo un canale di zeri per arrivare a 4
+            zeros_ir = torch.zeros((1, img_rgb.shape[1], img_rgb.shape[2]), device=img_rgb.device)
+            img = torch.cat([img_rgb, zeros_ir], dim=0)  # [4, H, W]
+            
             targets = inputs['labels'][0]
             img_path_vis = img_path
+
         elif item_type == IR_ITEM:
             img_path, annotation_path = item
-            img = self._load_ir(img_path)
-            targets = self._load_annotations(annotation_path, img, idx)
-            inputs = self.transform(img, annotations=targets, return_tensors="pt")
+            img_pil = self._load_ir(img_path)
+            targets = self._load_annotations(annotation_path, img_pil, idx)
+            inputs = self.transform(img_pil, annotations=targets, return_tensors="pt")
+            img_ir = inputs['pixel_values'][0][0:1]  # [1, H, W]
+            
+            # PADDING: Aggiungiamo 3 canali di zeri (RGB) per arrivare a 4
+            zeros_rgb = torch.zeros((3, img_ir.shape[1], img_ir.shape[2]), device=img_ir.device)
+            img = torch.cat([zeros_rgb, img_ir], dim=0)  # [4, H, W]
+            
             targets = inputs['labels'][0]
-            img = inputs['pixel_values'][0][0:1]
             img_path_vis = img_path
-        else: # item_type == FUSION_ITEM
+
+        else: # MULTI_MODALITY_ITEM (FUSION)
             (img_path_vis, annotation_path), (img_path_ir, annotation_path_ir) = item
-            img_vis = self._load_rgb(img_path_vis)
-            img_ir = self._load_ir(img_path_ir)
+            img_vis_pil = self._load_rgb(img_path_vis)
+            img_ir_pil = self._load_ir(img_path_ir)
 
-            targets_vis_raw = self._load_annotations(annotation_path, img_vis, idx)
-            targets_ir_raw = self._load_annotations(annotation_path_ir, img_ir, idx)
-
+            targets_vis_raw = self._load_annotations(annotation_path, img_vis_pil, idx)
+            targets_ir_raw = self._load_annotations(annotation_path_ir, img_ir_pil, idx)
 
             if self.modal_dropout:
                 mode = random.choices(['ir', 'rgb', 'fusion'], weights=self.modal_dropout_probs, k=1)[0]
             else:
-                mode = 'fusion'  # default behavior
+                mode = 'fusion'
 
             if mode == 'fusion':
-                # adjust IR to match RGB size for fusion
-                img_vis_processed, img_ir_processed = adapt_ir2rgb(img_vis, img_ir)
-
+                img_vis_processed, img_ir_processed = adapt_ir2rgb(img_vis_pil, img_ir_pil)
                 inputs_vis = self.transform(img_vis_processed, annotations=targets_vis_raw, return_tensors="pt")
-                img_vis_tensor = inputs_vis['pixel_values'][0]  # [3, H, W]
-                targets_vis = inputs_vis['labels'][0]
-
+                img_vis_tensor = inputs_vis['pixel_values'][0]
+                
                 inputs_ir = self.transform(img_ir_processed, annotations=targets_ir_raw, return_tensors="pt")
-                img_ir_tensor = inputs_ir['pixel_values'][0][0:1]  # [1, H, W]
-                targets_ir = inputs_ir['labels'][0]
+                img_ir_tensor = inputs_ir['pixel_values'][0][0:1]
 
                 img = torch.cat([img_vis_tensor, img_ir_tensor], dim=0)  # [4, H, W]
-                targets = targets_vis
+                targets = inputs_vis['labels'][0]
 
             elif mode == 'rgb':
-                inputs_vis = self.transform(img_vis, annotations=targets_vis_raw, return_tensors="pt")
-                img = inputs_vis['pixel_values'][0]  # [3, H, W]
+                inputs_vis = self.transform(img_vis_pil, annotations=targets_vis_raw, return_tensors="pt")
+                img_rgb = inputs_vis['pixel_values'][0]
+                
+                # PADDING: Solo RGB, mettiamo a zero l'IR
+                zeros_ir = torch.zeros((1, img_rgb.shape[1], img_rgb.shape[2]), device=img_rgb.device)
+                img = torch.cat([img_rgb, zeros_ir], dim=0)  # [4, H, W]
                 targets = inputs_vis['labels'][0]
 
             else:  # mode == 'ir'
-                # print("DEBUG: Modal Dropout -> SOLO IR")
                 img_path_vis = img_path_ir
-                inputs_ir = self.transform(img_ir, annotations=targets_ir_raw, return_tensors="pt")
-                img = inputs_ir['pixel_values'][0][0:1]  # [1, H, W]
+                inputs_ir = self.transform(img_ir_pil, annotations=targets_ir_raw, return_tensors="pt")
+                img_ir_tensor = inputs_ir['pixel_values'][0][0:1]
+                
+                # PADDING: Solo IR, mettiamo a zero l'RGB
+                zeros_rgb = torch.zeros((3, img_ir_tensor.shape[1], img_ir_tensor.shape[2]), device=img_ir_tensor.device)
+                img = torch.cat([zeros_rgb, img_ir_tensor], dim=0)  # [4, H, W]
                 targets = inputs_ir['labels'][0]
 
         data_dict = DataDict(pixel_values=img, labels=dict(targets), dims=targets["orig_size"])
+        
         if self.return_path:
             data_dict.path = img_path_vis
 
