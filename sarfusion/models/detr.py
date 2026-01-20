@@ -15,6 +15,7 @@ from sarfusion.utils.structures import LossOutput
 from sarfusion.utils.general import xyxy2xywh
 from sarfusion.models.detr_fusion import DetrFusionForObjectDetection
 from sarfusion.models.rtdetr_fusion import RTDetrFusionForObjectDetection
+from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
 
 
 def convert_detr_predictions(predictions):
@@ -137,4 +138,16 @@ class FusionRTDetr(BaseDetr):
             threshold=threshold,
         )
         # Force the processor to accept 4 channels
+        self.processor.num_channels = 4
+
+class FusionRTDetrCMX(BaseDetr):
+    def __init__(self, id2label, threshold=0.9):
+        super(FusionRTDetrCMX, self).__init__(
+            processor_class=RTDetrImageProcessor,
+            model_class=RTDetrCMXForObjectDetection,
+            pretrained_model_name="PekingU/rtdetr_r50vd", 
+            id2label=id2label,
+            threshold=threshold,
+        )
+        # Forza il processor ad accettare 4 canali (3 RGB + 1 IR)
         self.processor.num_channels = 4

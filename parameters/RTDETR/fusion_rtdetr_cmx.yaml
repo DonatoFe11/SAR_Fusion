@@ -1,0 +1,60 @@
+experiment:
+  # Informazioni per il tracciamento su WandB
+  name: RTDETR_CMX_SOTA_Fusion_vis_ir 
+  group: RTDETR_Investigation 
+  continue_with_errors: False 
+  start_from_grid: 0 
+  start_from_run: 0 
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [30] # Logga un'immagine ogni 30 per monitorare la pulizia delle box
+    tags: [[RTDETR, CMX, MultiScale]]
+
+  train:
+    # Ridotto a 30 epoche per velocizzare training
+    max_epochs: [30] 
+    compile: [False]
+    # Iniziamo con 5e-5 per "svegliare" i moduli di attenzione CMX
+    initial_lr: [0.00005] 
+    optimizer: [AdamW]
+    watch_metric: [map]
+    # ABILITA MIXED PRECISION per 2-3x speedup
+    mixed_precision: [fp16]
+  
+  loss: 
+
+  model:
+    name: [fusion_rtdetr_cmx] # Deve corrispondere al nome nel MODEL_REGISTRY
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01] # Teniamo basso all'inizio per vedere se l'attenzione "aggancia" le persone
+      
+
+  dataset: 
+    name: [wisard] 
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"] 
+    folders: [vis_ir]
+    single_class: [true]
+    # Configurazione Modal Dropout vincente dai tuoi test su DETR
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]] # P(IR)=20%, P(RGB)=20%, P(Fusion)=60%
+
+  dataloader:
+    num_workers: [8]
+    # Aumento batch_size a 4 se hai VRAM sufficiente (12GB)
+    # Se OOM, torna a 2
+    batch_size: [2] 
+  
+  val_evaluation: 
+    metrics: 
+
+other_grids: 

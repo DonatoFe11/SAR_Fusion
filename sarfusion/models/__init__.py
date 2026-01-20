@@ -9,7 +9,7 @@ from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr
+from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrCMX
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -164,6 +164,9 @@ def build_yolo_v10(
 def build_fusion_rt_detr(threshold=0.9, id2label=None):
     return FusionRTDetr(threshold=threshold, id2label=id2label)
 
+def build_fusion_rt_detr_cmx(threshold=0.9, id2label=None):
+    return FusionRTDetrCMX(threshold=threshold, id2label=id2label)
+
 
 MODEL_REGISTRY = {
     "vit_classifier": build_vit_classifier,
@@ -174,4 +177,5 @@ MODEL_REGISTRY = {
     "rtdetr": build_rtdetr,
     "fusiondetr": build_fusion_detr,
     "fusion_rtdetr": build_fusion_rt_detr,
+    "fusion_rtdetr_cmx": build_fusion_rt_detr_cmx,
 }
