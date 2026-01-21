@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Evaluation_Grid
+  name: RTDETR_Final_Evaluation_Grid
   group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
