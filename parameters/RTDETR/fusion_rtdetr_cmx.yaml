@@ -17,8 +17,7 @@ parameters:
     tags: [[RTDETR, CMX, MultiScale]]
 
   train:
-    # Ridotto a 30 epoche per velocizzare training
-    max_epochs: [30] 
+    max_epochs: [10] 
     compile: [False]
     # Iniziamo con 5e-5 per "svegliare" i moduli di attenzione CMX
     initial_lr: [0.00005] 
@@ -52,7 +51,7 @@ parameters:
     num_workers: [8]
     # Aumento batch_size a 4 se hai VRAM sufficiente (12GB)
     # Se OOM, torna a 2
-    batch_size: [2] 
+    batch_size: [4] 
   
   val_evaluation: 
     metrics: 
