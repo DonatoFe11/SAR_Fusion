@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Final_Evaluation_Grid_CMX
+  name: RTDETR_Final_Evaluation_Grid_10epochs
   group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
@@ -14,26 +14,26 @@ parameters:
     tags: [[FinalReport]]
 
   model:
-    name: [fusion_rtdetr_cmx]
+    name: [fusion_rtdetr]
     params:
       id2label:
         0: [person]
       # TESTIAMO SOGLIE MOLTO BASSE PER VEDERE IL VERO POTENZIALE
       threshold: [0.01, 0.02, 0.05, 0.1] 
-      pretrained_path: ["checkpoints/fusion_rtdetr_cmx_best.safetensors"]
-
+      pretrained_path: ["checkpoints/fusion_rtdetr_10epochs.safetensors"]
   dataset:
     name: [wisard]
     root: [dataset/WiSARD]
     preprocessor:
       path: ["PekingU/rtdetr_r50vd"]
-    # CONFRONTO MODALITÀ (Fondamentale per la tua tesi)
+    # CONFRONTO MODALITÀ 
     folders: [vis, ir, vis_ir] 
     single_class: [true]
+    use_tiling: [false]  # Manteniamo il tiling per questa valutazione finale
 
   dataloader:
-    num_workers: [4]
-    batch_size: [1]
+    num_workers: [8]
+    batch_size: [12]
 
   val_evaluation:
     metrics:

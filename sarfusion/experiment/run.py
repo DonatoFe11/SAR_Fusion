@@ -3,6 +3,7 @@ import sys
 import shutil
 from copy import deepcopy
 from safetensors import safe_open
+from collections import defaultdict
 
 import torch
 
@@ -13,6 +14,7 @@ from torchmetrics import MetricCollection
 from tqdm import tqdm
 
 from sarfusion.data.wisard import TEST_FOLDERS, TRAIN_FOLDERS, VAL_FOLDERS, generate_wisard_filelist, get_wisard_folders
+from sarfusion.data.tile_aggregation import aggregate_tile_predictions
 from sarfusion.experiment.yolo import WisardTrainer
 from sarfusion.models.yolov10 import YOLOv10WiSARD
 from sarfusion.utils.structures import LossOutput, WrapperModelOutput
@@ -461,6 +463,11 @@ class Run:
 
         avg_loss = RunningAverage()
 
+        # Rileva se stiamo usando tiling controllando il primo batch
+        use_tiling = False
+        tile_predictions_buffer = defaultdict(list)
+        tile_gt_buffer = {}  # Salva le GT per ogni immagine originale
+        
         tot_steps = 0
         desc = f"{phase} Epoch {epoch}" if epoch is not None else f"{phase}"
         bar = tqdm(
@@ -477,9 +484,35 @@ class Run:
                 # if batch_idx == 100:
                 #     break
                 batch_dict = DataDict(**batch_dict)
+                
+                # Rileva se abbiamo metadati di tiling
+                if batch_idx == 0:
+                    use_tiling = hasattr(batch_dict, 'original_idx') and hasattr(batch_dict, 'quadrant')
+                    if use_tiling:
+                        logger.info("Tile aggregation mode activated for evaluation")
+                        # DEBUG logging commentato - decommentare se serve debugging
+                        # logger.info(f"DEBUG - First batch original_idx: {batch_dict.original_idx}")
+                        # logger.info(f"DEBUG - First batch quadrant: {batch_dict.quadrant}")
+                    # else:
+                    #     logger.info("DEBUG - use_tiling is FALSE - no original_idx/quadrant found")
+                    #     logger.info(f"DEBUG - batch_dict keys: {batch_dict.keys() if hasattr(batch_dict, 'keys') else dir(batch_dict)}")
+                
                 result_dict: WrapperModelOutput = self.model(batch_dict)
-
-                self._update_val_metrics(batch_dict, result_dict, tot_steps)
+                
+                if use_tiling:
+                    # Modalità con tile aggregation
+                    self._accumulate_tile_predictions(
+                        batch_dict, 
+                        result_dict, 
+                        tile_predictions_buffer,
+                        tile_gt_buffer,
+                        tot_steps
+                    )
+                else:
+                    # Modalità standard senza tiling
+                    self._update_val_metrics(batch_dict, result_dict, tot_steps)
+                    self.log_predictions(batch_idx, batch_dict, result_dict, epoch)
+                
                 loss = result_dict.loss if result_dict.loss is not None else 0
                 loss_value = loss.value if isinstance(result_dict.loss, dict) else result_dict.loss
                 avg_loss.update(loss_value)
@@ -493,7 +526,15 @@ class Run:
                     )
 
                 self.global_val_step += 1
-                self.log_predictions(batch_idx, batch_dict, result_dict, epoch)
+            
+            # Se usiamo tiling, processa eventuali predizioni rimanenti nel buffer
+            if use_tiling:
+                logger.info(f"Processing remaining tiles from buffer: {len(tile_predictions_buffer)} images")
+                self._process_remaining_tiles(
+                    tile_predictions_buffer,
+                    tile_gt_buffer,
+                    epoch
+                )
 
             metrics_dict = {
                 **self.val_evaluator.compute(),
@@ -517,6 +558,125 @@ class Run:
                 logger.info(f"{phase} - {k}: {v}")
         logger.info(f"{phase} Loss: {avg_loss.compute()}")
         return metrics_dict
+    
+    def _accumulate_tile_predictions(
+        self,
+        batch_dict: DataDict,
+        result_dict: WrapperModelOutput,
+        tile_predictions_buffer: dict,
+        tile_gt_buffer: dict,
+        tot_steps: int,
+    ):
+        """
+        Accumula le predizioni dei tile per ogni immagine originale.
+        Quando abbiamo tutti i 4 tile, aggrega e aggiorna le metriche.
+        """
+        batch_size = len(batch_dict.original_idx)
+        
+        # DEBUG logging commentato - decommentare se serve debugging dettagliato
+        # if not hasattr(self, '_debug_accumulate_called'):
+        #     self._debug_accumulate_called = True
+        #     logger.info(f"DEBUG _accumulate: batch_size={batch_size}")
+        #     logger.info(f"DEBUG _accumulate: has labels_full={hasattr(batch_dict, 'labels_full')}")
+        #     if hasattr(batch_dict, 'labels_full'):
+        #         logger.info(f"DEBUG _accumulate: labels_full type={type(batch_dict.labels_full)}")
+        #         logger.info(f"DEBUG _accumulate: labels_full[0] type={type(batch_dict.labels_full[0])}")
+        #         logger.info(f"DEBUG _accumulate: labels_full[0] keys={batch_dict.labels_full[0].keys() if isinstance(batch_dict.labels_full[0], dict) else 'not a dict'}")
+        #         if isinstance(batch_dict.labels_full[0], dict) and 'boxes' in batch_dict.labels_full[0]:
+        #             logger.info(f"DEBUG _accumulate: labels_full[0]['boxes'] shape={batch_dict.labels_full[0]['boxes'].shape}")
+        
+        for i in range(batch_size):
+            original_idx = batch_dict.original_idx[i].item()
+            quadrant = batch_dict.quadrant[i].item()
+            
+            # Estrai predizioni per questo tile
+            tile_pred = {
+                'boxes': result_dict.predictions[i]['boxes'],
+                'scores': result_dict.predictions[i]['scores'],
+                'labels': result_dict.predictions[i]['labels'],
+                'quadrant': quadrant,
+            }
+            
+            tile_predictions_buffer[original_idx].append(tile_pred)
+            
+            # Salva le GT COMPLETE dell'immagine originale (non filtrate per tile)
+            if original_idx not in tile_gt_buffer:
+                # Usa labels_full se disponibile (GT complete 640x640), altrimenti fallback
+                if hasattr(batch_dict, 'labels_full'):
+                    tile_gt_buffer[original_idx] = batch_dict.labels_full[i]
+                else:
+                    # Fallback: usa le GT del tile (comportamento vecchio, potenzialmente errato)
+                    logger.warning(f"labels_full not found for image {original_idx}, using tile labels")
+                    tile_gt_buffer[original_idx] = batch_dict.labels[i]
+            
+            # Quando abbiamo tutti i 4 tile, aggrega
+            if len(tile_predictions_buffer[original_idx]) == 4:
+                self._aggregate_and_update_metrics(
+                    original_idx,
+                    tile_predictions_buffer[original_idx],
+                    tile_gt_buffer[original_idx],
+                )
+                # Rimuovi dal buffer
+                del tile_predictions_buffer[original_idx]
+                del tile_gt_buffer[original_idx]
+    
+    def _aggregate_and_update_metrics(
+        self,
+        original_idx: int,
+        tile_predictions: list,
+        ground_truth: dict,
+    ):
+        """
+        Aggrega le predizioni dei 4 tile e aggiorna le metriche.
+        """
+        # DEBUG logging commentato - decommentare se serve debugging dettagliato
+        # if original_idx < 3:
+        #     logger.info(f"DEBUG - Image {original_idx}")
+        #     # Stampa TUTTI i tile e i loro quadrant
+        #     for tile_idx, tile_pred in enumerate(tile_predictions):
+        #         q = tile_pred.get('quadrant', 'MISSING')
+        #         boxes = tile_pred['boxes']
+        #         logger.info(f"DEBUG - tile_idx={tile_idx}, quadrant={q}, num_boxes={len(boxes)}, first_box={boxes[0] if len(boxes) > 0 else 'empty'}")
+        #     gt_boxes = ground_truth.get('boxes', None)
+        #     logger.info(f"DEBUG - GT boxes: {gt_boxes[:2] if gt_boxes is not None and len(gt_boxes) > 0 else 'empty or None'}")
+        
+        # Aggrega le predizioni
+        # Nota: IoU 0.5 è conservativo (alto recall) - preferibile per SAR dove perdere una persona è critico
+        aggregated = aggregate_tile_predictions(tile_predictions, iou_threshold=0.5)
+        
+        # DEBUG logging commentato
+        # if original_idx < 3:
+        #     logger.info(f"DEBUG - Aggregated boxes sample (first 2): {aggregated['boxes'][:2] if len(aggregated['boxes']) > 0 else 'empty'}")
+        
+        # Crea strutture per l'update delle metriche
+        fake_batch = DataDict(labels=[ground_truth])
+        fake_result = WrapperModelOutput(predictions=[aggregated])
+        
+        # Aggiorna le metriche con le predizioni aggregate
+        self._update_metrics(self.val_evaluator, fake_batch, fake_result)
+    
+    def _process_remaining_tiles(
+        self,
+        tile_predictions_buffer: dict,
+        tile_gt_buffer: dict,
+        epoch,
+    ):
+        """
+        Processa eventuali tile rimanenti nel buffer (immagini incomplete).
+        Questo può succedere se il dataset ha un numero di tile non multiplo di 4.
+        """
+        for original_idx, tile_preds in tile_predictions_buffer.items():
+            if len(tile_preds) > 0:
+                logger.warning(
+                    f"Image {original_idx} has only {len(tile_preds)}/4 tiles. "
+                    f"Aggregating available tiles."
+                )
+                # Aggrega comunque con i tile disponibili
+                self._aggregate_and_update_metrics(
+                    original_idx,
+                    tile_preds,
+                    tile_gt_buffer[original_idx],
+                )
 
     def log_predictions(self, batch_idx, batch_dict, result_dict, epoch, sequence_name="predictions"):
         if self.task == "detection":

@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 import random
+from copy import deepcopy
 from PIL import Image, ImageOps
 import cv2
 import numpy as np
@@ -378,7 +379,9 @@ class WiSARDDataset(Dataset):
         image_size=640,
         single_class=False,
         modal_dropout=False,
-        modal_dropout_probs=None
+        modal_dropout_probs=None,
+        use_tiling=False,
+        test_all_tiles=False,  # Nuova opzione per test
     ):
         self.items = build_wisard_items(root, folders)
         if not self.items:
@@ -391,10 +394,24 @@ class WiSARDDataset(Dataset):
         self.single_class = single_class
         self.modal_dropout = modal_dropout
         self.modal_dropout_probs = modal_dropout_probs or [0.2, 0.2, 0.6]  # IR, RGB, Fusion
+        self.use_tiling = use_tiling
+        self.test_all_tiles = test_all_tiles  # Se True, restituisce tutti i 4 tile in fase di test
         if single_class:
             self.id2class = {0: "person"}
+        
+        # Se test_all_tiles è True, moltiplica gli items per 4 (uno per ogni tile)
+        if self.test_all_tiles:
+            expanded_items = []
+            for idx, item in enumerate(self.items):
+                for quadrant in range(4):
+                    expanded_items.append((idx, quadrant, item))
+            self.expanded_items = expanded_items
+        else:
+            self.expanded_items = None
 
     def __len__(self):
+        if self.expanded_items is not None:
+            return len(self.expanded_items)
         return len(self.items)
 
     def _load_rgb(self, img_path):
@@ -412,14 +429,81 @@ class WiSARDDataset(Dataset):
                 target[0] = 0
         targets = yolo_to_coco_annotations(bboxes=targets, image_id=img_id, img_width=img.size[0], img_height=img.size[1])
         return targets
+    
+    def _get_tile(self, img_pil, targets, quadrant):
+        """
+        Ritaglia un quadrante 320x320 da un'immagine 640x640 e sposta le box.
+        targets: dizionario formato COCO {"image_id": ..., "annotations": [...]}
+        """
+        w_orig, h_orig = img_pil.size # 640x640
+        tile_size = w_orig // 2  # 320
+        x_off = (quadrant % 2) * tile_size
+        y_off = (quadrant // 2) * tile_size
+
+        # 1. Ritaglio Immagine PIL
+        img_tile = img_pil.crop((x_off, y_off, x_off + tile_size, y_off + tile_size))
+
+        # 2. Traslazione Box (formato COCO: {"image_id": ..., "annotations": [...]})
+        if targets and "annotations" in targets and len(targets["annotations"]) > 0:
+            new_annotations = []
+            
+            for ann in targets["annotations"]:
+                # COCO bbox format: [x_min, y_min, width, height] in pixel assoluti
+                x_min, y_min, bbox_width, bbox_height = ann["bbox"]
+                
+                # Calcoliamo il centro della box
+                center_x = x_min + bbox_width / 2
+                center_y = y_min + bbox_height / 2
+                
+                # Verifichiamo se il CENTRO cade nel quadrante scelto
+                if x_off <= center_x < x_off + tile_size and y_off <= center_y < y_off + tile_size:
+                    # Trasliamo le coordinate rispetto al tile
+                    new_x_min = x_min - x_off
+                    new_y_min = y_min - y_off
+                    
+                    # Clippiamo le box ai bordi del tile
+                    new_x_min = max(0, new_x_min)
+                    new_y_min = max(0, new_y_min)
+                    new_bbox_width = min(bbox_width, tile_size - new_x_min)
+                    new_bbox_height = min(bbox_height, tile_size - new_y_min)
+                    
+                    new_ann = ann.copy()
+                    new_ann["bbox"] = [new_x_min, new_y_min, new_bbox_width, new_bbox_height]
+                    new_ann["area"] = new_bbox_width * new_bbox_height
+                    new_annotations.append(new_ann)
+            
+            targets["annotations"] = new_annotations
+
+        return img_tile, targets
 
     def __getitem__(self, idx):
-        item_type, item = self.items[idx]
+        # Se test_all_tiles è attivo, gestisci gli expanded_items
+        if self.expanded_items is not None:
+            original_idx, quadrant, item_data = self.expanded_items[idx]
+            item_type, item = item_data
+        else:
+            item_type, item = self.items[idx]
+            # Choose a random quadrant for tiling
+            quadrant = random.randint(0, 3) if self.use_tiling else None
+            original_idx = idx
 
         if item_type == RGB_ITEM:
             img_path, annotation_path = item
             img_pil = self._load_rgb(img_path)
-            targets = self._load_annotations(annotation_path, img_pil, idx)
+            
+            # IMPORTANTE: Resize a 640x640 PRIMA del tiling per coordinate corrette
+            if self.use_tiling:
+                img_pil = img_pil.resize((640, 640))
+            
+            targets = self._load_annotations(annotation_path, img_pil, original_idx)
+            
+            # Salva una deep copy delle GT complete e dell'immagine PRIMA del tiling
+            targets_full = deepcopy(targets) if self.expanded_items is not None else None
+            img_full_for_labels = img_pil.copy() if self.expanded_items is not None else None
+
+            if self.use_tiling:
+                img_pil, targets = self._get_tile(img_pil, targets, quadrant)
+
             inputs = self.transform(img_pil, annotations=targets, return_tensors="pt")
             img_rgb = inputs['pixel_values'][0]  # [3, H, W]
             
@@ -433,7 +517,20 @@ class WiSARDDataset(Dataset):
         elif item_type == IR_ITEM:
             img_path, annotation_path = item
             img_pil = self._load_ir(img_path)
-            targets = self._load_annotations(annotation_path, img_pil, idx)
+            
+            # IMPORTANTE: Resize a 640x640 PRIMA del tiling per coordinate corrette
+            if self.use_tiling:
+                img_pil = img_pil.resize((640, 640))
+            
+            targets = self._load_annotations(annotation_path, img_pil, original_idx)
+            
+            # Salva una deep copy delle GT complete e dell'immagine PRIMA del tiling
+            targets_full = deepcopy(targets) if self.expanded_items is not None else None
+            img_full_for_labels = img_pil.copy() if self.expanded_items is not None else None
+            
+            if self.use_tiling:
+                img_pil, targets = self._get_tile(img_pil, targets, quadrant)
+                
             inputs = self.transform(img_pil, annotations=targets, return_tensors="pt")
             img_ir = inputs['pixel_values'][0][0:1]  # [1, H, W]
             
@@ -449,8 +546,22 @@ class WiSARDDataset(Dataset):
             img_vis_pil = self._load_rgb(img_path_vis)
             img_ir_pil = self._load_ir(img_path_ir)
 
-            targets_vis_raw = self._load_annotations(annotation_path, img_vis_pil, idx)
-            targets_ir_raw = self._load_annotations(annotation_path_ir, img_ir_pil, idx)
+            # IMPORTANTE: Resize a 640x640 PRIMA del tiling per coordinate corrette
+            if self.use_tiling:
+                img_vis_pil = img_vis_pil.resize((640, 640))
+                img_ir_pil = img_ir_pil.resize((640, 640))
+
+            targets_vis_raw = self._load_annotations(annotation_path, img_vis_pil, original_idx)
+            targets_ir_raw = self._load_annotations(annotation_path_ir, img_ir_pil, original_idx)
+            
+            # Salva una deep copy delle GT complete E dell'immagine PRIMA del tiling
+            targets_full = deepcopy(targets_vis_raw) if self.expanded_items is not None else None
+            img_full_for_labels = img_vis_pil.copy() if self.expanded_items is not None else None
+
+            if self.use_tiling:
+                img_vis_pil, targets_vis_raw = self._get_tile(img_vis_pil, targets_vis_raw, quadrant)
+                # Processiamo anche l'IR con gli stessi targets (sincronizzati)
+                img_ir_pil, targets_ir_raw = self._get_tile(img_ir_pil, targets_ir_raw, quadrant)
 
             if self.modal_dropout:
                 mode = random.choices(['ir', 'rgb', 'fusion'], weights=self.modal_dropout_probs, k=1)[0]
@@ -491,6 +602,24 @@ class WiSARDDataset(Dataset):
         
         if self.return_path:
             data_dict.path = img_path_vis
+        
+        # Aggiungi metadati per tracciare i tile in fase di test
+        if self.expanded_items is not None:
+            data_dict.original_idx = original_idx
+            data_dict.quadrant = quadrant
+            data_dict.tile_size = self.image_size // 2  # 640//2 = 320
+            # Aggiungi le GT complete dell'immagine originale per l'evaluation
+            if targets_full is not None and img_full_for_labels is not None:
+                # Trasforma le GT usando l'immagine ORIGINALE (non dummy!) per normalizzare correttamente
+                inputs_full = self.transform(img_full_for_labels, annotations=targets_full, return_tensors="pt")
+                # Converti BatchFeature a dict normale per evitare problemi
+                labels_full_raw = inputs_full['labels'][0]
+                if hasattr(labels_full_raw, 'data'):
+                    data_dict.labels_full = dict(labels_full_raw.data)
+                elif hasattr(labels_full_raw, 'keys'):
+                    data_dict.labels_full = {k: labels_full_raw[k] for k in labels_full_raw.keys()}
+                else:
+                    data_dict.labels_full = dict(labels_full_raw)
 
         return data_dict
     
@@ -500,13 +629,23 @@ class WiSARDDataset(Dataset):
         labels = [item["labels"] for item in batch]
         dims = [item["dims"] for item in batch]
 
-        batch = {}
-        batch["pixel_values"] = encoding["pixel_values"]
-        batch["pixel_mask"] = encoding["pixel_mask"]
-        batch["labels"] = labels
-        batch["dims"] = dims
+        result = {}
+        result["pixel_values"] = encoding["pixel_values"]
+        result["pixel_mask"] = encoding["pixel_mask"]
+        result["labels"] = labels
+        result["dims"] = dims
+        
+        # Aggiungi metadati per tiling se presenti
+        if "original_idx" in batch[0]:
+            result["original_idx"] = torch.tensor([item["original_idx"] for item in batch])
+            result["quadrant"] = torch.tensor([item["quadrant"] for item in batch])
+            result["tile_size"] = batch[0]["tile_size"]  # Stesso per tutti
+        
+        # Aggiungi labels_full se presenti
+        if "labels_full" in batch[0]:
+            result["labels_full"] = [item["labels_full"] for item in batch]
 
-        return batch
+        return result
 
 def img2label_paths(img_paths):
     """Define label paths as a function of image paths."""

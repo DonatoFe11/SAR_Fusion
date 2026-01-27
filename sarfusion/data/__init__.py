@@ -56,7 +56,11 @@ def get_train_val_test_params(name, dataset_params):
             "folders": train_folders,
         }
         val_dataset_params = {**dataset_params, "folders": val_folders}
-        test_dataset_params = {**dataset_params, "folders": test_folders}
+        test_dataset_params = {
+            **dataset_params, 
+            "folders": test_folders,
+            "test_all_tiles": True if dataset_params.get("use_tiling", False) else False,
+        }
     else:
         raise ValueError(f"Unknown dataset name: {name}")
     return train_dataset_params, val_dataset_params, test_dataset_params

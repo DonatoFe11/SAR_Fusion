@@ -49,16 +49,33 @@ def build_model(params):
             print(f"DEBUG: Attempting smart load from {pretrained_path}")
             
             # --- LOGICA DI MATCHING PER SUFFISSI ---
+            def normalize_key(key):
+                """Normalizza una chiave rimuovendo tutti i prefissi comuni"""
+                # Rimuovi tutti i prefissi "model."
+                while key.startswith("model."):
+                    key = key[6:]
+                # Rimuovi "decoder." prefix (checkpoint ha decoder.bbox_embed, modello ha bbox_embed)
+                if key.startswith("decoder."):
+                    key = key[8:]
+                return key
+            
+            # Crea un dizionario inverso: suffix normalizzato -> chiave checkpoint
+            ckpt_suffix_to_key = {}
+            for k_ckpt in weights.keys():
+                suffix = normalize_key(k_ckpt)
+                ckpt_suffix_to_key[suffix] = k_ckpt
+            
             for k_model in model_state.keys():
-                # Prendiamo la parte finale della chiave (es: 'fusion_projections.0.weight')
-                # Rimuoviamo il prefisso 'model.' se presente nel modello attuale
-                suffix = k_model.replace("model.", "") 
+                # Prendiamo la parte finale della chiave normalizzata
+                suffix = normalize_key(k_model)
                 
-                for k_ckpt in weights.keys():
-                    # Se la chiave del file finisce esattamente come quella che serve a noi
-                    if k_ckpt.endswith(suffix):
+                if suffix in ckpt_suffix_to_key:
+                    k_ckpt = ckpt_suffix_to_key[suffix]
+                    # Verifica che le shape corrispondano
+                    if weights[k_ckpt].shape == model_state[k_model].shape:
                         new_weights[k_model] = weights[k_ckpt]
-                        break
+                    else:
+                        print(f"⚠️ Shape mismatch for {k_model}: ckpt={weights[k_ckpt].shape}, model={model_state[k_model].shape}")
             
             # Carichiamo i pesi rimappati
             model.load_state_dict(new_weights, strict=False)
@@ -66,7 +83,12 @@ def build_model(params):
             
             # Se mancano molte chiavi, stampiamo un avviso
             if len(new_weights) < len(model_state) * 0.9:
-                print(f"⚠️ Warning: only {len(new_weights)} keys matched. Check naming conventions.")
+                missing = len(model_state) - len(new_weights)
+                print(f"⚠️ Warning: {missing} keys not matched. Check naming conventions.")
+                # Stampa le prime 5 chiavi mancanti
+                matched_keys = set(new_weights.keys())
+                missing_keys = [k for k in model_state.keys() if k not in matched_keys]
+                print(f"   First 5 missing: {missing_keys[:5]}")
                 
         except Exception as e:
             print(f"❌ Error during smart loading: {e}")

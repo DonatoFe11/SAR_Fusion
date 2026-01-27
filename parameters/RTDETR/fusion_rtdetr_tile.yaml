@@ -1,0 +1,51 @@
+experiment:
+  name: RTDETR_Tile_Fusion_Training_vis_ir_10epochs
+  group: RTDETR_Investigation 
+  continue_with_errors: False 
+  start_from_grid: 0 
+  start_from_run: 0 
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+
+  train:
+    max_epochs: [10] 
+    compile: [False]
+    initial_lr: [0.00002] # Leggermente alzato per il nuovo inizio
+    optimizer: [AdamW]
+    watch_metric: [map]
+  
+  loss:
+
+  model:
+    name: [fusion_rtdetr] 
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01] # Teniamo basso per monitorare WandB
+
+  dataset: 
+    name: [wisard] 
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"] 
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]] 
+    use_tiling: [true]  # Abilitiamo il tiling per questa configurazione
+
+  dataloader:
+    num_workers: [8] 
+    batch_size: [4] 
+  
+  val_evaluation: 
+    metrics: 
+
+other_grids:
