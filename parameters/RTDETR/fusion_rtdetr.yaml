@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Fusion_Training_vis_ir
+  name: RTDETR_Fusion_Training_vis_ir_10epochs
   group: RTDETR_Investigation 
   continue_with_errors: False 
   start_from_grid: 0 
@@ -15,7 +15,7 @@ parameters:
     val_image_log_frequency: [50]
 
   train:
-    max_epochs: [50] 
+    max_epochs: [10] 
     compile: [False]
     initial_lr: [0.00002] # Leggermente alzato per il nuovo inizio
     optimizer: [AdamW]
@@ -39,6 +39,7 @@ parameters:
     single_class: [true]
     modal_dropout: [true]
     modal_dropout_probs: [[0.2, 0.2, 0.6]] 
+    use_tiling: [false] 
 
   dataloader:
     num_workers: [8] 
