@@ -179,8 +179,14 @@ class RTDetrCMXForObjectDetection(RTDetrForObjectDetection):
         # Caricamento Backbone
         rgb_w = {k.replace("model.backbone.", ""): v for k, v in std.state_dict().items() if "model.backbone" in k}
         instance.model.backbone.rgb_backbone.load_state_dict(rgb_w, strict=False)
+
+        # ---- IR backbone (media sui canali per il primo layer) ----
         ir_w = copy.deepcopy(rgb_w)
-        k = "model.embedder.embedder.0.convolution.weight"
-        if k in ir_w: ir_w[k] = ir_w[k].mean(dim=1, keepdim=True)
+        for k_pt in list(ir_w.keys()):
+            # Se è il primo layer convoluzionale (3 in -> N out), facciamo la media
+            if ir_w[k_pt].dim() == 4 and ir_w[k_pt].shape[1] == 3:
+                ir_w[k_pt] = ir_w[k_pt].mean(dim=1, keepdim=True)
+                print(f"✅ Converted IR stem: {k_pt}")
+
         instance.model.backbone.ir_backbone.load_state_dict(ir_w, strict=False)
         return instance

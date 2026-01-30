@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Quick_Check
+  name: RTDETR_Final_Evaluation_Grid_CMX
   group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
@@ -10,20 +10,18 @@ parameters:
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
-    val_image_log_frequency: [1] # Logghiamo ogni immagine per vedere bene le box
-    tags: [[QuickCheck]]
-
-  loss: {}
+    val_image_log_frequency: [50] # Logghiamo ogni immagine per vedere bene le box
+    tags: [[FinalReport]]
 
   model:
-    name: [fusion_rtdetr]
+    name: [fusion_rtdetr_cmx]
     params:
       id2label:
         0: [person]
       # Usiamo una soglia bassa ma non estrema per vedere se il mAP si conferma
-      threshold: [0.05]
+      threshold: [0.1]
       # IL PERCORSO DEL TUO MIGLIOR MODELLO
-      pretrained_path: ["checkpoints/fusion_rtdetr_best.safetensors"] 
+      pretrained_path: ["checkpoints/fusion_rtdetr_cmx_best.safetensors"] 
 
   dataset:
     name: [wisard]
@@ -33,10 +31,11 @@ parameters:
     # Testiamo solo sulla modalità FUSION sincronizzata (la più completa)
     folders: [vis_ir] 
     single_class: [true]
+    use_tiling: [false]  # Disabilitiamo il tiling per questa valutazione finale
 
   dataloader:
-    num_workers: [4]
-    batch_size: [1]
+    num_workers: [8]
+    batch_size: [12]
 
   val_evaluation:
     metrics:

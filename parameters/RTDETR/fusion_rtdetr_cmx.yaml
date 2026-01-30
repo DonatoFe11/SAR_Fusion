@@ -17,10 +17,10 @@ parameters:
     tags: [[RTDETR, CMX, MultiScale]]
 
   train:
-    max_epochs: [10] 
+    max_epochs: [25] 
     compile: [False]
     # Iniziamo con 5e-5 per "svegliare" i moduli di attenzione CMX
-    initial_lr: [0.00005] 
+    initial_lr: [0.0001] 
     optimizer: [AdamW]
     watch_metric: [map]
     # ABILITA MIXED PRECISION per 2-3x speedup
@@ -51,7 +51,7 @@ parameters:
     num_workers: [8]
     # Aumento batch_size a 4 se hai VRAM sufficiente (12GB)
     # Se OOM, torna a 2
-    batch_size: [4] 
+    batch_size: [2] 
   
   val_evaluation: 
     metrics: 
