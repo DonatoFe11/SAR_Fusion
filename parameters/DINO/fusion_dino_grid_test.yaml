@@ -1,0 +1,42 @@
+experiment:
+  name: DINO_FAM_Fusion_Final_Evaluation_Grid_2.0
+  group: DINO_Investigation
+  continue_with_errors: False
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[FinalReport]]
+
+  model:
+    name: [fusion_dino]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01, 0.05, 0.1]
+      pretrained_path: ["checkpoints/fusion_dino_fam_10ep.safetensors"]
+      num_feature_levels: [4]
+      use_fam: [true]  # IMPORTANT: Must match the checkpoint trained with FAM
+  
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["SenseTime/deformable-detr"]
+    folders: [vis, ir, vis_ir]
+    single_class: [true]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [2]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

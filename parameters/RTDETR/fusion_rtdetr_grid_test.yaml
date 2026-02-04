@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Final_Evaluation_Grid_CMX
+  name: RTDETR_FAM_Final_Evaluation_Grid
   group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
@@ -14,13 +14,15 @@ parameters:
     tags: [[FinalReport]]
 
   model:
-    name: [fusion_rtdetr_cmx]
+    name: [fusion_rtdetr]
     params:
       id2label:
         0: [person]
       # TESTIAMO SOGLIE MOLTO BASSE PER VEDERE IL VERO POTENZIALE
-      threshold: [0.01, 0.02, 0.05, 0.1] 
-      pretrained_path: ["checkpoints/fusion_rtdetr_cmx_best.safetensors"]
+      threshold: [0.01, 0.05, 0.1]
+      use_fam: [true]  
+      pretrained_path: ["checkpoints/fusion_rtdetr_fam_best.safetensors"]
+
   dataset:
     name: [wisard]
     root: [dataset/WiSARD]

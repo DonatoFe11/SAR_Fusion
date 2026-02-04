@@ -156,3 +156,5 @@ test
 
 nano .gitignore
 Miniconda3-latest-Linux-x86_64.sh
+
+external/

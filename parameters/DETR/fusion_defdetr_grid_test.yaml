@@ -1,0 +1,41 @@
+experiment:
+  name: DeformableDetr_Final_Evaluation_Grid
+  group: DeformableDetr_Investigation
+  continue_with_errors: False
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50] 
+    tags: [[FinalReport]]
+
+  model:
+    name: [fusion_defdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.05, 0.1] 
+      pretrained_path: ["checkpoints/fusion_defdetr_best.safetensors"]  # Specify epoch 1 checkpoint
+      num_feature_levels: [4]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["SenseTime/deformable-detr"]
+    folders: [vis_ir] 
+    single_class: [true]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [4]
+  
+  val_evaluation:
+    metrics:
+
+other_grids: []

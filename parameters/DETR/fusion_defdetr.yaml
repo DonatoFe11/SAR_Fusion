@@ -1,0 +1,53 @@
+experiment:
+  name: FusionDeformableDETR_Training_vis_ir_2.0
+  group: FusionDeformableDETR_Investigation
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+
+  train:
+    max_epochs: [5]  # Ridotto da 10 per evitare overfitting, converge già a epoca 1-2
+    compile: [False]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map]    
+    precision: ["fp16"]  # Mixed precision FP16 per speedup (weighted fusion dovrebbe essere più stabile)  
+  
+  loss:
+
+  model:
+    name: [fusion_defdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      num_feature_levels: [4]  # Channel concat: token count invariato, efficiente
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["SenseTime/deformable-detr"]
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [1]  # Channel concat consente batch_size più alto  
+  
+  val_evaluation:
+    metrics:
+
+other_grids:

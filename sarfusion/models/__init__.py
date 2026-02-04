@@ -2,6 +2,8 @@ import tempfile
 
 from copy import deepcopy
 from enum import StrEnum
+import torch
+import torch.nn as nn
 from transformers import AutoModel, ViTForImageClassification
 
 from sarfusion.experiment.utils import WrapperModule
@@ -9,7 +11,7 @@ from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrCMX
+from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrCMX, FusionDeformableDetr, FusionDino
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -183,11 +185,28 @@ def build_yolo_v10(
         model = YOLOv10WiSARD(cfg, task="detect").model
     return model
 
-def build_fusion_rt_detr(threshold=0.9, id2label=None):
-    return FusionRTDetr(threshold=threshold, id2label=id2label)
+def build_fusion_rt_detr(threshold=0.9, id2label=None, use_fam=False):
+    return FusionRTDetr(threshold=threshold, id2label=id2label, use_fam=use_fam)
 
 def build_fusion_rt_detr_cmx(threshold=0.9, id2label=None):
     return FusionRTDetrCMX(threshold=threshold, id2label=id2label)
+
+
+def build_fusion_deformable_detr(threshold=0.9, id2label=None, num_feature_levels=None):
+    return FusionDeformableDetr(
+        threshold=threshold, 
+        id2label=id2label,
+        num_feature_levels=num_feature_levels,
+    )
+
+
+def build_fusion_dino(threshold=0.9, id2label=None, num_feature_levels=None, use_fam=False):
+    return FusionDino(
+        threshold=threshold,
+        id2label=id2label,
+        num_feature_levels=num_feature_levels,
+        use_fam=use_fam,
+    )
 
 
 MODEL_REGISTRY = {
@@ -200,4 +219,6 @@ MODEL_REGISTRY = {
     "fusiondetr": build_fusion_detr,
     "fusion_rtdetr": build_fusion_rt_detr,
     "fusion_rtdetr_cmx": build_fusion_rt_detr_cmx,
+    "fusion_defdetr": build_fusion_deformable_detr,
+    "fusion_dino": build_fusion_dino,
 }

@@ -1,0 +1,54 @@
+experiment:
+  name: DINO_FAM_Fusion_Training_vis_ir_2.0
+  group: DINO_Investigation
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+
+  train:
+    max_epochs: [10]  
+    compile: [False]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map]
+    precision: ["fp16"]  # Mixed precision for speed
+  
+  loss:
+
+  model:
+    name: [fusion_dino]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      num_feature_levels: [4]  # Full multi-scale with channel concat
+      use_fam: [true]  # Enable FAM for fusion
+      
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["SenseTime/deformable-detr"]  # DINO uses same processor
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [1]  # Start with 1, increase if memory allows
+  
+  val_evaluation:
+    metrics:
+
+other_grids:
