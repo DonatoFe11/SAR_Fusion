@@ -13,31 +13,31 @@ from transformers.models.rt_detr.modeling_rt_detr import (
 
 # ============================================================
 # 1. FEATURE ALIGNMENT MODULE (FAM)
-#    - RGB guida la predizione degli offset spaziali
-#    - Deformable Conv su IR per allineamento esplicito
-#    - Risolve il problema del misalignment RGB-IR
+#   - RGB guides spatial offset prediction for IR
+#   - Deformable Conv on IR for explicit alignment
+#   - Solves RGB-IR misalignment issue
 # ============================================================
 class FeatureAlignmentModule(nn.Module):
     """
-    Feature Alignment Module usando Deformable Convolution.
-    RGB features guidano l'allineamento di IR features.
+    Feature Alignment Module using Deformable Convolution.
+    RGB features guide the spatial alignment of IR features.
     """
     def __init__(self, in_channels):
         super().__init__()
         
-        # Predice offset e mask per deformable conv
+        # Predicts offset and mask for deformable conv
         # RGB features → offset prediction
         self.offset_conv = nn.Conv2d(
-            in_channels * 2,  # RGB + IR concatenati
-            27,  # 3x3 kernel: 2 offset (x,y) * 9 punti + 9 mask
+            in_channels * 2,  # RGB + IR concatenated
+            27,  # 3x3 kernel: 2 offset (x,y) * 9 points + 9 mask
             kernel_size=3,
             padding=1
         )
         
-        # Deformable convolution su IR features
+        # Deformable convolution on IR features
         self.deform_conv = DeformConv2d(
             in_channels,
-            in_channels,
+            in_channels,  # output same as input
             kernel_size=3,
             padding=1
         )
@@ -53,12 +53,12 @@ class FeatureAlignmentModule(nn.Module):
             ir_feat: [B, C, H, W] IR features
             
         Returns:
-            ir_aligned: [B, C, H, W] IR features allineate a RGB
+            ir_aligned: [B, C, H, W] IR features aligned to RGB
         """
-        # Concatena RGB e IR per predire offset
+        # Concatenate RGB and IR to predict offset
         concat = torch.cat([rgb_feat, ir_feat], dim=1)  # [B, 2C, H, W]
         
-        # Predici offset e modulation scalars
+        # Predict offset and modulation scalars
         out = self.offset_conv(concat)  # [B, 27, H, W]
         
         # Split: 18 channels for offsets (x,y for 9 points), 9 for mask
@@ -73,10 +73,10 @@ class FeatureAlignmentModule(nn.Module):
 
 # ============================================================
 # 2. FUSION BACKBONE (RT-DETR + FAM)
-#    - RGB e IR processati separatamente
-#    - FAM allinea IR a RGB
-#    - Fusione ADDITIVA sulle feature map allineate
-#    - Geometria preservata
+#    - RGB and IR processed separately
+#    - FAM aligns IR to RGB
+#    - Additive fusion on aligned feature maps
+#    - Geometry preserved
 # ============================================================
 class RTDetrFusionBackbone(nn.Module):
     def __init__(self, config: RTDetrConfig, use_fam: bool = False):
@@ -94,16 +94,16 @@ class RTDetrFusionBackbone(nn.Module):
 
         self._adapt_ir_backbone()
         
-        # Feature Alignment Modules - opzionali
+        # Feature Alignment Modules - optional
         self.use_fam = use_fam
-        # Inizializzati lazy al primo forward se use_fam=True
-        # Verranno creati quando conosciamo i canali effettivi
+        # Initialized lazily on first forward if use_fam=True
+        # Will be created when we know the actual channels
         self.fam_modules = None if use_fam else False  # False = disabled
 
     def _adapt_ir_backbone(self):
         """
-        Adatta i pesi RGB al caso IR (1 canale)
-        facendo la media sui canali.
+        Adapts RGB weights to IR case (1 channel)
+        by averaging across channels.
         """
         for module in self.ir_backbone.modules():
             if isinstance(module, nn.Conv2d) and module.in_channels == 3:
@@ -134,7 +134,7 @@ class RTDetrFusionBackbone(nn.Module):
             rgb_feats = self.rgb_backbone(pixel_values[:, :3], pixel_mask)
             ir_feats  = self.ir_backbone(pixel_values[:, 3:], pixel_mask)
 
-            # Modalità con FAM (Feature Alignment Module)
+            # Mode with FAM (Feature Alignment Module)
             if self.use_fam:
                 # Initialize FAM modules on first forward (lazy init)
                 if self.fam_modules is None:
@@ -153,7 +153,7 @@ class RTDetrFusionBackbone(nn.Module):
 
                 return fused_feats
             
-            # Modalità base: fusione diretta senza allineamento
+            # Base mode: direct fusion without alignment
             else:
                 fused_feats = []
                 for (r_feat, r_mask), (i_feat, _) in zip(rgb_feats, ir_feats):
@@ -166,7 +166,7 @@ class RTDetrFusionBackbone(nn.Module):
 
 
 # ============================================================
-# 2. RT-DETR MODEL (NO forward override!)
+# 3. RT-DETR MODEL (NO forward override!)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
     def __init__(self, config: RTDetrConfig, use_fam: bool = False):
@@ -176,30 +176,30 @@ class RTDetrFusionModel(RTDetrModel):
 
 
 # ============================================================
-# 3. OBJECT DETECTION WRAPPER
+# 4. OBJECT DETECTION WRAPPER
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
     def __init__(self, config: RTDetrConfig, use_fam: bool = False):
-        # Trick: inizializziamo come RGB standard
+        # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
         super().__init__(tmp_cfg)
 
-        # Salviamo le teste originali
+        # Save original heads
         saved_class_embed = self.class_embed
         saved_bbox_embed = self.bbox_embed
 
-        # Sostituiamo il modello
+        # Replace the model
         self.model = RTDetrFusionModel(config, use_fam=use_fam)
 
-        # Ripristiniamo le teste nel decoder
+        # Restore heads in decoder
         self.model.decoder.class_embed = saved_class_embed
         self.model.decoder.bbox_embed = saved_bbox_embed
         self.config = config
         self.use_fam = use_fam
 
     def load_state_dict(self, state_dict, strict=True):
-        # Caricamento permissivo (necessario per IR)
+        # Permissive loading (necessary for IR)
         return super().load_state_dict(state_dict, strict=False)
 
     @classmethod
@@ -211,7 +211,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         ignore_mismatched_sizes=True,
         use_fam=False,
     ):
-        # Modello RT-DETR standard
+        # Standard RT-DETR model
         base = RTDetrForObjectDetection.from_pretrained(
             pretrained_model_name,
             id2label=id2label,
@@ -223,7 +223,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         config.num_channels = 4
         instance = cls(config, use_fam=use_fam)
 
-        # Carichiamo tutto (decoder, encoder, ecc.)
+        # Load everything (decoder, encoder, etc.)
         instance.load_state_dict(base.state_dict())
 
         # ---- RGB backbone ----
@@ -237,7 +237,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             rgb_w, strict=False
         )
 
-        # ---- IR backbone (media sui canali) ----
+        # ---- IR backbone (average across channels) ----
         ir_w = copy.deepcopy(rgb_w)
         for k in list(ir_w.keys()):
             if ir_w[k].dim() == 4 and ir_w[k].shape[1] == 3:
