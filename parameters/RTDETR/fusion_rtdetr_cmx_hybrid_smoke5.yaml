@@ -1,0 +1,53 @@
+experiment:
+  # Smoke test breve per verificare stabilita' e trend metriche
+  name: RTDETR_CMX_Hybrid_Fusion_vis_ir_smoke5
+  group: RTDETR_Investigation_Hybrid
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [30]
+    tags: [[RTDETR, CMX_Hybrid, FAM, PositionalEncoding, Smoke5]]
+
+  train:
+    max_epochs: [5]
+    compile: [False]
+    initial_lr: [0.00005]
+    optimizer: [AdamW]
+    watch_metric: [map]
+    gradient_clip_norm: [0.5]
+    precision: [bf16]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr_cmx_hybrid]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [false]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [2]
+
+  val_evaluation:
+    metrics:
+
+other_grids:

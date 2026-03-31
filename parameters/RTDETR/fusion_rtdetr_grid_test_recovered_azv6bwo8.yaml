@@ -1,0 +1,40 @@
+experiment:
+  name: RTDETR_FAM_Test
+  group: RTDETR_Investigation
+  continue_with_errors: False
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[FinalReport]]
+
+  model:
+    name: [fusion_rtdetr_historical]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      pretrained_path: ["checkpoints/fusion_rtdetr_fam_best.safetensors"]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    single_class: [true]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

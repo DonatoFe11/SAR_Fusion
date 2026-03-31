@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Fusion_Training_vis_ir_10epochs
+  name: RTDETR_FAM_Fusion_Training_vis_ir
   group: RTDETR_Investigation 
   continue_with_errors: False 
   start_from_grid: 0 
@@ -29,6 +29,7 @@ parameters:
       id2label:
         0: [person]
       threshold: [0.01] # Teniamo basso per monitorare WandB
+      use_fam: [true]
 
   dataset: 
     name: [wisard] 

@@ -15,7 +15,9 @@ from sarfusion.utils.structures import LossOutput
 from sarfusion.utils.general import xyxy2xywh
 from sarfusion.models.detr_fusion import DetrFusionForObjectDetection
 from sarfusion.models.rtdetr_fusion import RTDetrFusionForObjectDetection
+from sarfusion.models.rtdetr_fusion_fam import RTDetrFusionForObjectDetection as RTDetrFusionHistoricalForObjectDetection
 from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
+from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
 from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
 from sarfusion.models.dino_fusion import DinoFusionForObjectDetection
 
@@ -146,6 +148,20 @@ class FusionRTDetr(BaseDetr):
         self.processor.num_channels = 4
         self.use_fam = use_fam
 
+
+class FusionRTDetrHistorical(BaseDetr):
+    """Historical RT-DETR FAM implementation (lazy FAM init in backbone forward)."""
+    def __init__(self, id2label, threshold=0.9):
+        super(FusionRTDetrHistorical, self).__init__(
+            processor_class=RTDetrImageProcessor,
+            model_class=RTDetrFusionHistoricalForObjectDetection,
+            pretrained_model_name="PekingU/rtdetr_r50vd",
+            id2label=id2label,
+            threshold=threshold,
+        )
+        # Force the processor to accept 4 channels
+        self.processor.num_channels = 4
+
 class FusionRTDetrCMX(BaseDetr):
     def __init__(self, id2label, threshold=0.9):
         super(FusionRTDetrCMX, self).__init__(
@@ -156,6 +172,18 @@ class FusionRTDetrCMX(BaseDetr):
             threshold=threshold,
         )
         # Forza il processor ad accettare 4 canali (3 RGB + 1 IR)
+        self.processor.num_channels = 4
+
+class FusionRTDetrCMXHybrid(BaseDetr):
+    def __init__(self, id2label, threshold=0.9):
+        super(FusionRTDetrCMXHybrid, self).__init__(
+            processor_class=RTDetrImageProcessor,
+            model_class=RTDetrCMXHybridForObjectDetection,
+            pretrained_model_name="PekingU/rtdetr_r50vd", 
+            id2label=id2label,
+            threshold=threshold,
+        )
+        # Forza il processor ad accettare 4 canali
         self.processor.num_channels = 4
 
 

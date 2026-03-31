@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_FAM_Final_Evaluation_Grid
+  name: RTDETR_Final_Evaluation_Grid_CMX_Hybrid
   group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
@@ -14,14 +14,14 @@ parameters:
     tags: [[FinalReport]]
 
   model:
-    name: [fusion_rtdetr]
+    name: [fusion_rtdetr_cmx_hybrid]
     params:
       id2label:
         0: [person]
       # TESTIAMO SOGLIE MOLTO BASSE PER VEDERE IL VERO POTENZIALE
       threshold: [0.01, 0.05, 0.1]
-      use_fam: [true]  
-      pretrained_path: ["checkpoints/fusion_rtdetr_fam_best.safetensors"]
+      # use_fam è già abilitato di default nel modello, non serve specificarlo qui
+      pretrained_path: ["checkpoints/fusion_rtdetr_cmx_hybrid.safetensors"]
 
   dataset:
     name: [wisard]
@@ -31,7 +31,7 @@ parameters:
     # CONFRONTO MODALITÀ 
     folders: [vis, ir, vis_ir] 
     single_class: [true]
-    use_tiling: [false]  # Manteniamo il tiling per questa valutazione finale
+    use_tiling: [false]  # Disattiviamo il tiling per questa valutazione finale
 
   dataloader:
     num_workers: [8]
