@@ -94,8 +94,11 @@ class RTDetrFusionBackbone(nn.Module):
 
         self._adapt_ir_backbone()
         
+        # Feature Alignment Modules - optional
         self.use_fam = use_fam
         if self.use_fam:
+            # Build FAM eagerly so its parameters are visible to the optimizer
+            # before the first training step.
             feature_channels = getattr(config, "encoder_in_channels", None)
             if feature_channels is None:
                 raise ValueError(

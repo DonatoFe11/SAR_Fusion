@@ -15,7 +15,7 @@ from sarfusion.utils.structures import LossOutput
 from sarfusion.utils.general import xyxy2xywh
 from sarfusion.models.detr_fusion import DetrFusionForObjectDetection
 from sarfusion.models.rtdetr_fusion import RTDetrFusionForObjectDetection
-from sarfusion.models.rtdetr_fusion_fam import RTDetrFusionForObjectDetection as RTDetrFusionHistoricalForObjectDetection
+from sarfusion.models.rtdetr_fusion_fam import RTDetrFusionForObjectDetection as RTDetrFusionFAMForObjectDetection
 from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
 from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
 from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
@@ -149,12 +149,12 @@ class FusionRTDetr(BaseDetr):
         self.use_fam = use_fam
 
 
-class FusionRTDetrHistorical(BaseDetr):
-    """Historical RT-DETR FAM implementation (lazy FAM init in backbone forward)."""
+class FusionRTDetrFAM(BaseDetr):
+    """RT-DETR FAM implementation (lazy FAM init in backbone forward)."""
     def __init__(self, id2label, threshold=0.9):
-        super(FusionRTDetrHistorical, self).__init__(
+        super(FusionRTDetrFAM, self).__init__(
             processor_class=RTDetrImageProcessor,
-            model_class=RTDetrFusionHistoricalForObjectDetection,
+            model_class=RTDetrFusionFAMForObjectDetection,
             pretrained_model_name="PekingU/rtdetr_r50vd",
             id2label=id2label,
             threshold=threshold,
