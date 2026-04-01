@@ -413,6 +413,9 @@ class Run:
                 batch_dict, epoch, batch_idx
             )
             loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
+            clip_norm = self.train_params.get("gradient_clip_norm", None)
+            if clip_norm is not None and clip_norm > 0:
+                self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
             self.optimizer.step()
             self._scheduler_step(SchedulerStepMoment.BATCH)
 

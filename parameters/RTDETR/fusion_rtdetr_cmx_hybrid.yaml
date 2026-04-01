@@ -1,0 +1,60 @@
+experiment:
+  # Informazioni per il tracciamento su WandB
+  name: RTDETR_CMX_Hybrid_Fusion_vis_ir 
+  group: RTDETR_Investigation_Hybrid 
+  continue_with_errors: False 
+  start_from_grid: 0 
+  start_from_run: 0 
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [30] 
+    tags: [[RTDETR, CMX_Hybrid, FAM, PositionalEncoding]]
+
+  train:
+    max_epochs: [10] 
+    compile: [False]
+    # LR più prudente: riduce picchi di gradiente nel ramo ibrido (FAM + CMX)
+    initial_lr: [0.00003]
+    optimizer: [AdamW]
+    watch_metric: [map]
+    gradient_clip_norm: [0.5]
+    # bf16 è spesso più stabile numericamente di fp16 su modelli transformer/fusion
+    precision: [bf16]
+  
+  loss: 
+
+  model:
+    name: [fusion_rtdetr_cmx_hybrid] # Punta al nuovo modello nel registro
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      
+
+  dataset: 
+    name: [wisard] 
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"] 
+    # vis_ir ha solo 3 train folder e 1 val; qui usiamo uno split più ricco
+    folders: [vis_ir]
+    single_class: [true]
+    # Disabilitato per prima convergenza stabile del modello ibrido
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]] 
+
+  dataloader:
+    num_workers: [4] # Ridotto a 4 per non saturare la RAM della CPU / colli di bottiglia IO
+    # Lasciamo batch_size a 2 data la pesantezza di due backbone + FAM + deform conv su GPU da 8GB
+    batch_size: [2] 
+  
+  val_evaluation: 
+    metrics: 
+
+other_grids:
