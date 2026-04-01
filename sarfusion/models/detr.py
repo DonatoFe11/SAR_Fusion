@@ -135,7 +135,7 @@ class FusionDetr(BaseDetr):
         )
 
 class FusionRTDetr(BaseDetr):
-    def __init__(self, id2label, threshold=0.9, use_fam=False):
+    def __init__(self, id2label, threshold=0.9, use_fam=False, freeze_fam=False):
         super(FusionRTDetr, self).__init__(
             processor_class=RTDetrImageProcessor,
             model_class=RTDetrFusionForObjectDetection,
@@ -143,10 +143,12 @@ class FusionRTDetr(BaseDetr):
             id2label=id2label,
             threshold=threshold,
             use_fam=use_fam,  # Pass use_fam to model
+            freeze_fam=freeze_fam, # Pass freeze_fam to model
         )
         # Force the processor to accept 4 channels
         self.processor.num_channels = 4
         self.use_fam = use_fam
+        self.freeze_fam = freeze_fam
 
 
 class FusionRTDetrFAM(BaseDetr):

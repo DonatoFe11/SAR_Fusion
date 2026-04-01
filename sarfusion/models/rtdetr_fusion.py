@@ -22,7 +22,7 @@ class FeatureAlignmentModule(nn.Module):
     Feature Alignment Module using Deformable Convolution.
     RGB features guide the spatial alignment of IR features.
     """
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, freeze=False):
         super().__init__()
         
         # Predicts offset and mask for deformable conv
@@ -45,6 +45,12 @@ class FeatureAlignmentModule(nn.Module):
         # Initialize offset to zero (identity mapping initially)
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
+
+        # Se freeze=True, replichiamo formalmente l'effetto "regolarizzatore"
+        # congelando i pesi e impedendo l'aggiornamento dei gradienti.
+        if freeze:
+            for param in self.parameters():
+                param.requires_grad = False
         
     def forward(self, rgb_feat, ir_feat):
         """
@@ -79,7 +85,7 @@ class FeatureAlignmentModule(nn.Module):
 #    - Geometry preserved
 # ============================================================
 class RTDetrFusionBackbone(nn.Module):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
         super().__init__()
 
         # RGB backbone (standard)
@@ -96,6 +102,7 @@ class RTDetrFusionBackbone(nn.Module):
         
         # Feature Alignment Modules - optional
         self.use_fam = use_fam
+        self.freeze_fam = freeze_fam
         if self.use_fam:
             # Build FAM eagerly so its parameters are visible to the optimizer
             # before the first training step.
@@ -105,7 +112,7 @@ class RTDetrFusionBackbone(nn.Module):
                     "RTDetrFusionBackbone requires config.encoder_in_channels when use_fam=True"
                 )
             self.fam_modules = nn.ModuleList(
-                [FeatureAlignmentModule(ch) for ch in feature_channels]
+                [FeatureAlignmentModule(ch, freeze=self.freeze_fam) for ch in feature_channels]
             )
         else:
             self.fam_modules = None
@@ -177,9 +184,9 @@ class RTDetrFusionBackbone(nn.Module):
 # 3. RT-DETR MODEL (NO forward override!)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
         super().__init__(config)
-        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam)
+        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam)
         self.post_init()
 
 
@@ -187,7 +194,7 @@ class RTDetrFusionModel(RTDetrModel):
 # 4. OBJECT DETECTION WRAPPER
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
@@ -198,13 +205,14 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         saved_bbox_embed = self.bbox_embed
 
         # Replace the model
-        self.model = RTDetrFusionModel(config, use_fam=use_fam)
+        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam)
 
         # Restore heads in decoder
         self.model.decoder.class_embed = saved_class_embed
         self.model.decoder.bbox_embed = saved_bbox_embed
         self.config = config
         self.use_fam = use_fam
+        self.freeze_fam = freeze_fam
 
     def load_state_dict(self, state_dict, strict=True):
         # Permissive loading (necessary for IR)
@@ -218,6 +226,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         label2id,
         ignore_mismatched_sizes=True,
         use_fam=False,
+        freeze_fam=False,
     ):
         # Standard RT-DETR model
         base = RTDetrForObjectDetection.from_pretrained(
@@ -229,7 +238,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
 
         config = base.config
         config.num_channels = 4
-        instance = cls(config, use_fam=use_fam)
+        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam)
 
         # Load everything (decoder, encoder, etc.)
         instance.load_state_dict(base.state_dict())
