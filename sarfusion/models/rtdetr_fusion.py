@@ -85,7 +85,7 @@ class FeatureAlignmentModule(nn.Module):
 #    - Geometry preserved
 # ============================================================
 class RTDetrFusionBackbone(nn.Module):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0):
         super().__init__()
 
         # RGB backbone (standard)
@@ -103,6 +103,14 @@ class RTDetrFusionBackbone(nn.Module):
         # Feature Alignment Modules - optional
         self.use_fam = use_fam
         self.freeze_fam = freeze_fam
+        self.ir_dropout_rate = ir_dropout_rate
+        
+        if self.ir_dropout_rate > 0.0:
+            # Dropout2d azzera randomicamente interi canali della feature map (Spatial Dropout)
+            self.ir_dropout = nn.Dropout2d(p=self.ir_dropout_rate)
+        else:
+            self.ir_dropout = None
+
         if self.use_fam:
             # Build FAM eagerly so its parameters are visible to the optimizer
             # before the first training step.
@@ -163,6 +171,10 @@ class RTDetrFusionBackbone(nn.Module):
                     # Apply FAM to align IR to RGB
                     i_aligned = self.fam_modules[idx](r_feat, i_feat)
                     
+                    # Apply Spatial Dropout to IR if active
+                    if self.ir_dropout is not None:
+                        i_aligned = self.ir_dropout(i_aligned)
+                    
                     # Additive fusion on aligned features
                     fused_feats.append((r_feat + i_aligned, r_mask))
 
@@ -172,8 +184,13 @@ class RTDetrFusionBackbone(nn.Module):
             else:
                 fused_feats = []
                 for (r_feat, r_mask), (i_feat, _) in zip(rgb_feats, ir_feats):
+                    i_to_fuse = i_feat
+                    # Apply Spatial Dropout to IR if active
+                    if self.ir_dropout is not None:
+                        i_to_fuse = self.ir_dropout(i_to_fuse)
+                        
                     # Simple additive fusion
-                    fused_feats.append((r_feat + i_feat, r_mask))
+                    fused_feats.append((r_feat + i_to_fuse, r_mask))
                 
                 return fused_feats
 
@@ -184,9 +201,9 @@ class RTDetrFusionBackbone(nn.Module):
 # 3. RT-DETR MODEL (NO forward override!)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0):
         super().__init__(config)
-        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam)
+        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate)
         self.post_init()
 
 
@@ -194,7 +211,7 @@ class RTDetrFusionModel(RTDetrModel):
 # 4. OBJECT DETECTION WRAPPER
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
@@ -205,7 +222,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         saved_bbox_embed = self.bbox_embed
 
         # Replace the model
-        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam)
+        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate)
 
         # Restore heads in decoder
         self.model.decoder.class_embed = saved_class_embed
@@ -213,6 +230,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         self.config = config
         self.use_fam = use_fam
         self.freeze_fam = freeze_fam
+        self.ir_dropout_rate = ir_dropout_rate
 
     def load_state_dict(self, state_dict, strict=True):
         # Permissive loading (necessary for IR)
@@ -227,6 +245,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         ignore_mismatched_sizes=True,
         use_fam=False,
         freeze_fam=False,
+        ir_dropout_rate=0.0,
     ):
         # Standard RT-DETR model
         base = RTDetrForObjectDetection.from_pretrained(
@@ -238,7 +257,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
 
         config = base.config
         config.num_channels = 4
-        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam)
+        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate)
 
         # Load everything (decoder, encoder, etc.)
         instance.load_state_dict(base.state_dict())

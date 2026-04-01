@@ -185,8 +185,8 @@ def build_yolo_v10(
         model = YOLOv10WiSARD(cfg, task="detect").model
     return model
 
-def build_fusion_rt_detr(threshold=0.9, id2label=None, use_fam=False, freeze_fam=False):
-    return FusionRTDetr(threshold=threshold, id2label=id2label, use_fam=use_fam, freeze_fam=freeze_fam)
+def build_fusion_rt_detr(threshold=0.9, id2label=None, use_fam=False, freeze_fam=False, ir_dropout_rate=0.0):
+    return FusionRTDetr(threshold=threshold, id2label=id2label, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate)
 
 
 def build_fusion_rt_detr_fam(threshold=0.9, id2label=None):

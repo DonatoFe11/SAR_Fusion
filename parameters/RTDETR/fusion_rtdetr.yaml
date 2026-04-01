@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Fusion_FAM
+  name: RTDETR_FAM_Eager_Dropout_0_4
   group: RTDETR_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -30,7 +30,8 @@ parameters:
         0: [person]
       threshold: [0.01]
       use_fam: [true]
-      freeze_fam: [true]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.4]
 
   dataset:
     name: [wisard]
