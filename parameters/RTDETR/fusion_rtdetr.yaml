@@ -24,11 +24,12 @@ parameters:
   loss:
 
   model:
-    name: [fusion_rtdetr_fam]
+    name: [fusion_rtdetr]
     params:
       id2label:
         0: [person]
       threshold: [0.01]
+      use_fam: [true]
 
   dataset:
     name: [wisard]
