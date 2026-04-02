@@ -22,8 +22,9 @@ class FeatureAlignmentModule(nn.Module):
     Feature Alignment Module using Deformable Convolution.
     RGB features guide the spatial alignment of IR features.
     """
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, freeze=False, spatial_jitter_std=0.0):
         super().__init__()
+        self.spatial_jitter_std = spatial_jitter_std
         
         # Predicts offset and mask for deformable conv
         # RGB features → offset prediction
@@ -45,6 +46,12 @@ class FeatureAlignmentModule(nn.Module):
         # Initialize offset to zero (identity mapping initially)
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
+
+        # Se freeze=True, replichiamo formalmente l'effetto "regolarizzatore"
+        # congelando i pesi e impedendo l'aggiornamento dei gradienti.
+        if freeze:
+            for param in self.parameters():
+                param.requires_grad = False
         
     def forward(self, rgb_feat, ir_feat):
         """
@@ -65,6 +72,11 @@ class FeatureAlignmentModule(nn.Module):
         offset = out[:, :18, :, :]  # [B, 18, H, W]
         mask = torch.sigmoid(out[:, 18:, :, :])  # [B, 9, H, W]
         
+        # Stochastic Spatial Jitter (SSJ): Inietta rumore Gaussiano negli offset spaziali
+        if self.training and self.spatial_jitter_std > 0.0:
+            noise = torch.randn_like(offset) * self.spatial_jitter_std
+            offset = offset + noise
+        
         # Apply deformable convolution to IR
         ir_aligned = self.deform_conv(ir_feat, offset, mask)
         
@@ -79,7 +91,7 @@ class FeatureAlignmentModule(nn.Module):
 #    - Geometry preserved
 # ============================================================
 class RTDetrFusionBackbone(nn.Module):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0):
         super().__init__()
 
         # RGB backbone (standard)
@@ -96,6 +108,16 @@ class RTDetrFusionBackbone(nn.Module):
         
         # Feature Alignment Modules - optional
         self.use_fam = use_fam
+        self.freeze_fam = freeze_fam
+        self.ir_dropout_rate = ir_dropout_rate
+        self.spatial_jitter_std = spatial_jitter_std
+        
+        if self.ir_dropout_rate > 0.0:
+            # Dropout2d azzera randomicamente interi canali della feature map (Spatial Dropout)
+            self.ir_dropout = nn.Dropout2d(p=self.ir_dropout_rate)
+        else:
+            self.ir_dropout = None
+
         if self.use_fam:
             # Build FAM eagerly so its parameters are visible to the optimizer
             # before the first training step.
@@ -105,7 +127,7 @@ class RTDetrFusionBackbone(nn.Module):
                     "RTDetrFusionBackbone requires config.encoder_in_channels when use_fam=True"
                 )
             self.fam_modules = nn.ModuleList(
-                [FeatureAlignmentModule(ch) for ch in feature_channels]
+                [FeatureAlignmentModule(ch, freeze=self.freeze_fam, spatial_jitter_std=self.spatial_jitter_std) for ch in feature_channels]
             )
         else:
             self.fam_modules = None
@@ -156,6 +178,10 @@ class RTDetrFusionBackbone(nn.Module):
                     # Apply FAM to align IR to RGB
                     i_aligned = self.fam_modules[idx](r_feat, i_feat)
                     
+                    # Apply Spatial Dropout to IR if active
+                    if self.ir_dropout is not None:
+                        i_aligned = self.ir_dropout(i_aligned)
+                    
                     # Additive fusion on aligned features
                     fused_feats.append((r_feat + i_aligned, r_mask))
 
@@ -165,8 +191,13 @@ class RTDetrFusionBackbone(nn.Module):
             else:
                 fused_feats = []
                 for (r_feat, r_mask), (i_feat, _) in zip(rgb_feats, ir_feats):
+                    i_to_fuse = i_feat
+                    # Apply Spatial Dropout to IR if active
+                    if self.ir_dropout is not None:
+                        i_to_fuse = self.ir_dropout(i_to_fuse)
+                        
                     # Simple additive fusion
-                    fused_feats.append((r_feat + i_feat, r_mask))
+                    fused_feats.append((r_feat + i_to_fuse, r_mask))
                 
                 return fused_feats
 
@@ -177,9 +208,9 @@ class RTDetrFusionBackbone(nn.Module):
 # 3. RT-DETR MODEL (NO forward override!)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0):
         super().__init__(config)
-        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam)
+        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
         self.post_init()
 
 
@@ -187,7 +218,7 @@ class RTDetrFusionModel(RTDetrModel):
 # 4. OBJECT DETECTION WRAPPER
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
@@ -198,13 +229,16 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         saved_bbox_embed = self.bbox_embed
 
         # Replace the model
-        self.model = RTDetrFusionModel(config, use_fam=use_fam)
+        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
 
         # Restore heads in decoder
         self.model.decoder.class_embed = saved_class_embed
         self.model.decoder.bbox_embed = saved_bbox_embed
         self.config = config
         self.use_fam = use_fam
+        self.freeze_fam = freeze_fam
+        self.ir_dropout_rate = ir_dropout_rate
+        self.spatial_jitter_std = spatial_jitter_std
 
     def load_state_dict(self, state_dict, strict=True):
         # Permissive loading (necessary for IR)
@@ -218,6 +252,9 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         label2id,
         ignore_mismatched_sizes=True,
         use_fam=False,
+        freeze_fam=False,
+        ir_dropout_rate=0.0,
+        spatial_jitter_std=0.0,
     ):
         # Standard RT-DETR model
         base = RTDetrForObjectDetection.from_pretrained(
@@ -229,7 +266,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
 
         config = base.config
         config.num_channels = 4
-        instance = cls(config, use_fam=use_fam)
+        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
 
         # Load everything (decoder, encoder, etc.)
         instance.load_state_dict(base.state_dict())

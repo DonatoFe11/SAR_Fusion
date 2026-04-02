@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_Fusion_FAM
+  name: RTDETR_FAM_Eager_SpatialJitter
   group: RTDETR_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -30,6 +30,9 @@ parameters:
         0: [person]
       threshold: [0.01]
       use_fam: [true]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.5]
 
   dataset:
     name: [wisard]
@@ -38,8 +41,8 @@ parameters:
       path: ["PekingU/rtdetr_r50vd"]
     folders: [vis_ir]
     single_class: [true]
-    modal_dropout: [true]
-    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    modal_dropout: [false]
+    # modal_dropout_probs: [[0.2, 0.2, 0.6]]
     use_tiling: [false]
 
   dataloader:
