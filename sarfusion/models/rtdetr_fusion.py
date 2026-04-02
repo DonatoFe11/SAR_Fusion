@@ -254,6 +254,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         use_fam=False,
         freeze_fam=False,
         ir_dropout_rate=0.0,
+        spatial_jitter_std=0.0,
     ):
         # Standard RT-DETR model
         base = RTDetrForObjectDetection.from_pretrained(
@@ -265,7 +266,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
 
         config = base.config
         config.num_channels = 4
-        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate)
+        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
 
         # Load everything (decoder, encoder, etc.)
         instance.load_state_dict(base.state_dict())
