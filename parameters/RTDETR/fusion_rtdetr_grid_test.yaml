@@ -1,5 +1,5 @@
 experiment:
-  name: RTDETR_FAM_Eager_Dropout_0_4_Eval
+  name: RTDETR_FAM_Eager_Dropout_0_4_Evaluation_Grid
   group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
