@@ -41,8 +41,8 @@ parameters:
       path: ["PekingU/rtdetr_r50vd"]
     folders: [vis_ir]
     single_class: [true]
-    modal_dropout: [true]
-    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    modal_dropout: [false]
+    # modal_dropout_probs: [[0.2, 0.2, 0.6]]
     use_tiling: [false]
 
   dataloader:
