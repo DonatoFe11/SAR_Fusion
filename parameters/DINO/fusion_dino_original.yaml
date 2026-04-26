@@ -23,7 +23,7 @@ parameters:
     gradient_clip_norm: [0.1]
     gradient_accumulation_steps: [8]
     scheduler:
-      type: [cosine_with_warmup]
+      type: [cosine]
       num_warmup_steps: [200]
       step_moment: [batch]
 
