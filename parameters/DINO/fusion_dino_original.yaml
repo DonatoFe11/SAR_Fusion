@@ -21,7 +21,7 @@ parameters:
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
-    gradient_accumulation_steps: [4]
+    gradient_accumulation_steps: [8]
     scheduler:
       name: [cosine_with_warmup]
       num_warmup_steps: [200]
@@ -34,7 +34,7 @@ parameters:
       id2label:
         0: [person]
       threshold: [0.01]
-      num_feature_levels: [8]
+      num_feature_levels: [4]
 
   dataset:
     name: [wisard]
