@@ -96,6 +96,7 @@ class Run:
             kwargs_handlers=kwargs,
             split_batches=False,
             mixed_precision=self.train_params.get("precision", None),
+            gradient_accumulation_steps=self.train_params.get("gradient_accumulation_steps", 1),
         )
         logger.info("Initiliazing tracker...")
         self.tracker = get_experiment_tracker(self.accelerator, self.params)
@@ -408,16 +409,17 @@ class Run:
             # if batch_idx == 1000:
             #     break
             batch_dict = DataDict(**batch_dict)
-            self.optimizer.zero_grad()
-            result_dict: WrapperModelOutput = self._forward(
-                batch_dict, epoch, batch_idx
-            )
-            loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
-            clip_norm = self.train_params.get("gradient_clip_norm", None)
-            if clip_norm is not None and clip_norm > 0:
-                self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
-            self.optimizer.step()
-            self._scheduler_step(SchedulerStepMoment.BATCH)
+            with self.accelerator.accumulate(self.model):
+                self.optimizer.zero_grad()
+                result_dict: WrapperModelOutput = self._forward(
+                    batch_dict, epoch, batch_idx
+                )
+                loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
+                clip_norm = self.train_params.get("gradient_clip_norm", None)
+                if clip_norm is not None and clip_norm > 0:
+                    self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
+                self.optimizer.step()
+                self._scheduler_step(SchedulerStepMoment.BATCH)
 
             loss_avg.update(loss.item())
             self.tracker.log_metric("loss", loss.item())
