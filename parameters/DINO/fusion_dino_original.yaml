@@ -1,0 +1,52 @@
+experiment:
+  name: DINO_Fusion_Training_vis_ir_Investigation
+  group: DINO_Investigation
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+
+parameters:
+  seed: &seed [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+
+  train:
+    max_epochs: [20]  
+    compile: [False]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map]
+  
+  loss:
+
+  model:
+    name: [fusion_dino_original]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      num_feature_levels: [4]
+      
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["SenseTime/deformable-detr"]
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [4]
+    batch_size: [1]
+  
+  val_evaluation:
+    metrics:
+
+other_grids:
