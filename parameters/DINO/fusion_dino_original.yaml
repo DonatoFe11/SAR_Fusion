@@ -17,7 +17,7 @@ parameters:
   train:
     max_epochs: [10]
     compile: [False]
-    initial_lr: [0.00002]
+    initial_lr: [0.0001]
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
