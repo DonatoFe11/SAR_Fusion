@@ -25,6 +25,7 @@ parameters:
     scheduler:
       type: [cosine_with_warmup]
       num_warmup_steps: [200]
+      step_moment: [batch]
 
   loss:
 
