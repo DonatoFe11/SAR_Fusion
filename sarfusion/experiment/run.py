@@ -137,14 +137,30 @@ class Run:
         self.watch_metric = self.train_params["watch_metric"]
         self.greater_is_better = self.train_params.get("greater_is_better", True)
         logger.info("Creating optimizer")
-        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-            params = self.model.module.get_learnable_params(self.train_params)
-        else:
-            params = self.model.get_learnable_params(self.train_params)
-        self.optimizer = AdamW(
-            self.model.parameters(),
-            lr=self.train_params["initial_lr"],
+        
+        backbone_lr = self.train_params.get("backbone_lr", self.train_params["initial_lr"])
+        new_module_params = []
+        backbone_params = []
+
+        for name, param in self.model.named_parameters():
+            if any(k in name for k in ["ir_backbone", "channel_fusion"]):
+                new_module_params.append(param)
+            else:
+                backbone_params.append(param)
+
+        logger.info(
+            f"New module params: {len(new_module_params)}, "
+            f"Backbone params: {len(backbone_params)}"
         )
+        logger.info(
+            f"LR for new modules: {self.train_params['initial_lr']}, "
+            f"LR for backbone: {backbone_lr}"
+        )
+
+        self.optimizer = AdamW([
+            {"params": backbone_params, "lr": backbone_lr},
+            {"params": new_module_params, "lr": self.train_params["initial_lr"]},
+        ])
 
         scheduler_params = self.train_params.get("scheduler", None)
         if scheduler_params:
@@ -225,6 +241,10 @@ class Run:
                 logger.info(
                     f"Running Model Training {self.params.get('experiment').get('name')}"
                 )
+
+                patience = self.train_params.get("early_stopping_patience", None)
+                epochs_without_improvement = 0
+
                 for epoch in range(self.train_params["max_epochs"]):
                     logger.info(
                         "Epoch: {}/{}".format(epoch, self.train_params["max_epochs"])
@@ -240,7 +260,20 @@ class Run:
                             logger.info(f"Running Model Validation")
                             metrics = self.validate_epoch(epoch)
                             self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                    self.save_training_state(epoch, metrics)
+                    improved = self.save_training_state(epoch, metrics)
+
+                    if patience is not None and metrics is not None:
+                        if improved:
+                            epochs_without_improvement = 0
+                        else:
+                            epochs_without_improvement += 1
+                            logger.info(
+                                f"No improvement for {epochs_without_improvement}/{patience} epochs"
+                            )
+                        if epochs_without_improvement >= patience:
+                            logger.info(
+                                f"Early stopping triggered after {epoch +1} epochs")
+                            break
         else:
             logger.info("No training params, no training")
 
@@ -256,6 +289,7 @@ class Run:
         return metric < self.best_metric
 
     def save_training_state(self, epoch, metrics=None):
+        improved = False
         if metrics:
             if self._metric_is_better(metrics[self.watch_metric]):
                 logger.info(
@@ -263,7 +297,9 @@ class Run:
                 )
                 self.best_metric = metrics[self.watch_metric]
                 self.tracker.log_training_state(epoch=epoch, subfolder="best")
+                improved = True
         self.tracker.log_training_state(epoch=epoch, subfolder="latest")
+        return improved
 
     def _get_lr(self):
         if self.scheduler is None:

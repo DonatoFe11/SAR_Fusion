@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Fusion_Training_vis_ir
+  name: DINO_Fusion_differential_lr
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -15,13 +15,15 @@ parameters:
     val_image_log_frequency: [50]
 
   train:
-    max_epochs: [10]
+    max_epochs: [20]
     compile: [False]
-    initial_lr: [0.0001]
+    initial_lr: [0.0001]  # for ir backbone and channel fusion
+    backbone_lr: [0.00001]  # for pretrained encoder/decoder/rgb backbone
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
     gradient_accumulation_steps: [8]
+    early_stopping_patience: [5]
     scheduler:
       type: [cosine]
       num_warmup_steps: [200]
