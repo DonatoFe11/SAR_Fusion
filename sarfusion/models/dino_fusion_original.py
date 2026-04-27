@@ -57,7 +57,7 @@ class DinoFusionBackbone(nn.Module):
         ir_position_embeddings = build_position_encoding(ir_config)
         self.ir_backbone = DeformableDetrConvModel(ir_backbone, ir_position_embeddings)
         
-        # Store channel sizes
+        # Store channel sizes e.g. [256, 512, 1024, 2048] for ResNet50
         self.intermediate_channel_sizes = rgb_backbone.intermediate_channel_sizes
         
         # Store num_feature_levels to limit output

@@ -148,6 +148,24 @@ class Run:
             else:
                 backbone_params.append(param)
 
+        frozen = sum(1 for _, p in self.model.named_parameters() if not p.requires_grad)
+        logger.info(f"Frozen params: {frozen}")
+
+        logger.info("Sample new_module params:")
+        for name, _ in self.model.named_parameters():
+            if any(k in name for k in ["ir_backbone", "channel_fusion"]):
+                logger.info(f"  NEW: {name}")
+                break  # solo il primo per non spammare
+        logger.info("Sample backbone params:")
+        for name, _ in self.model.named_parameters():
+            if not any(k in name for k in ["ir_backbone", "channel_fusion"]):
+                logger.info(f"  BACKBONE: {name}")
+                break
+
+        total = sum(1 for _, p in self.model.named_parameters())
+        trainable = sum(1 for _, p in self.model.named_parameters() if p.requires_grad)
+        logger.info(f"Total params tensors: {total}, Trainable: {trainable}")
+
         logger.info(
             f"New module params: {len(new_module_params)}, "
             f"Backbone params: {len(backbone_params)}"
@@ -168,7 +186,8 @@ class Run:
                 scheduler_params=scheduler_params,
                 optimizer=self.optimizer,
                 num_training_steps=self.train_params["max_epochs"]
-                * len(self.train_loader),
+                * len(self.train_loader)
+                // self.train_params.get("gradient_accumulation_steps", 1),
             )
 
         self.train_loader, self.optimizer = self.accelerator.prepare(
@@ -459,6 +478,9 @@ class Run:
 
             loss_avg.update(loss.item())
             self.tracker.log_metric("loss", loss.item())
+
+            self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
+            self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
 
             self._update_train_metrics(
                 result_dict,
