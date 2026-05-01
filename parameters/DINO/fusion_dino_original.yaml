@@ -18,16 +18,16 @@ parameters:
     max_epochs: [20]
     compile: [False]
     initial_lr: [0.00002]  # for ir backbone and channel fusion
-    # backbone_lr: [0.00001]  # for pretrained encoder/decoder/rgb backbone
+    backbone_lr: [0.00001]  # for pretrained encoder/decoder/rgb backbone
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
     gradient_accumulation_steps: [4]
     early_stopping_patience: [5]
-    # scheduler:
-    #   type: [cosine]
-    #   num_warmup_steps: [200]
-    #   step_moment: [batch]
+    scheduler:
+      type: [cosine]
+      num_warmup_steps: [200]
+      step_moment: [batch]
 
   loss:
 
