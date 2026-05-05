@@ -1,6 +1,6 @@
 experiment:
-  name: FusionDeformableDETR_Training_vis_ir_2.0
-  group: FusionDeformableDETR_Investigation
+  name: DeformableDETR_Fusion_differential_lr
+  group: DeformableDETR_Investigation
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -15,13 +15,20 @@ parameters:
     val_image_log_frequency: [50]
 
   train:
-    max_epochs: [5]  # Ridotto da 10 per evitare overfitting, converge già a epoca 1-2
+    max_epochs: [20]
     compile: [False]
-    initial_lr: [0.00002]
+    initial_lr: [0.00002]  # for ir backbone and channel fusion
+    backbone_lr: [0.00001]  # for pretrained encoder/decoder/rgb backbone
     optimizer: [AdamW]
-    watch_metric: [map]    
-    precision: ["fp16"]  # Mixed precision FP16 per speedup (weighted fusion dovrebbe essere più stabile)  
-  
+    watch_metric: [map]
+    gradient_clip_norm: [0.1]
+    gradient_accumulation_steps: [4]
+    early_stopping_patience: [3]
+    scheduler:
+      type: [cosine]
+      num_warmup_steps: [200]
+      step_moment: [batch]
+
   loss:
 
   model:
@@ -30,7 +37,7 @@ parameters:
       id2label:
         0: [person]
       threshold: [0.01]
-      num_feature_levels: [4]  # Channel concat: token count invariato, efficiente
+      num_feature_levels: [4]
 
   dataset:
     name: [wisard]
@@ -45,8 +52,8 @@ parameters:
 
   dataloader:
     num_workers: [4]
-    batch_size: [1]  # Channel concat consente batch_size più alto  
-  
+    batch_size: [1]
+
   val_evaluation:
     metrics:
 
