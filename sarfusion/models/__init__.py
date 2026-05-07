@@ -11,7 +11,7 @@ from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDino, FusionDinoOriginal
+from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDeformableDetrFAM, FusionDino, FusionDinoOriginal
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -207,6 +207,26 @@ def build_fusion_deformable_detr(threshold=0.9, id2label=None, num_feature_level
     )
 
 
+def build_fusion_deformable_detr_fam(
+    threshold=0.9,
+    id2label=None,
+    num_feature_levels=None,
+    use_fam=False,
+    freeze_fam=False,
+    ir_dropout_rate=0.0,
+    spatial_jitter_std=0.0,
+):
+    return FusionDeformableDetrFAM(
+        threshold=threshold,
+        id2label=id2label,
+        num_feature_levels=num_feature_levels,
+        use_fam=use_fam,
+        freeze_fam=freeze_fam,
+        ir_dropout_rate=ir_dropout_rate,
+        spatial_jitter_std=spatial_jitter_std,
+    )
+
+
 def build_fusion_dino(threshold=0.9, id2label=None, num_feature_levels=None, use_fam=False):
     return FusionDino(
         threshold=threshold,
@@ -237,6 +257,7 @@ MODEL_REGISTRY = {
     "fusion_rtdetr_cmx": build_fusion_rt_detr_cmx,
     "fusion_rtdetr_cmx_hybrid": build_fusion_rt_detr_cmx_hybrid,
     "fusion_defdetr": build_fusion_deformable_detr,
+    "fusion_defdetr_fam": build_fusion_deformable_detr_fam,
     "fusion_dino": build_fusion_dino,
     "fusion_dino_original": build_fusion_dino_original,
 }
