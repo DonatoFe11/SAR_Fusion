@@ -82,6 +82,9 @@ class Run:
 
     def init(self, params: dict):
         set_seed(params["seed"])
+        torch.backends.cudnn.benchmark = True
+        # torch.use_deterministic_algorithms(True, warn_only=True)
+        # os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -96,6 +99,7 @@ class Run:
             kwargs_handlers=kwargs,
             split_batches=False,
             mixed_precision=self.train_params.get("precision", None),
+            gradient_accumulation_steps=self.train_params.get("gradient_accumulation_steps", 1),
         )
         logger.info("Initiliazing tracker...")
         self.tracker = get_experiment_tracker(self.accelerator, self.params)
@@ -136,14 +140,48 @@ class Run:
         self.watch_metric = self.train_params["watch_metric"]
         self.greater_is_better = self.train_params.get("greater_is_better", True)
         logger.info("Creating optimizer")
-        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-            params = self.model.module.get_learnable_params(self.train_params)
-        else:
-            params = self.model.get_learnable_params(self.train_params)
-        self.optimizer = AdamW(
-            self.model.parameters(),
-            lr=self.train_params["initial_lr"],
+        
+        backbone_lr = self.train_params.get("backbone_lr", self.train_params["initial_lr"])
+        new_module_params = []
+        backbone_params = []
+
+        for name, param in self.model.named_parameters():
+            if any(k in name for k in ["ir_backbone", "channel_fusion"]):
+                new_module_params.append(param)
+            else:
+                backbone_params.append(param)
+
+        frozen = sum(1 for _, p in self.model.named_parameters() if not p.requires_grad)
+        logger.info(f"Frozen params: {frozen}")
+
+        logger.info("Sample new_module params:")
+        for name, _ in self.model.named_parameters():
+            if any(k in name for k in ["ir_backbone", "channel_fusion"]):
+                logger.info(f"  NEW: {name}")
+                break  # solo il primo per non spammare
+        logger.info("Sample backbone params:")
+        for name, _ in self.model.named_parameters():
+            if not any(k in name for k in ["ir_backbone", "channel_fusion"]):
+                logger.info(f"  BACKBONE: {name}")
+                break
+
+        total = sum(1 for _, p in self.model.named_parameters())
+        trainable = sum(1 for _, p in self.model.named_parameters() if p.requires_grad)
+        logger.info(f"Total params tensors: {total}, Trainable: {trainable}")
+
+        logger.info(
+            f"New module params: {len(new_module_params)}, "
+            f"Backbone params: {len(backbone_params)}"
         )
+        logger.info(
+            f"LR for new modules: {self.train_params['initial_lr']}, "
+            f"LR for backbone: {backbone_lr}"
+        )
+
+        self.optimizer = AdamW([
+            {"params": backbone_params, "lr": backbone_lr},
+            {"params": new_module_params, "lr": self.train_params["initial_lr"]},
+        ])
 
         scheduler_params = self.train_params.get("scheduler", None)
         if scheduler_params:
@@ -151,7 +189,8 @@ class Run:
                 scheduler_params=scheduler_params,
                 optimizer=self.optimizer,
                 num_training_steps=self.train_params["max_epochs"]
-                * len(self.train_loader),
+                * len(self.train_loader)
+                // self.train_params.get("gradient_accumulation_steps", 1),
             )
 
         self.train_loader, self.optimizer = self.accelerator.prepare(
@@ -224,6 +263,10 @@ class Run:
                 logger.info(
                     f"Running Model Training {self.params.get('experiment').get('name')}"
                 )
+
+                patience = self.train_params.get("early_stopping_patience", None)
+                epochs_without_improvement = 0
+
                 for epoch in range(self.train_params["max_epochs"]):
                     logger.info(
                         "Epoch: {}/{}".format(epoch, self.train_params["max_epochs"])
@@ -239,7 +282,20 @@ class Run:
                             logger.info(f"Running Model Validation")
                             metrics = self.validate_epoch(epoch)
                             self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                    self.save_training_state(epoch, metrics)
+                    improved = self.save_training_state(epoch, metrics)
+
+                    if patience is not None and metrics is not None:
+                        if improved:
+                            epochs_without_improvement = 0
+                        else:
+                            epochs_without_improvement += 1
+                            logger.info(
+                                f"No improvement for {epochs_without_improvement}/{patience} epochs"
+                            )
+                        if epochs_without_improvement >= patience:
+                            logger.info(
+                                f"Early stopping triggered after {epoch +1} epochs")
+                            break
         else:
             logger.info("No training params, no training")
 
@@ -255,6 +311,7 @@ class Run:
         return metric < self.best_metric
 
     def save_training_state(self, epoch, metrics=None):
+        improved = False
         if metrics:
             if self._metric_is_better(metrics[self.watch_metric]):
                 logger.info(
@@ -262,7 +319,9 @@ class Run:
                 )
                 self.best_metric = metrics[self.watch_metric]
                 self.tracker.log_training_state(epoch=epoch, subfolder="best")
+                improved = True
         self.tracker.log_training_state(epoch=epoch, subfolder="latest")
+        return improved
 
     def _get_lr(self):
         if self.scheduler is None:
@@ -386,6 +445,8 @@ class Run:
     ):
         if epoch > 0:
             set_seed(self.params["seed"] + epoch)
+            torch.backends.cudnn.benchmark = True
+            # torch.use_deterministic_algorithms(True, warn_only=True)
             logger.info(f"Setting seed to {self.params['seed'] + epoch}")
         self.tracker.log_metric("start_epoch", epoch)
         self.model.train()
@@ -408,19 +469,23 @@ class Run:
             # if batch_idx == 1000:
             #     break
             batch_dict = DataDict(**batch_dict)
-            self.optimizer.zero_grad()
-            result_dict: WrapperModelOutput = self._forward(
-                batch_dict, epoch, batch_idx
-            )
-            loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
-            clip_norm = self.train_params.get("gradient_clip_norm", None)
-            if clip_norm is not None and clip_norm > 0:
-                self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
-            self.optimizer.step()
-            self._scheduler_step(SchedulerStepMoment.BATCH)
+            with self.accelerator.accumulate(self.model):
+                self.optimizer.zero_grad()
+                result_dict: WrapperModelOutput = self._forward(
+                    batch_dict, epoch, batch_idx
+                )
+                loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
+                clip_norm = self.train_params.get("gradient_clip_norm", None)
+                if clip_norm is not None and clip_norm > 0:
+                    self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
+                self.optimizer.step()
+                self._scheduler_step(SchedulerStepMoment.BATCH)
 
             loss_avg.update(loss.item())
             self.tracker.log_metric("loss", loss.item())
+
+            self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
+            self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
 
             self._update_train_metrics(
                 result_dict,

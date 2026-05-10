@@ -19,6 +19,7 @@ from sarfusion.models.rtdetr_fusion_fam import RTDetrFusionForObjectDetection as
 from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
 from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
 from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
+from sarfusion.models.deformable_detr_fusion_fam import DeformableDetrFusionFAMForObjectDetection
 from sarfusion.models.dino_fusion import DinoFusionForObjectDetection
 from sarfusion.models.dino_fusion_original import DinoFusionForObjectDetection as DinoFusionOriginalForObjectDetection
 
@@ -215,6 +216,46 @@ class FusionDeformableDetr(BaseDetr):
         )
         # Force the processor to accept 4 channels (3 RGB + 1 IR)
         self.processor.num_channels = 4
+
+
+class FusionDeformableDetrFAM(BaseDetr):
+    """Deformable DETR with RGB-IR fusion + optional FAM alignment."""
+
+    def __init__(
+        self,
+        id2label,
+        threshold=0.9,
+        num_feature_levels=None,
+        use_fam=False,
+        freeze_fam=False,
+        ir_dropout_rate=0.0,
+        spatial_jitter_std=0.0,
+    ):
+        model_kwargs = {}
+        if num_feature_levels is not None:
+            model_kwargs["num_feature_levels"] = num_feature_levels
+        model_kwargs.update(
+            {
+                "use_fam": use_fam,
+                "freeze_fam": freeze_fam,
+                "ir_dropout_rate": ir_dropout_rate,
+                "spatial_jitter_std": spatial_jitter_std,
+            }
+        )
+
+        super(FusionDeformableDetrFAM, self).__init__(
+            processor_class=DeformableDetrImageProcessor,
+            model_class=DeformableDetrFusionFAMForObjectDetection,
+            pretrained_model_name="SenseTime/deformable-detr",
+            id2label=id2label,
+            threshold=threshold,
+            **model_kwargs,
+        )
+        self.processor.num_channels = 4
+        self.use_fam = use_fam
+        self.freeze_fam = freeze_fam
+        self.ir_dropout_rate = ir_dropout_rate
+        self.spatial_jitter_std = spatial_jitter_std
 
 
 class FusionDino(BaseDetr):

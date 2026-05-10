@@ -1,6 +1,6 @@
 experiment:
-  name: DINO_Fusion_differential_lr
-  group: DINO_Investigation
+  name: DeformableDETR_Fusion_FAM_SpatialJitter
+  group: DeformableDETR_Investigation
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -17,8 +17,8 @@ parameters:
   train:
     max_epochs: [20]
     compile: [False]
-    initial_lr: [0.00002]  # for ir backbone and channel fusion
-    backbone_lr: [0.00001]  # for pretrained encoder/decoder/rgb backbone
+    initial_lr: [0.00002]
+    backbone_lr: [0.00001]
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
@@ -32,12 +32,16 @@ parameters:
   loss:
 
   model:
-    name: [fusion_dino_original]
+    name: [fusion_defdetr_fam]
     params:
       id2label:
         0: [person]
       threshold: [0.01]
       num_feature_levels: [4]
+      use_fam: [true]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.5]
 
   dataset:
     name: [wisard]

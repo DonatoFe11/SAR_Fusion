@@ -57,7 +57,7 @@ class DinoFusionBackbone(nn.Module):
         ir_position_embeddings = build_position_encoding(ir_config)
         self.ir_backbone = DeformableDetrConvModel(ir_backbone, ir_position_embeddings)
         
-        # Store channel sizes
+        # Store channel sizes e.g. [256, 512, 1024, 2048] for ResNet50
         self.intermediate_channel_sizes = rgb_backbone.intermediate_channel_sizes
         
         # Store num_feature_levels to limit output
@@ -152,7 +152,7 @@ class DinoFusionModel(DeformableDetrModel):
         super().__init__(config)
         # Replace backbone with fusion backbone
         self.backbone = DinoFusionBackbone(config)
-        self.post_init()
+        # Removed self.post_init() to avoid double initialization
 
 
 # DINO FOR OBJECT DETECTION
@@ -203,6 +203,19 @@ class DinoFusionForObjectDetection(DeformableDetrForObjectDetection):
         # Load pretrained weights (permissive for backbone mismatches)
         fusion_model.load_state_dict(base_model.state_dict(), strict=False)
         
+        # --- Fix: Load position embeddings for both RGB and IR backbones ---
+        position_emb_state = {
+            k.replace("model.backbone.", ""): v
+            for k, v in base_model.state_dict().items()
+            if "backbone.position_embedding" in k
+        }
+        fusion_model.model.backbone.rgb_backbone.position_embedding.load_state_dict(
+            position_emb_state, strict=False
+        )
+        fusion_model.model.backbone.ir_backbone.position_embedding.load_state_dict(
+            position_emb_state, strict=False
+        )
+
         # Adapt IR backbone weights from RGB (mean over channels)
         rgb_backbone_state = base_model.model.backbone.conv_encoder.state_dict()
         ir_backbone_state = {}
@@ -222,5 +235,15 @@ class DinoFusionForObjectDetection(DeformableDetrForObjectDetection):
         fusion_model.model.backbone.ir_backbone.conv_encoder.load_state_dict(
             ir_backbone_state, strict=False
         )
+
+        # --- Explicitly initialize channel_fusion blocks to stable identity-like mapping ---
+        for fusion_block in fusion_model.model.backbone.channel_fusion:
+            conv = fusion_block[0]  # The Conv2d
+            nn.init.xavier_uniform_(conv.weight)
+            nn.init.zeros_(conv.bias)
+            # Zero out the GN parameters to start near identity
+            gn = fusion_block[1]
+            nn.init.ones_(gn.weight)
+            nn.init.zeros_(gn.bias)
         
         return fusion_model
