@@ -20,8 +20,6 @@ from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
 from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
 from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
 from sarfusion.models.deformable_detr_fusion_fam import DeformableDetrFusionFAMForObjectDetection
-from sarfusion.models.dino_fusion import DinoFusionForObjectDetection
-from sarfusion.models.dino_fusion_original import DinoFusionForObjectDetection as DinoFusionOriginalForObjectDetection
 
 
 def convert_detr_predictions(predictions):
@@ -256,49 +254,3 @@ class FusionDeformableDetrFAM(BaseDetr):
         self.freeze_fam = freeze_fam
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
-
-
-class FusionDino(BaseDetr):
-    """DINO (DETR with Improved deNoising anchOr boxes) with RGB-IR fusion.
-    
-    DINO is SOTA detection transformer with channel concatenation for efficiency.
-    Uses Conv + BN + ReLU for expressive cross-modal fusion.
-    """
-    def __init__(self, id2label, threshold=0.9, num_feature_levels=None, use_fam=False):
-        model_kwargs = {}
-        if num_feature_levels is not None:
-            model_kwargs['num_feature_levels'] = num_feature_levels
-        model_kwargs['use_fam'] = use_fam
-            
-        super(FusionDino, self).__init__(
-            processor_class=DeformableDetrImageProcessor,
-            model_class=DinoFusionForObjectDetection,
-            pretrained_model_name="SenseTime/deformable-detr",  # DINO uses same arch as Deformable DETR
-            id2label=id2label,
-            threshold=threshold,
-            **model_kwargs,
-        )
-        # Force the processor to accept 4 channels (3 RGB + 1 IR)
-        self.use_fam = use_fam
-        self.processor.num_channels = 4
-
-
-class FusionDinoOriginal(BaseDetr):
-    """Original DINO with RGB-IR fusion.
-    """
-    def __init__(self, id2label, threshold=0.9, num_feature_levels=None):
-        model_kwargs = {}
-        if num_feature_levels is not None:
-            model_kwargs['num_feature_levels'] = num_feature_levels
-            
-        super(FusionDinoOriginal, self).__init__(
-            processor_class=DeformableDetrImageProcessor,
-            model_class=DinoFusionOriginalForObjectDetection,
-            pretrained_model_name="SenseTime/deformable-detr",
-            id2label=id2label,
-            threshold=threshold,
-            **model_kwargs,
-        )
-        # Force the processor to accept 4 channels (3 RGB + 1 IR)
-        self.processor.num_channels = 4
-
