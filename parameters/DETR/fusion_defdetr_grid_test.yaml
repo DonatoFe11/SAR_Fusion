@@ -1,6 +1,6 @@
 experiment:
-  name: DeformableDetr_Evaluation_Grid
-  group: DeformableDetr_Investigation
+  name: DeformableDetr_FAM_Eager_SpatialJitter_Evaluation_Grid
+  group: RTDETR_Investigation
   continue_with_errors: False
   search: grid
 
@@ -14,11 +14,15 @@ parameters:
     tags: [[FinalReport]]
 
   model:
-    name: [fusion_defdetr]
+    name: [fusion_defdetr_fam]
     params:
       id2label:
         0: [person]
       threshold: [0.01, 0.05, 0.1]
+      use_fam: [true]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
       pretrained_path: ["checkpoints/model.safetensors"]
       num_feature_levels: [4]
   
@@ -33,7 +37,7 @@ parameters:
 
   dataloader:
     num_workers: [4]
-    batch_size: [2]
+    batch_size: [1]
 
   val_evaluation:
     metrics:

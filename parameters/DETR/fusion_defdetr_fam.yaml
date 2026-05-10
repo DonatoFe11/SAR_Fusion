@@ -1,5 +1,5 @@
 experiment:
-  name: DeformableDETR_Fusion_FAM
+  name: DeformableDETR_Fusion_FAM_SpatialJitter
   group: DeformableDETR_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -41,7 +41,7 @@ parameters:
       use_fam: [true]
       freeze_fam: [false]
       ir_dropout_rate: [0.0]
-      spatial_jitter_std: [0.0]
+      spatial_jitter_std: [0.5]
 
   dataset:
     name: [wisard]
