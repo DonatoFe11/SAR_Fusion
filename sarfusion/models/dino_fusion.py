@@ -28,6 +28,8 @@ import torch.nn as nn
 from transformers.models.deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoder,
     DeformableDetrDecoderOutput,
+    DeformableDetrHungarianMatcher,
+    DeformableDetrLoss,
     DeformableDetrObjectDetectionOutput,
     inverse_sigmoid,
 )
@@ -67,16 +69,14 @@ class LFTDecoder(DeformableDetrDecoder):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        object_queries_position_embeddings=None,
+        position_embeddings=None,
         reference_points=None,
         spatial_shapes=None,
-        spatial_shapes_list=None,
         level_start_index=None,
         valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         output_attentions = output_attentions or self.config.output_attentions
 
@@ -102,15 +102,13 @@ class LFTDecoder(DeformableDetrDecoder):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                object_queries_position_embeddings,
+                position_embeddings=position_embeddings,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 reference_points=reference_points_input,
                 spatial_shapes=spatial_shapes,
-                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 output_attentions=output_attentions,
-                **kwargs,
             )
             hidden_states = layer_outputs[0]
 
@@ -376,16 +374,43 @@ class DINOFusionForObjectDetection(DeformableDetrFusionFAMForObjectDetection):
         loss, loss_dict, auxiliary_outputs = None, None, None
 
         if labels is not None:
-            # Standard Hungarian matching loss (inherited from HF)
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits,
-                labels,
-                self.device,
-                pred_boxes,
-                self.config,
-                outputs_class,
-                outputs_coord,
+            matcher = DeformableDetrHungarianMatcher(
+                class_cost=self.config.class_cost,
+                bbox_cost=self.config.bbox_cost,
+                giou_cost=self.config.giou_cost,
             )
+            losses = ["labels", "boxes", "cardinality"]
+            criterion = DeformableDetrLoss(
+                matcher=matcher,
+                num_classes=self.config.num_labels,
+                focal_alpha=self.config.focal_alpha,
+                losses=losses,
+            )
+            criterion.to(self.device)
+
+            outputs_loss = {"logits": logits, "pred_boxes": pred_boxes}
+            if self.config.auxiliary_loss:
+                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+            if self.config.two_stage:
+                enc_outputs_coord = outputs.enc_outputs_coord_logits.sigmoid()
+                outputs_loss["enc_outputs"] = {
+                    "logits": outputs.enc_outputs_class,
+                    "pred_boxes": enc_outputs_coord,
+                }
+
+            loss_dict = criterion(outputs_loss, labels)
+            weight_dict = {
+                "loss_ce": 1,
+                "loss_bbox": self.config.bbox_loss_coefficient,
+                "loss_giou": self.config.giou_loss_coefficient,
+            }
+            if self.config.auxiliary_loss:
+                aux_weight_dict = {}
+                for i in range(self.config.decoder_layers - 1):
+                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+                weight_dict.update(aux_weight_dict)
+            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
             # CDN loss (training only, only when CDN was active)
             if cdn_targets is not None and dn_hidden is not None:
@@ -400,6 +425,8 @@ class DINOFusionForObjectDetection(DeformableDetrFusionFAMForObjectDetection):
                 )
                 cdn_total = sum(cdn_loss_dict.values()) * self.cdn_loss_coef
                 loss = loss + cdn_total
+                if loss_dict is None:
+                    loss_dict = {}
                 loss_dict.update(cdn_loss_dict)
 
         return DeformableDetrObjectDetectionOutput(

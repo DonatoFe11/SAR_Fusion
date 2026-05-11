@@ -55,6 +55,7 @@ class CDNTargets:
     dn_content: torch.Tensor
     dn_pos: torch.Tensor
     dn_ref_points: torch.Tensor
+    dn_labels: torch.Tensor
     attn_mask: torch.Tensor
     num_dn: int
     num_groups: int
@@ -255,13 +256,18 @@ def build_cdn_queries(
     dn_labels     = labels_tiled.reshape(batch_size, num_dn)       # (B, num_dn)
 
     # pos_neg_flag: 1 for positive slots, 0 for negative slots
+    # Mark only real GT (per-image) as positive; padded slots stay negative.
     # Positive slots occupy even groups in the layout above:
-    #   indices [0..max_gt-1], [2*max_gt..3*max_gt-1], ...
+    #   indices [g*2*max_gt .. g*2*max_gt + n_i - 1]
     pos_neg_flag = torch.zeros(batch_size, num_dn, device=device)
-    for g in range(num_dn_groups):
-        start = g * 2 * max_gt
-        end   = start + max_gt
-        pos_neg_flag[:, start:end] = 1.0
+    for b in range(batch_size):
+        n_i = int(valid_mask[b].sum().item())
+        if n_i == 0:
+            continue
+        for g in range(num_dn_groups):
+            start = g * 2 * max_gt
+            end = start + n_i
+            pos_neg_flag[b, start:end] = 1.0
 
     # ------------------------------------------------------------------ #
     #  5. Build content embeddings  (B, N_dn, d_model)                   #
@@ -345,6 +351,7 @@ def build_cdn_queries(
         dn_content=dn_content,       # (B, N_dn, d_model)
         dn_pos=dn_pos,               # (B, N_dn, d_model)
         dn_ref_points=dn_ref_points, # (B, N_dn, 4)
+        dn_labels=dn_labels,         # (B, N_dn)
         attn_mask=attn_mask,         # (N_total, N_total)
         num_dn=num_dn,
         num_groups=num_dn_groups,
@@ -440,19 +447,24 @@ def compute_cdn_loss(
             bbox_loss = F.l1_loss(pred_pos, tgt_pos, reduction="sum")
             giou_loss = (1.0 - _box_iou_union(pred_pos, tgt_pos)).sum()
 
-            # ---- cross-entropy for all DN slots (pos + neg) ----
-            # Positive targets: original class (stored in dn_labels via label_embeddings
-            #   but we don't have raw labels here; we infer from pos_neg_flag)
-            # Simplified: positive → class 0 (single-class WiSARD), negative → num_classes
-            # For multi-class you'd carry the label through CDNTargets.
-            tgt_cls = torch.full((N_dn,), num_classes, dtype=torch.long, device=device)
-            tgt_cls[pos_slots] = 0   # hard-coded for single-class; generalise if needed
-
-            cls_loss = F.cross_entropy(
-                pred_logits[b],   # (N_dn, num_classes+1)
-                tgt_cls,
-                reduction="sum",
+            # ---- classification loss for all DN slots (pos + neg) ----
+            # Deformable DETR uses sigmoid focal loss with "no-object" as all-zero targets.
+            # Build one-hot targets for positive slots only; negatives remain all zeros.
+            tgt_labels = cdn_targets.dn_labels[b]  # (N_dn,)
+            target_onehot = torch.zeros(
+                (N_dn, num_classes),
+                dtype=pred_logits.dtype,
+                device=device,
             )
+            if pos_slots.numel() > 0:
+                pos_labels = tgt_labels[pos_slots].clamp(0, num_classes - 1)
+                target_onehot[pos_slots, pos_labels] = 1.0
+
+            cls_loss = _sigmoid_focal_loss(
+                pred_logits[b],
+                target_onehot,
+                num_boxes=max(len(pos_slots), 1),
+            ) * pred_logits[b].shape[0]
 
             total_bbox_loss  += bbox_loss
             total_giou_loss  += giou_loss
@@ -465,6 +477,27 @@ def compute_cdn_loss(
         "loss_cdn_bbox":  loss_coef_bbox  * total_bbox_loss  / normaliser,
         "loss_cdn_giou":  loss_coef_giou  * total_giou_loss  / normaliser,
     }
+
+
+def _sigmoid_focal_loss(
+    inputs: torch.Tensor,
+    targets: torch.Tensor,
+    num_boxes: int,
+    alpha: float = 0.25,
+    gamma: float = 2.0,
+) -> torch.Tensor:
+    """
+    Sigmoid focal loss used by Deformable DETR.
+    Matches HF implementation; normalised by num_boxes.
+    """
+    prob = inputs.sigmoid()
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+    return loss.mean(1).sum() / max(num_boxes, 1)
 
 
 def _box_iou_union(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
