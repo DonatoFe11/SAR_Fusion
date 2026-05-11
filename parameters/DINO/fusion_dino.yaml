@@ -32,7 +32,7 @@ parameters:
   loss:
 
   model:
-    name: [dino_fusion_defdetr]
+    name: [fusion_dino_defdetr]
     params:
       id2label:
         0: [person]
