@@ -221,6 +221,15 @@ class DINOFusionForObjectDetection(DeformableDetrFusionFAMForObjectDetection):
         self.label_noise_prob = label_noise_prob
         self.box_noise_scale  = box_noise_scale
         self.cdn_loss_coef    = cdn_loss_coef
+
+        # Dedicated nn.Embedding for CDN content vectors.
+        # Maps class index (0..num_classes) → d_model vector.
+        # Size is num_classes+1 to include the "no-object" sentinel for negative DN slots.
+        # Must NOT be class_embed, which is a Linear(d_model → num_classes+1).
+        self.dn_label_embeddings = nn.Embedding(
+            len(config.id2label) + 1, config.d_model
+        )
+
         self.post_init()
 
     # ------------------------------------------------------------------
@@ -245,7 +254,7 @@ class DINOFusionForObjectDetection(DeformableDetrFusionFAMForObjectDetection):
         if self.training and labels is not None:
             cdn_targets = build_cdn_queries(
                 targets=labels,
-                label_embeddings=self.class_embed[-1],
+                label_embeddings=self.dn_label_embeddings,
                 pos_embeddings=self.model.query_position_embeddings,
                 num_dn_groups=self.num_dn_groups,
                 label_noise_prob=self.label_noise_prob,
