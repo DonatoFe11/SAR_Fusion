@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_FAM_Fusion_Training_vis_ir_2.0
+  name: DINO_Fusion_DefDETR_baseline
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -15,29 +15,43 @@ parameters:
     val_image_log_frequency: [50]
 
   train:
-    max_epochs: [10]  
+    max_epochs: [20]
     compile: [False]
     initial_lr: [0.00002]
+    backbone_lr: [0.00001]
     optimizer: [AdamW]
     watch_metric: [map]
-    precision: ["fp16"]  # Mixed precision for speed
-  
+    gradient_clip_norm: [0.1]
+    gradient_accumulation_steps: [4]
+    early_stopping_patience: [5]
+    scheduler:
+      type: [cosine]
+      num_warmup_steps: [200]
+      step_moment: [batch]
+
   loss:
 
   model:
-    name: [fusion_dino]
+    name: [dino_fusion_defdetr]
     params:
       id2label:
         0: [person]
       threshold: [0.01]
-      num_feature_levels: [4]  # Full multi-scale with channel concat
-      use_fam: [true]  # Enable FAM for fusion
-      
+      num_feature_levels: [4]
+      use_fam: [false]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      num_dn_groups: [5]
+      label_noise_prob: [0.5]
+      box_noise_scale: [1.0]
+      cdn_loss_coef: [1.0]
+
   dataset:
     name: [wisard]
     root: [dataset/WiSARD]
     preprocessor:
-      path: ["SenseTime/deformable-detr"]  # DINO uses same processor
+      path: ["SenseTime/deformable-detr"]
     folders: [vis_ir]
     single_class: [true]
     modal_dropout: [true]
@@ -46,8 +60,8 @@ parameters:
 
   dataloader:
     num_workers: [4]
-    batch_size: [1]  # Start with 1, increase if memory allows
-  
+    batch_size: [1]
+
   val_evaluation:
     metrics:
 

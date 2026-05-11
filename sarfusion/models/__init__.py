@@ -11,7 +11,7 @@ from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDeformableDetrFAM
+from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDeformableDetrFAM, FusionDINODeformableDetr
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -226,6 +226,33 @@ def build_fusion_deformable_detr_fam(
         spatial_jitter_std=spatial_jitter_std,
     )
 
+def build_fusion_dino_defdetr(
+    threshold=0.9,
+    id2label=None,
+    num_feature_levels=None,
+    use_fam=False,
+    freeze_fam=False,
+    ir_dropout_rate=0.0,
+    spatial_jitter_std=0.0,
+    num_dn_groups=5,
+    label_noise_prob=0.5,
+    box_noise_scale=1.0,
+    cdn_loss_coef=1.0,
+):
+    return FusionDINODeformableDetr(
+        threshold=threshold,
+        id2label=id2label,
+        num_feature_levels=num_feature_levels,
+        use_fam=use_fam,
+        freeze_fam=freeze_fam,
+        ir_dropout_rate=ir_dropout_rate,
+        spatial_jitter_std=spatial_jitter_std,
+        num_dn_groups=num_dn_groups,
+        label_noise_prob=label_noise_prob,
+        box_noise_scale=box_noise_scale,
+        cdn_loss_coef=cdn_loss_coef,
+    )
+
 
 MODEL_REGISTRY = {
     "vit_classifier": build_vit_classifier,
@@ -241,4 +268,5 @@ MODEL_REGISTRY = {
     "fusion_rtdetr_cmx_hybrid": build_fusion_rt_detr_cmx_hybrid,
     "fusion_defdetr": build_fusion_deformable_detr,
     "fusion_defdetr_fam": build_fusion_deformable_detr_fam,
+    "fusion_dino_defdetr": build_fusion_dino_defdetr,
 }

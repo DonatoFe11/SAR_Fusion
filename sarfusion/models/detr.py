@@ -20,6 +20,7 @@ from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
 from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
 from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
 from sarfusion.models.deformable_detr_fusion_fam import DeformableDetrFusionFAMForObjectDetection
+from sarfusion.models.dino_fusion import DINOFusionForObjectDetection
 
 
 def convert_detr_predictions(predictions):
@@ -254,3 +255,51 @@ class FusionDeformableDetrFAM(BaseDetr):
         self.freeze_fam = freeze_fam
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
+
+
+class FusionDINODeformableDetr(BaseDetr):
+    """
+    DINO-style Deformable DETR with RGB-IR fusion + optional FAM.
+    Adds CDN training and Look-Forward-Twice on top of FusionDeformableDetrFAM.
+    """
+ 
+    def __init__(
+        self,
+        id2label,
+        threshold=0.9,
+        num_feature_levels=None,
+        use_fam=False,
+        freeze_fam=False,
+        ir_dropout_rate=0.0,
+        spatial_jitter_std=0.0,
+        num_dn_groups=5,
+        label_noise_prob=0.5,
+        box_noise_scale=1.0,
+        cdn_loss_coef=1.0,
+    ):
+ 
+        model_kwargs = {}
+        if num_feature_levels is not None:
+            model_kwargs["num_feature_levels"] = num_feature_levels
+        model_kwargs.update(
+            {
+                "use_fam": use_fam,
+                "freeze_fam": freeze_fam,
+                "ir_dropout_rate": ir_dropout_rate,
+                "spatial_jitter_std": spatial_jitter_std,
+                "num_dn_groups": num_dn_groups,
+                "label_noise_prob": label_noise_prob,
+                "box_noise_scale": box_noise_scale,
+                "cdn_loss_coef": cdn_loss_coef,
+            }
+        )
+ 
+        super(FusionDINODeformableDetr, self).__init__(
+            processor_class=DeformableDetrImageProcessor,
+            model_class=DINOFusionForObjectDetection,
+            pretrained_model_name="SenseTime/deformable-detr",
+            id2label=id2label,
+            threshold=threshold,
+            **model_kwargs,
+        )
+        self.processor.num_channels = 4
