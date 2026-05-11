@@ -269,7 +269,7 @@ class Run:
 
                 for epoch in range(self.train_params["max_epochs"]):
                     logger.info(
-                        "Epoch: {}/{}".format(epoch, self.train_params["max_epochs"])
+                        "Epoch: {}/{}".format(epoch + 1, self.train_params["max_epochs"])
                     )
                     self.train_epoch(epoch)
 
@@ -294,7 +294,7 @@ class Run:
                             )
                         if epochs_without_improvement >= patience:
                             logger.info(
-                                f"Early stopping triggered after {epoch +1} epochs")
+                                f"Early stopping triggered after {epoch + 1} epochs")
                             break
         else:
             logger.info("No training params, no training")
@@ -483,6 +483,11 @@ class Run:
 
             loss_avg.update(loss.item())
             self.tracker.log_metric("loss", loss.item())
+
+            if hasattr(result_dict, "loss") and hasattr(result_dict.loss, "components"):
+                for k, v in result_dict.loss.components.items():
+                    if "cdn" in k:
+                        self.tracker.log_metric(k, v.item() if hasattr(v, "item") else v)
 
             self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
             self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
