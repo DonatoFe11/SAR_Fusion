@@ -367,7 +367,16 @@ class Run:
     def _backward(
         self, batch_idx, input_dict, outputs: WrapperModelOutput, loss_normalizer
     ):
-        loss_value = outputs.loss.value if isinstance(outputs.loss, LossOutput) else outputs.loss
+        loss = outputs.loss
+        if isinstance(loss, torch.Tensor):
+            loss_value = loss
+        elif hasattr(loss, "value"):
+            loss_value = loss.value
+        elif isinstance(loss, dict) and "value" in loss:
+            loss_value = loss["value"]
+        else:
+            raise ValueError(f"Unexpected loss type: {type(loss)}, value: {loss}")
+
         loss_value = loss_value / loss_normalizer
         self.accelerator.backward(loss_value)
         check_nan(
