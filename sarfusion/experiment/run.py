@@ -367,7 +367,7 @@ class Run:
     def _backward(
         self, batch_idx, input_dict, outputs: WrapperModelOutput, loss_normalizer
     ):
-        loss_value = outputs.loss.value if isinstance(outputs.loss, dict) else outputs.loss
+        loss_value = outputs.loss.value if isinstance(outputs.loss, LossOutput) else outputs.loss
         loss_value = loss_value / loss_normalizer
         self.accelerator.backward(loss_value)
         check_nan(
