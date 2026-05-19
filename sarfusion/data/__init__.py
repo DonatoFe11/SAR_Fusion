@@ -92,11 +92,14 @@ def get_dataloaders(dataset_params, dataloader_params, return_datasets=False):
         transform=transforms,
         **train_dataset_params,
     )
+    generator_train = torch.Generator()
+    generator_train.manual_seed(torch.initial_seed())
     train_loader = torch.utils.data.DataLoader(
         train_set,
         collate_fn=get_collate_fn(train_set),
         shuffle=True,
         worker_init_fn=seed_worker,
+        generator=generator_train,
         **dataloader_params,
     )
     val_set = dataclass(

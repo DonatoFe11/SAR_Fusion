@@ -23,7 +23,7 @@ parameters:
     watch_metric: [map]
     gradient_clip_norm: [0.1]
     gradient_accumulation_steps: [4]
-    early_stopping_patience: [5]
+    early_stopping_patience: [8]
     scheduler:
       type: [cosine]
       num_warmup_steps: [200]
