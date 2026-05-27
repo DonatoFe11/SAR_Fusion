@@ -1,5 +1,5 @@
 experiment:
-  name: DeformableDETR_Fusion
+  name: DeformableDETR_Fusion_vis_ir
   group: DeformableDETR_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -7,7 +7,7 @@ experiment:
   search: grid
 
 parameters:
-  seed: &seed [42, 43, 44]
+  seed: &seed [42]
   task: [detection]
 
   tracker:
@@ -27,6 +27,8 @@ parameters:
       type: [cosine]
       num_warmup_steps: [200]
       step_moment: [batch]
+    time_probe_interval: [100]
+    time_probe_sync: [True]
 
   loss:
 
