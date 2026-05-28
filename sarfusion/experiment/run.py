@@ -83,6 +83,8 @@ class Run:
 
     def init(self, params: dict):
         set_seed(params["seed"])
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -471,6 +473,8 @@ class Run:
     ):
         if epoch > 0:
             set_seed(self.params["seed"] + epoch)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = True
             logger.info(f"Setting seed to {self.params['seed'] + epoch}")
         self.tracker.log_metric("start_epoch", epoch)
         self.model.train()
