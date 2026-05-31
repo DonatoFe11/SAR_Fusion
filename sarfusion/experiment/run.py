@@ -6,9 +6,6 @@ from copy import deepcopy
 from safetensors import safe_open
 from collections import defaultdict
 
-# Set cublas for deterministic behavior
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs
@@ -86,9 +83,6 @@ class Run:
 
     def init(self, params: dict):
         set_seed(params["seed"])
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        torch.use_deterministic_algorithms(True, warn_only=True)
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -477,9 +471,6 @@ class Run:
     ):
         if epoch > 0:
             set_seed(self.params["seed"] + epoch)
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
-            torch.use_deterministic_algorithms(True, warn_only=True)
             logger.info(f"Setting seed to {self.params['seed'] + epoch}")
         self.tracker.log_metric("start_epoch", epoch)
         self.model.train()
