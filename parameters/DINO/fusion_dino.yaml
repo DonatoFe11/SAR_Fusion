@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Fusion_DefDETR_baseline
+  name: DINO_Fusion_DefDETR_vis_ir
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -7,7 +7,7 @@ experiment:
   search: grid
 
 parameters:
-  seed: &seed [42]
+  seed: &seed [49]
   task: [detection]
 
   tracker:
@@ -15,19 +15,15 @@ parameters:
     val_image_log_frequency: [50]
 
   train:
-    max_epochs: [20]
+    max_epochs: [10]
     compile: [False]
     initial_lr: [0.00002]
-    backbone_lr: [0.00001]
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
     gradient_accumulation_steps: [4]
-    early_stopping_patience: [8]
-    scheduler:
-      type: [cosine]
-      num_warmup_steps: [200]
-      step_moment: [batch]
+    time_probe_interval: [100]
+    time_probe_sync: [True]
 
   loss:
 
