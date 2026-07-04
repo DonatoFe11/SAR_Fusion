@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Fusion_DefDETR_baseline_test
+  name: DINO_DefDETR_FAM_Test1
   group: DINO_Investigation
   continue_with_errors: False
   search: grid
@@ -18,10 +18,10 @@ parameters:
     params:
       id2label:
         0: [person]
-      threshold: [0.01, 0.05, 0.1]
-      pretrained_path: ["checkpoints/model.safetensors"]
+      threshold: [0.01, 0.1]
+      pretrained_path: ["checkpoints/dino_defdetr_fam1.safetensors"]
       num_feature_levels: [4]
-      use_fam: [false]  # IMPORTANT: Must match the checkpoint trained with FAM
+      use_fam: [true]
   
   dataset:
     name: [wisard]

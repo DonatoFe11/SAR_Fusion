@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Fusion_DefDETR_vis_ir
+  name: DINO_Fusion_DefDETR_FAM_SSJ_vis_ir
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -34,10 +34,10 @@ parameters:
         0: [person]
       threshold: [0.01]
       num_feature_levels: [4]
-      use_fam: [false]
+      use_fam: [true]
       freeze_fam: [false]
       ir_dropout_rate: [0.0]
-      spatial_jitter_std: [0.0]
+      spatial_jitter_std: [0.5]
       num_dn_groups: [5]
       label_noise_prob: [0.5]
       box_noise_scale: [1.0]
