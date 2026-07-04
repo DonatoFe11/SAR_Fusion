@@ -19,7 +19,6 @@ from sarfusion.models.rtdetr_fusion_fam import RTDetrFusionForObjectDetection as
 from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
 from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
 from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
-from sarfusion.models.deformable_detr_fusion_fam import DeformableDetrFusionFAMForObjectDetection
 from sarfusion.models.dino_fusion import DINOFusionForObjectDetection
 
 
@@ -195,29 +194,6 @@ class FusionRTDetrCMXHybrid(BaseDetr):
 
 
 class FusionDeformableDetr(BaseDetr):
-    """Deformable DETR with RGB-IR fusion via token concatenation.
-    
-    This model is robust to spatial misalignment between RGB and IR modalities
-    thanks to deformable attention with learnable offsets and token-level fusion.
-    """
-    def __init__(self, id2label, threshold=0.9, num_feature_levels=None):
-        model_kwargs = {}
-        if num_feature_levels is not None:
-            model_kwargs['num_feature_levels'] = num_feature_levels
-            
-        super(FusionDeformableDetr, self).__init__(
-            processor_class=DeformableDetrImageProcessor,
-            model_class=DeformableDetrFusionForObjectDetection,
-            pretrained_model_name="SenseTime/deformable-detr",
-            id2label=id2label,
-            threshold=threshold,
-            **model_kwargs,
-        )
-        # Force the processor to accept 4 channels (3 RGB + 1 IR)
-        self.processor.num_channels = 4
-
-
-class FusionDeformableDetrFAM(BaseDetr):
     """Deformable DETR with RGB-IR fusion + optional FAM alignment."""
 
     def __init__(
@@ -242,9 +218,9 @@ class FusionDeformableDetrFAM(BaseDetr):
             }
         )
 
-        super(FusionDeformableDetrFAM, self).__init__(
+        super(FusionDeformableDetr, self).__init__(
             processor_class=DeformableDetrImageProcessor,
-            model_class=DeformableDetrFusionFAMForObjectDetection,
+            model_class=DeformableDetrFusionForObjectDetection,
             pretrained_model_name="SenseTime/deformable-detr",
             id2label=id2label,
             threshold=threshold,
@@ -260,7 +236,7 @@ class FusionDeformableDetrFAM(BaseDetr):
 class FusionDINODeformableDetr(BaseDetr):
     """
     DINO-style Deformable DETR with RGB-IR fusion + optional FAM.
-    Adds CDN training and Look-Forward-Twice on top of FusionDeformableDetrFAM.
+    Adds CDN training and Look-Forward-Twice on top of FusionDeformableDetr.
     """
  
     def __init__(

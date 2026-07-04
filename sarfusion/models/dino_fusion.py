@@ -1,23 +1,3 @@
-"""
-dino_fusion.py
---------------
-DINO-style training on top of the existing RGB-IR Fusion backbone.
-
-Class hierarchy:
-    DeformableDetrForObjectDetection               (HuggingFace, untouched)
-      └─ DeformableDetrFusionFAMForObjectDetection  (deformable_detr_fusion_fam.py, untouched)
-           └─ DINOFusionForObjectDetection           ← this file
-
-What this file adds vs. the parent:
-  1. CDN query injection in forward()   – prepend DN slots to decoder input
-  2. CDN loss in forward()              – supervised on DN slots only
-  3. Look Forward Twice (LFT)           – gradient flows through reference points
-     between decoder layers via LFTDecoder
-
-Place this file at:
-    sarfusion/models/dino_fusion.py
-"""
-
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -37,9 +17,9 @@ from transformers.models.deformable_detr.configuration_deformable_detr import (
     DeformableDetrConfig,
 )
 
-from sarfusion.models.deformable_detr_fusion_fam import (
-    DeformableDetrFusionFAMForObjectDetection,
-    DeformableDetrFusionFAMModel,
+from sarfusion.models.deformable_detr_fusion import (
+    DeformableDetrFusionForObjectDetection,
+    DeformableDetrFusionModel,
 )
 from sarfusion.models.dino_cdn import (
     CDNTargets,
@@ -144,7 +124,7 @@ class LFTDecoder(DeformableDetrDecoder):
 # 2.  Inner model — swaps in LFTDecoder, keeps fusion backbone
 # ---------------------------------------------------------------------------
 
-class DINOFusionModel(DeformableDetrFusionFAMModel):
+class DINOFusionModel(DeformableDetrFusionModel):
     """
     Replaces the standard decoder with LFTDecoder.
     Backbone and encoder are fully inherited.
@@ -172,11 +152,11 @@ class DINOFusionModel(DeformableDetrFusionFAMModel):
 # 3.  Detection head — CDN injection + CDN loss
 # ---------------------------------------------------------------------------
 
-class DINOFusionForObjectDetection(DeformableDetrFusionFAMForObjectDetection):
+class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
     """
     Full DINO-style RGB-IR fusion model.
 
-    Adds to DeformableDetrFusionFAMForObjectDetection:
+    Adds to DeformableDetrFusionForObjectDetection:
       • CDN query injection (training only)
       • CDN loss on denoising slots
       • Look-Forward-Twice via LFTDecoder

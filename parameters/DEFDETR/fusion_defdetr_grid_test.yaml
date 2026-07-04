@@ -14,7 +14,7 @@ parameters:
     tags: [[FinalReport]]
 
   model:
-    name: [fusion_defdetr_fam]
+    name: [fusion_defdetr]
     params:
       id2label:
         0: [person]

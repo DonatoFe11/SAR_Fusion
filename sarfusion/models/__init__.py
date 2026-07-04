@@ -11,7 +11,7 @@ from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDeformableDetrFAM, FusionDINODeformableDetr
+from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDINODeformableDetr
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -198,16 +198,7 @@ def build_fusion_rt_detr_cmx(threshold=0.9, id2label=None):
 def build_fusion_rt_detr_cmx_hybrid(threshold=0.9, id2label=None):
     return FusionRTDetrCMXHybrid(threshold=threshold, id2label=id2label)
 
-
-def build_fusion_deformable_detr(threshold=0.9, id2label=None, num_feature_levels=None):
-    return FusionDeformableDetr(
-        threshold=threshold, 
-        id2label=id2label,
-        num_feature_levels=num_feature_levels,
-    )
-
-
-def build_fusion_deformable_detr_fam(
+def build_fusion_deformable_detr(
     threshold=0.9,
     id2label=None,
     num_feature_levels=None,
@@ -216,7 +207,7 @@ def build_fusion_deformable_detr_fam(
     ir_dropout_rate=0.0,
     spatial_jitter_std=0.0,
 ):
-    return FusionDeformableDetrFAM(
+    return FusionDeformableDetr(
         threshold=threshold,
         id2label=id2label,
         num_feature_levels=num_feature_levels,
@@ -267,6 +258,5 @@ MODEL_REGISTRY = {
     "fusion_rtdetr_cmx": build_fusion_rt_detr_cmx,
     "fusion_rtdetr_cmx_hybrid": build_fusion_rt_detr_cmx_hybrid,
     "fusion_defdetr": build_fusion_deformable_detr,
-    "fusion_defdetr_fam": build_fusion_deformable_detr_fam,
     "fusion_dino_defdetr": build_fusion_dino_defdetr,
 }
