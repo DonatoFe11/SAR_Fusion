@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import time
 from copy import deepcopy
 from safetensors import safe_open
 from collections import defaultdict
@@ -82,9 +83,6 @@ class Run:
 
     def init(self, params: dict):
         set_seed(params["seed"])
-        torch.backends.cudnn.benchmark = True
-        # torch.use_deterministic_algorithms(True, warn_only=True)
-        # os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -269,7 +267,7 @@ class Run:
 
                 for epoch in range(self.train_params["max_epochs"]):
                     logger.info(
-                        "Epoch: {}/{}".format(epoch, self.train_params["max_epochs"])
+                        "Epoch: {}/{}".format(epoch + 1, self.train_params["max_epochs"])
                     )
                     self.train_epoch(epoch)
 
@@ -294,7 +292,7 @@ class Run:
                             )
                         if epochs_without_improvement >= patience:
                             logger.info(
-                                f"Early stopping triggered after {epoch +1} epochs")
+                                f"Early stopping triggered after {epoch + 1} epochs")
                             break
         else:
             logger.info("No training params, no training")
@@ -367,7 +365,16 @@ class Run:
     def _backward(
         self, batch_idx, input_dict, outputs: WrapperModelOutput, loss_normalizer
     ):
-        loss_value = outputs.loss.value if isinstance(outputs.loss, dict) else outputs.loss
+        loss = outputs.loss
+        if isinstance(loss, torch.Tensor):
+            loss_value = loss
+        elif hasattr(loss, "value"):
+            loss_value = loss.value
+        elif isinstance(loss, dict) and "value" in loss:
+            loss_value = loss["value"]
+        else:
+            raise ValueError(f"Unexpected loss type: {type(loss)}, value: {loss}")
+
         loss_value = loss_value / loss_normalizer
         self.accelerator.backward(loss_value)
         check_nan(
@@ -439,14 +446,31 @@ class Run:
         if self.train_evaluator is not None:
             self._update_metrics(self.train_evaluator, batch_dict, result_dict)
 
+    def _count_targets(self, batch_dict: DataDict) -> int:
+        labels = getattr(batch_dict, "labels", None)
+        if not labels:
+            return 0
+        total = 0
+        try:
+            for label in labels:
+                if label is None:
+                    continue
+                if isinstance(label, dict) and "boxes" in label:
+                    total += len(label["boxes"])
+                elif hasattr(label, "boxes"):
+                    total += len(label.boxes)
+                elif isinstance(label, (list, tuple)):
+                    total += len(label)
+        except Exception:
+            return 0
+        return int(total)
+
     def train_epoch(
         self,
         epoch: int,
     ):
         if epoch > 0:
             set_seed(self.params["seed"] + epoch)
-            torch.backends.cudnn.benchmark = True
-            # torch.use_deterministic_algorithms(True, warn_only=True)
             logger.info(f"Setting seed to {self.params['seed'] + epoch}")
         self.tracker.log_metric("start_epoch", epoch)
         self.model.train()
@@ -461,15 +485,25 @@ class Run:
             enumerate(self.train_loader),
             total=len(self.train_loader),
             postfix={"loss": 0},
-            desc=f"Train Epoch {epoch}/{self.train_params['max_epochs']-1}",
+            desc=f"Train Epoch {epoch + 1}/{self.train_params['max_epochs']}",
         )
         metric_values = {}
+        probe_every = int(self.train_params.get("time_probe_interval", 0) or 0)
+        probe_sync = bool(self.train_params.get("time_probe_sync", True))
+        probe_enabled = probe_every > 0
+        prev_iter_end = time.perf_counter()
 
         for batch_idx, batch_dict in bar:
+            iter_start = time.perf_counter()
+            data_time = iter_start - prev_iter_end
             # if batch_idx == 1000:
             #     break
             batch_dict = DataDict(**batch_dict)
             with self.accelerator.accumulate(self.model):
+                if probe_enabled and (batch_idx % probe_every == 0):
+                    if probe_sync and torch.cuda.is_available():
+                        torch.cuda.synchronize()
+                compute_start = time.perf_counter()
                 self.optimizer.zero_grad()
                 result_dict: WrapperModelOutput = self._forward(
                     batch_dict, epoch, batch_idx
@@ -481,8 +515,27 @@ class Run:
                 self.optimizer.step()
                 self._scheduler_step(SchedulerStepMoment.BATCH)
 
+            if probe_enabled and (batch_idx % probe_every == 0):
+                if probe_sync and torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                compute_time = time.perf_counter() - compute_start
+                num_targets = self._count_targets(batch_dict)
+                logger.info(
+                    "Probe epoch %s step %s: data=%.3fs compute=%.3fs targets=%s",
+                    epoch + 1,
+                    batch_idx,
+                    data_time,
+                    compute_time,
+                    num_targets,
+                )
+
             loss_avg.update(loss.item())
             self.tracker.log_metric("loss", loss.item())
+
+            if hasattr(result_dict, "loss") and hasattr(result_dict.loss, "components"):
+                for k, v in result_dict.loss.components.items():
+                    if "cdn" in k:
+                        self.tracker.log_metric(k, v.item() if hasattr(v, "item") else v)
 
             self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
             self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
@@ -505,10 +558,11 @@ class Run:
             tot_steps += 1
             self.global_train_step += 1
             self.tracker.save_experiment_timed()
+            prev_iter_end = time.perf_counter()
 
         logger.info(f"Waiting for everyone")
         self.accelerator.wait_for_everyone()
-        logger.info(f"Finished Epoch {epoch}")
+        logger.info(f"Finished Epoch {epoch+1}")
         logger.info(f"Metrics")
         metric_dict = {
             **self.train_evaluator.compute(),
@@ -537,7 +591,7 @@ class Run:
         tile_gt_buffer = {}  # Salva le GT per ogni immagine originale
         
         tot_steps = 0
-        desc = f"{phase} Epoch {epoch}" if epoch is not None else f"{phase}"
+        desc = f"{phase} Epoch {epoch+1}" if epoch is not None else f"{phase}"
         bar = tqdm(
             enumerate(dataloader),
             total=len(dataloader),
@@ -621,7 +675,7 @@ class Run:
         metrics_value = self.val_evaluator.compute()
         for k, v in metrics_value.items():
             if epoch is not None:
-                logger.info(f"{phase} epoch {epoch} - {k}: {v}")
+                logger.info(f"{phase} epoch {epoch+1} - {k}: {v}")
             else:
                 logger.info(f"{phase} - {k}: {v}")
         logger.info(f"{phase} Loss: {avg_loss.compute()}")
