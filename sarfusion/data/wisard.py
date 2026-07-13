@@ -1012,7 +1012,9 @@ class WiSARDYOLODataset(YOLODataset):
                 else:
                     im_vis = torch.tensor(cv2.imread(f[0])).permute(2, 0, 1)  # BGR
                     im_ir = torch.tensor(cv2.imread(f[1])).permute(2, 0, 1)  # IR
-                    im = adapt_ir2rgb(im_vis, im_ir).permute(1, 2, 0).numpy()
+                    im_vis, im_ir = adapt_ir2rgb(im_vis, im_ir)
+                    im_ir = im_ir[:1] if im_ir.dim() == 3 else im_ir
+                    im = torch.cat([im_vis, im_ir], dim=0).permute(1, 2, 0).numpy()
             if im is None:
                 raise FileNotFoundError(f"Image Not Found {f}")
 

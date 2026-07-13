@@ -134,13 +134,18 @@ class YOLOv10FusionFAM(nn.Module):
     # ------------------------------------------------------------------
 
     def _adapt_ir_first_conv(self):
-        """Resize IR backbone's first Conv from 3ch to 1ch in-place."""
+        """
+        Shrink IR backbone's first Conv from 3ch to 1ch in-place
+        so the state-dict shape matches the RGB→IR weights that
+        load_coco_pretrained() copies over.
+        parse_model(ir_cfg, ch=1) already creates a 1ch Conv when
+        building from scratch, but the pretrained weight remapping
+        needs the module to report in_channels=1 *before* the copy.
+        """
         for layer in self.ir_layers:
             for module in layer.modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == 3:
                     module.in_channels = 1
-                    old_w = module.weight
-                    module.weight = nn.Parameter(old_w.mean(dim=1, keepdim=True))
 
     def _compute_stride(self):
         """Compute and set detection stride using standard YOLO forward."""
@@ -213,8 +218,9 @@ class YOLOv10FusionFAM(nn.Module):
             y.append(x if m.i in self.save else None)
         return x
 
-    def forward(self, x):
-        """Forward pass. Accepts 4ch tensor [B,4,H,W] or batch dict from trainer."""
+    def forward(self, x, *args, **kwargs):
+        """Forward pass. Accepts 4ch tensor [B,4,H,W] or batch dict from trainer.
+        Extra kwargs (augment, etc.) from ultralytics validator are ignored."""
         if isinstance(x, dict):
             return self.loss(x)
         return self.predict(x)
@@ -346,38 +352,3 @@ class YOLOv10FusionFAM(nn.Module):
         if not hasattr(self, "criterion") or self.criterion is None:
             self.criterion = self.init_criterion()
         return self.criterion(preds, batch)
-
-    def get_learnable_params(self, train_params: dict):
-        """
-        Return learnable parameter groups with differential learning rates.
-        Backbone params use lower LR; FAM and neck use higher LR.
-        """
-        backbone_ids = set()
-        for i in range(self.num_backbone_layers):
-            for p in self.full_model[i].parameters():
-                backbone_ids.add(id(p))
-        for layer in self.ir_layers:
-            for p in layer.parameters():
-                backbone_ids.add(id(p))
-
-        backbone_params = []
-        new_params = []
-        for name, param in self.named_parameters():
-            if not param.requires_grad:
-                continue
-            if id(param) in backbone_ids:
-                backbone_params.append(param)
-            else:
-                new_params.append(param)
-
-        backbone_lr = train_params.get("backbone_lr", train_params.get("initial_lr", 1e-4))
-        new_lr = train_params.get("initial_lr", 1e-3)
-
-        groups = []
-        if backbone_params:
-            groups.append({"params": backbone_params, "lr": backbone_lr * 0.1})
-        if new_params:
-            groups.append({"params": new_params, "lr": new_lr})
-        if not groups:
-            groups.append({"params": list(self.parameters())})
-        return groups

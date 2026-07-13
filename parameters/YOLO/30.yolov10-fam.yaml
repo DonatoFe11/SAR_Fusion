@@ -20,7 +20,7 @@ parameters:
       ir_dropout_rate: [0.0]
       freeze_fam: [False]
 
-  data: [wisards_vis_all_ir_sync-test_vis.yaml]
+  data: [wisards_vis_ir.yaml]
   epochs: [200]
   patience: [30]
   batch: [16]
@@ -38,7 +38,7 @@ parameters:
   verbose: [True]
   seed: [42]
   deterministic: [True]
-  augment_vis_ir: [True]  # Modal dropout (20% IR, 20% RGB, 60% fusion)
+  augment_vis_ir: [False]  # Disabled: single-modality padding not yet implemented in WiSARDYOLODataset for 4ch models
   single_cls: [True]
   rect: [False]
   cos_lr: [False]
@@ -92,4 +92,4 @@ parameters:
   erasing: [0.4]
   crop_fraction: [1.0]
 
-# Grid search: 2 (use_fam) × 3 (spatial_jitter_std) = 6 runs
+other_grids: []
