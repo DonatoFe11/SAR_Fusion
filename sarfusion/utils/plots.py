@@ -775,7 +775,8 @@ def plot_images(
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
         annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
         if paths:
-            annotator.text((x + 5, y + 5), text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))  # filenames
+            p = paths[i][0] if isinstance(paths[i], (list, tuple)) else paths[i]
+            annotator.text((x + 5, y + 5), text=Path(p).name[:40], txt_color=(220, 220, 220))  # filenames
             annotator.text((x + 5, y + h - 25), text=f"{img_types[i]}", txt_color=(220, 220, 220))  # image type
         if len(cls) > 0:
             idx = batch_idx == i

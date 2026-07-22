@@ -851,7 +851,7 @@ def yolo_train(parameters):
     args['model'] = None
     
     trainer = WisardTrainer(overrides=args)
-    model['params']['nc'] = trainer.data["nc"]
+    model['params']['nc'] = 1 if args.get("single_cls") else trainer.data["nc"]
     
     trainer.model = build_model(model)
     trainer.train()

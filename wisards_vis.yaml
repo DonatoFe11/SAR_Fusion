@@ -1,0 +1,12 @@
+
+# Train/val/test sets come 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, o 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: ../dataset/WiSARD # dataset root dir
+train: train_vis.txt
+val: val_vis.txt
+test: test_vis.txt
+
+# Classes
+names:
+  0: stands
+  1: rests
+  2: not_defined

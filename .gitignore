@@ -150,6 +150,7 @@ checkpoints
 out
 runs
 SarYOLO
+SarYOLOSingleClass
 
 output
 test

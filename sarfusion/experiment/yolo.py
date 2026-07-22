@@ -114,6 +114,8 @@ class WisardValidator(YOLOv10DetectionValidator):
         )
         bar = TQDM(self.dataloader, desc=self.get_desc(), total=len(self.dataloader))
         self.init_metrics(de_parallel(model))
+        if self.args.single_cls:
+            self.nc = 1
         self.jdict = []  # empty before each val
         for batch_i, batch in enumerate(bar):
             self.run_callbacks("on_val_batch_start")
@@ -181,6 +183,18 @@ class WisardValidator(YOLOv10DetectionValidator):
             batch["bboxes"],
             paths=batch["im_file"],
             fname=self.save_dir / f"{mode}_batch{ni}_labels.jpg",
+            names=self.names,
+            on_plot=self.on_plot,
+        )
+
+    def plot_predictions(self, batch, preds, ni):
+        """Plots predicted bounding boxes using the 4-channel-aware plotter."""
+        from sarfusion.utils.plots import output_to_target
+        plot_images(
+            batch["img"],
+            *output_to_target(preds, max_det=self.args.max_det),
+            paths=batch["im_file"],
+            fname=self.save_dir / f"val_batch{ni}_pred.jpg",
             names=self.names,
             on_plot=self.on_plot,
         )

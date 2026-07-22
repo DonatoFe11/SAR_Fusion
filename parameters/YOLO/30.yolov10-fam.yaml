@@ -30,8 +30,8 @@ parameters:
   val_period: [1]
   cache: [False]
   workers: [4]
-  project: [SarYOLO]
-  name: [YOLOv10-FAM-Grid]
+  project: [SarYOLOSingleClass]
+  name: [YOLOv10-sc-FAM-Grid]
   exist_ok: [False]
   pretrained: [False]  # Weights loaded internally by the model class
   optimizer: [AdamW]

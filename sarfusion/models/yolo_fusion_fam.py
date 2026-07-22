@@ -205,6 +205,10 @@ class YOLOv10FusionFAM(nn.Module):
             y.append(x if m.i in self.save else None)
         return y
 
+    def _forward_single(self, x: torch.Tensor, _ir) -> torch.Tensor:
+        """Single-modality forward (3ch) — used during AutoBackend warmup."""
+        return self._run_standard_forward(x)
+
     def _run_standard_forward(self, x: torch.Tensor) -> torch.Tensor:
         """Run standard YOLO forward through the full model."""
         y = []
@@ -230,12 +234,16 @@ class YOLOv10FusionFAM(nn.Module):
         Forward pass with dual backbone, FAM, and additive fusion.
 
         Args:
-            x: [B, 4, H, W] — channels 0:3 = RGB, channel 3 = IR
+            x: [B, C, H, W] — C=4 (RGB ch0-2 + IR ch3) for fusion,
+                C=3 for warmup/standard single-modality inference
 
         Returns:
             YOLOv10 detection output (dict with one2one + one2many during
             training, postprocessed tensor during inference)
         """
+        if x.shape[1] == 3:
+            return self._forward_single(x, None)
+
         rgb = x[:, :3].contiguous()
         ir = x[:, 3:4].contiguous()
 
