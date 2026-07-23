@@ -6,7 +6,7 @@ Contrastive DeNoising (CDN) query generator for DINO-Fusion.
 This module is self-contained: it only needs torch and produces tensors
 whose shapes are dictated by the DeformableDetr decoder contract.
 
-DeformableDetr decoder contract (one-stage, non-two-stage):
+DeformableDetr decoder contract (two-stage DINO):
   inputs_embeds                  : (B, Q,   d_model)   ← content ("target")
   object_queries_position_embeds : (B, Q,   d_model)   ← positional ("query_embed")
   reference_points               : (B, Q,   2 or 4)    ← normalised cx,cy[,w,h]
@@ -43,8 +43,8 @@ class CDNTargets:
     Shapes
     ------
     dn_content    : (B, N_dn, d_model)  – content embeddings for DN slots
-    dn_pos        : (B, N_dn, d_model)  – position embeddings for DN slots
     dn_ref_points : (B, N_dn, 4)        – noised reference boxes (cx,cy,w,h) in [0,1]
+    dn_target_boxes: (B, N_dn, 4)       – original boxes used as CDN reconstruction targets
     attn_mask     : (N_total, N_total)  – additive float mask (0 = attend, -inf = block)
     num_dn        : int                 – N_dn = 2 * num_dn_groups * max_gt_per_image
     num_groups    : int                 – num_dn_groups (used by loss)
@@ -53,8 +53,8 @@ class CDNTargets:
     pos_neg_flag  : Tensor (B, N_dn)    – 1=positive DN slot, 0=negative DN slot
     """
     dn_content: torch.Tensor
-    dn_pos: torch.Tensor
     dn_ref_points: torch.Tensor
+    dn_target_boxes: torch.Tensor
     dn_labels: torch.Tensor
     attn_mask: torch.Tensor
     num_dn: int
@@ -118,7 +118,6 @@ def build_cdn_queries(
     targets: List[dict],
     # Model embedding modules – passed in, not owned here
     label_embeddings: torch.nn.Embedding,   # (num_classes+1, d_model) – the class embed table
-    pos_embeddings: torch.nn.Embedding,     # (d_model,) – learned scalar or small MLP; we use a linear
     # CDN hyperparameters
     num_dn_groups: int = 5,
     label_noise_prob: float = 0.5,
@@ -141,12 +140,6 @@ def build_cdn_queries(
     label_embeddings :
         The model's class embedding table.  We look up the noised class index
         to produce the content vector.  Shape (num_classes, d_model).
-    pos_embeddings :
-        The model's query_position_embeddings table, shape (num_queries, 2*d_model).
-        We use the *position* half (first d_model columns) as the DN positional embed,
-        tiled to match the DN slot count.  This is a deliberate simplification vs. the
-        official DINO which uses a learned anchor MLP; it keeps us compatible with the
-        one-stage DeformableDetr weight layout.
     num_dn_groups : int
         Number of CDN groups.  Each group contains one positive + one negative copy of
         every GT box.  Total DN slots = 2 * num_dn_groups * max_gt_per_image.
@@ -195,7 +188,7 @@ def build_cdn_queries(
     # boxes_pad  : (B, max_gt, 4)   padded with 0.5 (centre of image)
     # labels_pad : (B, max_gt)      padded with 0   (arbitrary, masked out)
     # valid_mask : (B, max_gt)      True where real GT exists
-    boxes_pad  = boxes_pad  = torch.full((batch_size, max_gt, 4), 0.5, device=device)
+    boxes_pad = torch.full((batch_size, max_gt, 4), 0.5, device=device)
     labels_pad = torch.zeros(batch_size, max_gt, dtype=torch.long, device=device)
     valid_mask = torch.zeros(batch_size, max_gt, dtype=torch.bool, device=device)
 
@@ -215,9 +208,10 @@ def build_cdn_queries(
     #   slots [(2g+1)*max_gt .. (2g+2)*max_gt-1] → negative copies
 
     # boxes_tiled  : (B, num_dn_groups, 2, max_gt, 4)  → collapse last 3 dims later
-    boxes_tiled  = boxes_pad.unsqueeze(1).unsqueeze(2).expand(
+    target_boxes_tiled = boxes_pad.unsqueeze(1).unsqueeze(2).expand(
         batch_size, num_dn_groups, 2, max_gt, 4
-    ).clone()   # clone so in-place noise writes don't alias
+    ).clone()
+    boxes_tiled = target_boxes_tiled.clone()
     labels_tiled = labels_pad.unsqueeze(1).unsqueeze(2).expand(
         batch_size, num_dn_groups, 2, max_gt
     ).clone()
@@ -253,6 +247,7 @@ def build_cdn_queries(
     # Current shape: (B, num_dn_groups, 2, max_gt, ...)
     # → (B, num_dn_groups * 2 * max_gt, ...)
     dn_ref_points = boxes_tiled.reshape(batch_size, num_dn, 4).clamp(0.0, 1.0)
+    dn_target_boxes = target_boxes_tiled.reshape(batch_size, num_dn, 4)
     dn_labels     = labels_tiled.reshape(batch_size, num_dn)       # (B, num_dn)
 
     # pos_neg_flag: 1 for positive slots, 0 for negative slots
@@ -272,26 +267,10 @@ def build_cdn_queries(
     # ------------------------------------------------------------------ #
     #  5. Build content embeddings  (B, N_dn, d_model)                   #
     # ------------------------------------------------------------------ #
-    # For valid GT slots: embed the (noised) class label.
-    # For padded slots:   embed class 0 (arbitrary; they are masked out in loss).
-    # Negative slots use class index = num_classes → we need a special embedding.
-    # We handle this by clamping the index to the valid range and relying on
-    # the loss to skip padded/negative slots via the CDNTargets metadata.
-    embed_indices = dn_labels.clamp(0, num_classes - 1)   # (B, num_dn)
+    # The final row is the dedicated no-object content embedding used by the
+    # negative denoising slots.  It must not be folded onto a foreground class.
+    embed_indices = dn_labels.clamp(0, num_classes)       # (B, num_dn)
     dn_content = label_embeddings(embed_indices)           # (B, num_dn, d_model)
-
-    # ------------------------------------------------------------------ #
-    #  6. Build positional embeddings  (B, N_dn, d_model)                #
-    # ------------------------------------------------------------------ #
-    # We use the first d_model columns of query_position_embeddings, tiled
-    # across DN slots.  This keeps us compatible with the HF one-stage weight
-    # layout (pos_embeddings is a (num_queries, 2*d_model) table).
-    # Tile the first min(num_dn, num_queries) rows, then repeat-wrap.
-    pos_weight = pos_embeddings.weight[:, :d_model]        # (num_queries, d_model)
-    # tile to cover num_dn slots
-    repeats = (num_dn + num_queries - 1) // num_queries
-    pos_tiled = pos_weight.repeat(repeats, 1)[:num_dn]     # (num_dn, d_model)
-    dn_pos = pos_tiled.unsqueeze(0).expand(batch_size, -1, -1)  # (B, num_dn, d_model)
 
     # ------------------------------------------------------------------ #
     #  7. Build attention mask                                            #
@@ -316,12 +295,8 @@ def build_cdn_queries(
 
     # Block: DN slots from different groups
     group_size = 2 * max_gt  # pos + neg slots per group
-    for g in range(num_dn_groups):
-        start_g = g * group_size
-        end_g   = start_g + group_size
-        # Block all DN-DN pairs where groups differ
-        # Set entire DN×DN block to -inf, then restore intra-group to 0
-        attn_mask[:num_dn, :num_dn] = float("-inf")
+    # Block all DN-DN pairs where groups differ, then restore each group.
+    attn_mask[:num_dn, :num_dn] = float("-inf")
     # Restore intra-group attention to 0 (allow)
     for g in range(num_dn_groups):
         start_g = g * group_size
@@ -349,8 +324,8 @@ def build_cdn_queries(
 
     return CDNTargets(
         dn_content=dn_content,       # (B, N_dn, d_model)
-        dn_pos=dn_pos,               # (B, N_dn, d_model)
         dn_ref_points=dn_ref_points, # (B, N_dn, 4)
+        dn_target_boxes=dn_target_boxes,
         dn_labels=dn_labels,         # (B, N_dn)
         attn_mask=attn_mask,         # (N_total, N_total)
         num_dn=num_dn,
@@ -425,24 +400,10 @@ def compute_cdn_loss(
             pos_mask = pos_neg[b].bool()                      # (N_dn,)
             pos_slots = pos_mask.nonzero(as_tuple=True)[0]   # indices of pos slots
 
-            # GT boxes for positive slots: tile GT n_gt boxes for each group
-            gt_boxes = torch.cat([
-                cdn_targets.dn_ref_points[b, g * 2 * max_gt: g * 2 * max_gt + n_gt]
-                for g in range(num_groups)
-            ], dim=0)  # (num_groups * n_gt, 4)  – these are the noised targets
-
-            # For the loss target we use the *original* GT boxes, which are the
-            # same as the input GT because dn_ref_points contains the noised version.
-            # We retrieve the original from cdn_targets via gt_indices.
-            # But since build_cdn_queries clones before noising, we need the
-            # original to be stored. We recover it from the batch targets.
-            # (see note below — the caller must pass original targets separately
-            #  if needed; here we supervise against the noised reference itself
-            #  as an upper bound proxy, which is standard in most CDN impls)
-
-            # L1 loss on positive slots
+            # CDN learns to reconstruct the original GT box from its noised
+            # reference point, rather than merely reproduce the perturbation.
             pred_pos = pred_boxes[b][pos_slots]              # (n_pos, 4)
-            tgt_pos  = gt_boxes[:len(pos_slots)]             # (n_pos, 4)
+            tgt_pos = cdn_targets.dn_target_boxes[b][pos_slots]
 
             bbox_loss = F.l1_loss(pred_pos, tgt_pos, reduction="sum")
             giou_loss = (1.0 - _box_iou_union(pred_pos, tgt_pos)).sum()
@@ -556,7 +517,6 @@ if __name__ == "__main__":
     NUM_DN_GROUPS = 5
 
     label_emb = torch.nn.Embedding(NC + 1, D)      # +1 for "no-object" sentinel
-    pos_emb   = torch.nn.Embedding(Q, D * 2)
 
     # ------ Test 1: normal batch with GT ------
     targets = [
@@ -575,7 +535,6 @@ if __name__ == "__main__":
     cdn = build_cdn_queries(
         targets,
         label_embeddings=label_emb,
-        pos_embeddings=pos_emb,
         num_dn_groups=NUM_DN_GROUPS,
         label_noise_prob=0.5,
         box_noise_scale=1.0,
@@ -590,8 +549,8 @@ if __name__ == "__main__":
 
     assert cdn is not None,                              "CDN should not be None for non-empty batch"
     assert cdn.dn_content.shape    == (B, N_dn, D),     f"dn_content shape wrong: {cdn.dn_content.shape}"
-    assert cdn.dn_pos.shape        == (B, N_dn, D),     f"dn_pos shape wrong: {cdn.dn_pos.shape}"
     assert cdn.dn_ref_points.shape == (B, N_dn, 4),     f"dn_ref_points shape wrong: {cdn.dn_ref_points.shape}"
+    assert cdn.dn_target_boxes.shape == (B, N_dn, 4),   f"dn_target_boxes shape wrong: {cdn.dn_target_boxes.shape}"
     assert cdn.attn_mask.shape     == (N_tot, N_tot),   f"attn_mask shape wrong: {cdn.attn_mask.shape}"
     assert cdn.pos_neg_flag.shape  == (B, N_dn),        f"pos_neg_flag shape wrong: {cdn.pos_neg_flag.shape}"
     assert cdn.num_dn              == N_dn,             "num_dn wrong"
@@ -626,7 +585,6 @@ if __name__ == "__main__":
     cdn_empty = build_cdn_queries(
         empty_targets,
         label_embeddings=label_emb,
-        pos_embeddings=pos_emb,
         num_dn_groups=NUM_DN_GROUPS,
         num_queries=Q,
         d_model=D,
