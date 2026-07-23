@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Fusion_DefDETR_FAM_SSJ_vis_ir
+  name: DINO_Full_Fusion_DefDETR_FAM_SSJ_vis_ir
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -7,7 +7,7 @@ experiment:
   search: grid
 
 parameters:
-  seed: &seed [49]
+  seed: &seed [43, 44, 45, 46, 49]
   task: [detection]
 
   tracker:

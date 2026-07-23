@@ -56,6 +56,8 @@ class CDNTargets:
     dn_ref_points: torch.Tensor
     dn_target_boxes: torch.Tensor
     dn_labels: torch.Tensor
+    dn_target_labels: torch.Tensor
+    valid_slot_mask: torch.Tensor
     attn_mask: torch.Tensor
     num_dn: int
     num_groups: int
@@ -78,18 +80,32 @@ def _box_noise(
     boxes: torch.Tensor,
     box_noise_scale: float,
     device: torch.device,
+    negative: bool = False,
 ) -> torch.Tensor:
     """
-    Add uniform noise to boxes in logit space (matches DINO paper eq. 1).
+    Apply DINO's contrastive box perturbation in coordinate space.
 
     boxes : (N, 4)  cx,cy,w,h in [0,1]
     Returns noised boxes in [0,1], same shape.
     """
-    diff = boxes[..., 2:] * 0.5 * box_noise_scale          # half-wh as noise radius
-    # Random sign + magnitude
-    noise = torch.zeros_like(boxes).uniform_(-1.0, 1.0) * diff.repeat(1, 2)
-    noised = _inverse_sigmoid(boxes) + noise
-    return noised.sigmoid()
+    # The official implementation perturbs xyxy corners by half the original
+    # width/height. Positive magnitudes are in [0, 1), negative magnitudes in
+    # [1, 2), which makes the two copies genuinely contrastive.
+    cx, cy, w, h = boxes.unbind(-1)
+    xyxy = torch.stack(
+        [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], dim=-1
+    )
+    radius = torch.stack([w / 2, h / 2, w / 2, h / 2], dim=-1)
+    signs = torch.randint(0, 2, xyxy.shape, device=device, dtype=torch.long)
+    signs = signs.to(xyxy.dtype).mul_(2).sub_(1)
+    magnitude = torch.rand_like(xyxy)
+    if negative:
+        magnitude = magnitude + 1.0
+    xyxy = (xyxy + signs * magnitude * radius * box_noise_scale).clamp(0.0, 1.0)
+    x0, y0, x1, y1 = xyxy.unbind(-1)
+    return torch.stack(
+        [(x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0], dim=-1
+    )
 
 
 def _label_noise(
@@ -98,14 +114,20 @@ def _label_noise(
     label_noise_prob: float,
 ) -> torch.Tensor:
     """
-    With probability label_noise_prob, replace a label with a random class.
+    Apply DINO's configured label-noise ratio (effective flip threshold:
+    ``label_noise_prob * 0.5``).
 
     class_labels : (N,)  int64
     Returns noised labels, same shape.
     """
     if label_noise_prob == 0.0:
         return class_labels.clone()
-    mask = torch.rand(class_labels.shape, device=class_labels.device) < label_noise_prob
+    # DINO applies the configured label-noise ratio with the 0.5 factor used
+    # by its official query preparation code.
+    mask = (
+        torch.rand(class_labels.shape, device=class_labels.device)
+        < label_noise_prob * 0.5
+    )
     random_labels = torch.randint_like(class_labels, 0, num_classes)
     return torch.where(mask, random_labels, class_labels)
 
@@ -144,7 +166,8 @@ def build_cdn_queries(
         Number of CDN groups.  Each group contains one positive + one negative copy of
         every GT box.  Total DN slots = 2 * num_dn_groups * max_gt_per_image.
     label_noise_prob : float  ∈ [0,1]
-        Probability of flipping a label to a random class inside a positive DN slot.
+        DINO label-noise ratio; the official preparation samples flips with
+        threshold ``label_noise_prob * 0.5``.
     box_noise_scale : float
         Scale of coordinate noise. Positive slots get noise_scale/2, negative slots
         get noise_scale (larger → harder negative).
@@ -215,6 +238,10 @@ def build_cdn_queries(
     labels_tiled = labels_pad.unsqueeze(1).unsqueeze(2).expand(
         batch_size, num_dn_groups, 2, max_gt
     ).clone()
+    target_labels_tiled = labels_tiled.clone()
+    valid_slots_tiled = valid_mask.unsqueeze(1).unsqueeze(2).expand(
+        batch_size, num_dn_groups, 2, max_gt
+    )
 
     # ------------------------------------------------------------------ #
     #  4. Add noise                                                       #
@@ -229,7 +256,7 @@ def build_cdn_queries(
         for g in range(num_dn_groups):
             # --- positive ---
             pos_boxes = boxes_tiled[b, g, 0, :n]       # (n, 4)
-            noised_pos = _box_noise(pos_boxes, box_noise_scale * 0.5, device)
+            noised_pos = _box_noise(pos_boxes, box_noise_scale, device, negative=False)
             boxes_tiled[b, g, 0, :n] = noised_pos
 
             noised_labels = _label_noise(labels_tiled[b, g, 0, :n], num_classes, label_noise_prob)
@@ -237,11 +264,10 @@ def build_cdn_queries(
 
             # --- negative ---
             neg_boxes = boxes_tiled[b, g, 1, :n]       # (n, 4)
-            noised_neg = _box_noise(neg_boxes, box_noise_scale, device)
+            noised_neg = _box_noise(neg_boxes, box_noise_scale, device, negative=True)
             boxes_tiled[b, g, 1, :n] = noised_neg
-            # Negative labels → always "no object" = num_classes
-            # (represented here as num_classes; the loss treats it specially)
-            labels_tiled[b, g, 1, :n] = num_classes    # sentinel for "no-object"
+            noised_labels = _label_noise(labels_tiled[b, g, 1, :n], num_classes, label_noise_prob)
+            labels_tiled[b, g, 1, :n] = noised_labels
 
     # Reshape to (B, num_dn, 4) and (B, num_dn)
     # Current shape: (B, num_dn_groups, 2, max_gt, ...)
@@ -249,6 +275,8 @@ def build_cdn_queries(
     dn_ref_points = boxes_tiled.reshape(batch_size, num_dn, 4).clamp(0.0, 1.0)
     dn_target_boxes = target_boxes_tiled.reshape(batch_size, num_dn, 4)
     dn_labels     = labels_tiled.reshape(batch_size, num_dn)       # (B, num_dn)
+    dn_target_labels = target_labels_tiled.reshape(batch_size, num_dn)
+    valid_slot_mask = valid_slots_tiled.reshape(batch_size, num_dn)
 
     # pos_neg_flag: 1 for positive slots, 0 for negative slots
     # Mark only real GT (per-image) as positive; padded slots stay negative.
@@ -267,9 +295,7 @@ def build_cdn_queries(
     # ------------------------------------------------------------------ #
     #  5. Build content embeddings  (B, N_dn, d_model)                   #
     # ------------------------------------------------------------------ #
-    # The final row is the dedicated no-object content embedding used by the
-    # negative denoising slots.  It must not be folded onto a foreground class.
-    embed_indices = dn_labels.clamp(0, num_classes)       # (B, num_dn)
+    embed_indices = dn_labels.clamp(0, num_classes - 1)   # (B, num_dn)
     dn_content = label_embeddings(embed_indices)           # (B, num_dn, d_model)
 
     # ------------------------------------------------------------------ #
@@ -288,9 +314,8 @@ def build_cdn_queries(
     N_total = num_dn + num_queries
     attn_mask = torch.zeros(N_total, N_total, device=device)
 
-    # Block: any DN slot attending to any matching slot and vice-versa
-    # (upper-right and lower-left quadrants)
-    attn_mask[:num_dn, num_dn:] = float("-inf")   # DN → matching: blocked
+    # Matching queries must not read GT-derived denoising queries. Denoising
+    # queries are allowed to read matching queries, as in the official mask.
     attn_mask[num_dn:, :num_dn] = float("-inf")   # matching → DN: blocked
 
     # Block: DN slots from different groups
@@ -327,6 +352,8 @@ def build_cdn_queries(
         dn_ref_points=dn_ref_points, # (B, N_dn, 4)
         dn_target_boxes=dn_target_boxes,
         dn_labels=dn_labels,         # (B, N_dn)
+        dn_target_labels=dn_target_labels,
+        valid_slot_mask=valid_slot_mask,
         attn_mask=attn_mask,         # (N_total, N_total)
         num_dn=num_dn,
         num_groups=num_dn_groups,
@@ -355,88 +382,54 @@ def compute_cdn_loss(
     """
     Compute CDN auxiliary loss on the denoising slots.
 
-    Only positive DN slots are supervised with L1 + GIoU toward their noised GT.
-    Negative DN slots are supervised with cross-entropy toward "no object".
+    Both positive and contrastive-negative copies reconstruct their original
+    label and box, matching DINO's known-target auxiliary losses.
 
     Returns a dict of scalar losses:
         "loss_cdn_class", "loss_cdn_bbox", "loss_cdn_giou"
     """
-    device = dn_hidden_states.device
-    B, num_layers, N_dn, _ = dn_hidden_states.shape
-    num_groups  = cdn_targets.num_groups
-    max_gt      = cdn_targets.max_gt
-    pos_neg     = cdn_targets.pos_neg_flag  # (B, N_dn)  1=pos, 0=neg
-
+    _, num_layers, _, _ = dn_hidden_states.shape
     total_class_loss = dn_hidden_states.new_zeros(())
-    total_bbox_loss  = dn_hidden_states.new_zeros(())
-    total_giou_loss  = dn_hidden_states.new_zeros(())
-    num_pos_total    = 0
+    total_bbox_loss = dn_hidden_states.new_zeros(())
+    total_giou_loss = dn_hidden_states.new_zeros(())
+    valid = cdn_targets.valid_slot_mask
+    num_valid = max(int(valid.sum().item()), 1)
 
     for layer_idx in range(num_layers):
-        # reference for this layer
-        if layer_idx == 0:
-            ref = dn_init_reference                           # (B, N_dn, 4)
-        else:
-            ref = dn_reference_points[:, layer_idx - 1]      # (B, N_dn, 4)
+        ref = (
+            dn_init_reference
+            if layer_idx == 0
+            else dn_reference_points[:, layer_idx - 1]
+        )
+        hs = dn_hidden_states[:, layer_idx]
+        pred_logits = class_embed[layer_idx](hs)
+        delta_bbox = bbox_embed[layer_idx](hs)
+        pred_boxes = (delta_bbox + _inverse_sigmoid(ref)).sigmoid()
 
-        ref_logit  = _inverse_sigmoid(ref)
-        hs         = dn_hidden_states[:, layer_idx]          # (B, N_dn, d_model)
+        pred_valid = pred_boxes[valid]
+        target_boxes = cdn_targets.dn_target_boxes[valid]
+        logits_valid = pred_logits[valid]
+        target_labels = cdn_targets.dn_target_labels[valid]
+        target_onehot = torch.zeros_like(logits_valid)
+        target_onehot.scatter_(1, target_labels[:, None], 1.0)
 
-        pred_logits = class_embed[layer_idx](hs)             # (B, N_dn, num_classes+1)
-        delta_bbox  = bbox_embed[layer_idx](hs)              # (B, N_dn, 4)
+        # Each decoder layer has its own denoising auxiliary loss in DINO.
+        # Normalise each layer by the number of known target copies and sum
+        # layers, consistently with the regular auxiliary decoder losses.
+        total_class_loss += _sigmoid_focal_loss(
+            logits_valid, target_onehot, num_boxes=num_valid
+        ) * pred_logits.shape[1]
+        total_bbox_loss += F.l1_loss(
+            pred_valid, target_boxes, reduction="sum"
+        ) / num_valid
+        total_giou_loss += (
+            1.0 - _box_iou_union(pred_valid, target_boxes)
+        ).sum() / num_valid
 
-        if ref_logit.shape[-1] == 4:
-            pred_boxes = (delta_bbox + ref_logit).sigmoid()
-        else:
-            delta_bbox[..., :2] += ref_logit
-            pred_boxes = delta_bbox.sigmoid()
-
-        for b in range(B):
-            n_gt = cdn_targets.gt_indices[b].shape[0] // num_groups
-            if n_gt == 0:
-                continue
-
-            # ---- positive slots ----
-            pos_mask = pos_neg[b].bool()                      # (N_dn,)
-            pos_slots = pos_mask.nonzero(as_tuple=True)[0]   # indices of pos slots
-
-            # CDN learns to reconstruct the original GT box from its noised
-            # reference point, rather than merely reproduce the perturbation.
-            pred_pos = pred_boxes[b][pos_slots]              # (n_pos, 4)
-            tgt_pos = cdn_targets.dn_target_boxes[b][pos_slots]
-
-            bbox_loss = F.l1_loss(pred_pos, tgt_pos, reduction="sum")
-            giou_loss = (1.0 - _box_iou_union(pred_pos, tgt_pos)).sum()
-
-            # ---- classification loss for all DN slots (pos + neg) ----
-            # Deformable DETR uses sigmoid focal loss with "no-object" as all-zero targets.
-            # Build one-hot targets for positive slots only; negatives remain all zeros.
-            tgt_labels = cdn_targets.dn_labels[b]  # (N_dn,)
-            target_onehot = torch.zeros(
-                (N_dn, num_classes),
-                dtype=pred_logits.dtype,
-                device=device,
-            )
-            if pos_slots.numel() > 0:
-                pos_labels = tgt_labels[pos_slots].clamp(0, num_classes - 1)
-                target_onehot[pos_slots, pos_labels] = 1.0
-
-            cls_loss = _sigmoid_focal_loss(
-                pred_logits[b],
-                target_onehot,
-                num_boxes=max(len(pos_slots), 1),
-            ) * pred_logits[b].shape[0]
-
-            total_bbox_loss  += bbox_loss
-            total_giou_loss  += giou_loss
-            total_class_loss += cls_loss
-            num_pos_total    += max(len(pos_slots), 1)
-
-    normaliser = max(num_pos_total, 1)
     return {
-        "loss_cdn_class": loss_coef_class * total_class_loss / normaliser,
-        "loss_cdn_bbox":  loss_coef_bbox  * total_bbox_loss  / normaliser,
-        "loss_cdn_giou":  loss_coef_giou  * total_giou_loss  / normaliser,
+        "loss_cdn_class": loss_coef_class * total_class_loss,
+        "loss_cdn_bbox": loss_coef_bbox * total_bbox_loss,
+        "loss_cdn_giou": loss_coef_giou * total_giou_loss,
     }
 
 
@@ -557,8 +550,8 @@ if __name__ == "__main__":
     assert (cdn.dn_ref_points >= 0).all() and (cdn.dn_ref_points <= 1).all(), "ref_points out of [0,1]"
 
     # Attention mask structure checks
-    # DN → matching block must be all -inf
-    assert (cdn.attn_mask[:N_dn, N_dn:] == float("-inf")).all(), "DN→matching must be -inf"
+    # Denoising queries may read matching queries.
+    assert (cdn.attn_mask[:N_dn, N_dn:] == 0.0).all(), "DN→matching must be allowed"
     # matching → DN block must be all -inf
     assert (cdn.attn_mask[N_dn:, :N_dn] == float("-inf")).all(), "matching→DN must be -inf"
     # matching → matching must be all 0

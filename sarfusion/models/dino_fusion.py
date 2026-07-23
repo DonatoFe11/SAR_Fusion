@@ -241,11 +241,15 @@ class LFTDecoder(DeformableDetrDecoder):
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
-                # Look-Forward-Twice: deliberately do not detach here.
-                reference_points = new_reference_points
+                # DINO Look-Forward-Twice keeps the refined box in the graph for
+                # the prediction made from the next decoder output, but detaches
+                # the reference fed to the next attention layer.  Consequently
+                # layer i receives gradients from predictions i and i+1 without
+                # backpropagating through every later deformable-attention block.
+                reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
-            intermediate_reference_points += (reference_points,)
+            intermediate_reference_points += (new_reference_points,)
             if output_attentions:
                 all_self_attentions += (layer_outputs[1],)
                 all_cross_attentions += (layer_outputs[2],)
@@ -386,7 +390,11 @@ class DINOFusionModel(DeformableDetrFusionModel):
         )
         enc_outputs_class = self.decoder.class_embed[-1](object_query_embedding)
         enc_outputs_coord_logits = self.decoder.bbox_embed[-1](object_query_embedding) + output_proposals
-        topk_indices = torch.topk(enc_outputs_class[..., 0], self.config.num_queries, dim=1).indices
+        # DINO ranks encoder proposals by their best foreground class.  Using
+        # channel zero happens to work for WiSARD's single class, but silently
+        # breaks mixed query selection as soon as the model is multi-class.
+        topk_scores = enc_outputs_class.max(dim=-1).values
+        topk_indices = torch.topk(topk_scores, self.config.num_queries, dim=1).indices
         topk_coords_logits = torch.gather(
             enc_outputs_coord_logits, 1, topk_indices.unsqueeze(-1).expand(-1, -1, 4)
         ).detach()
@@ -457,7 +465,7 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
 
     Extra constructor parameters (all have sensible defaults):
       num_dn_groups    : int   = 5     number of CDN groups
-      label_noise_prob : float = 0.5   probability of label flip for positive DN slots
+      label_noise_prob : float = 0.5   DINO label-noise ratio
       box_noise_scale  : float = 1.0   noise scale (positive slots get /2, negative full)
       cdn_loss_coef    : float = 1.0   multiplier on the total CDN loss term
     """

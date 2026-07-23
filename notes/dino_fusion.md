@@ -43,19 +43,23 @@ Questa è la mixed query selection: anchor informativi dall'encoder, contenuto d
 
 ## Look-Forward-Twice (LFT)
 
-Il decoder usa box refinement a ogni layer. Nel decoder Deformable DETR standard il nuovo reference point viene staccato dal grafo:
+Il decoder usa box refinement a ogni layer. DINO distingue il reference point
+passato all'attenzione del layer successivo dalla copia usata per calcolare la
+predizione successiva:
 
 ```python
 reference_points = new_reference_points.detach()
+intermediate_reference_points.append(new_reference_points)
 ```
 
-`LFTDecoder` mantiene invece il tensore nel grafo:
-
-```python
-reference_points = new_reference_points
-```
-
-Poiché `with_box_refine=True` viene forzato per questa variante, il refinement viene realmente eseguito e l'errore dei layer successivi può retropropagare attraverso i reference point prodotti dai layer precedenti. Le nuove teste di proposal dell'encoder e la settima copia delle teste (una per l'encoder oltre ai sei layer decoder) sono inizializzate ex novo; i pesi compatibili del checkpoint vengono comunque riutilizzati.
+La prima copia evita di retropropagare attraverso tutti i successivi blocchi di
+deformable attention; la seconda resta nel grafo e fa sì che la loss della
+predizione al layer seguente aggiorni anche la testa box del layer precedente.
+Questo collegamento fra loss adiacenti è il Look-Forward-Twice. Poiché
+`with_box_refine=True` viene forzato, il refinement viene realmente eseguito.
+Le nuove teste di proposal dell'encoder e la settima copia delle teste (una per
+l'encoder oltre ai sei layer decoder) sono inizializzate ex novo; i pesi
+compatibili del checkpoint vengono comunque riutilizzati.
 
 ## Contrastive DeNoising (CDN)
 
