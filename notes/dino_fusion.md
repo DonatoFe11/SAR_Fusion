@@ -1,190 +1,108 @@
-# DINO Fusion per RGB-IR (versione original)
+# DINO Fusion per RGB-IR
 
-Questo documento descrive l'implementazione del modello DINO (DETR with Improved deNoising anchOr boxes) adattato per scenari multi-modali (RGB + Infrarosso) nella sua versione base.
-Il codice di riferimento è: [sarfusion/models/dino_fusion_original.py](../sarfusion/models/dino_fusion_original.py).
+Questa nota documenta l'implementazione **DINO completa** in [dino_fusion.py](../sarfusion/models/dino_fusion.py), da usare per i prossimi training. Essa mantiene backbone, FAM opzionale e channel fusion di [Deformable DETR Fusion](deformable_detr_fusion.md), ma sostituisce l'inizializzazione delle query e il decoder con le tre componenti proprie di DINO:
 
----
+- **Contrastive DeNoising (CDN)** durante il training;
+- **Mixed Query Selection (MQS)**;
+- **Look-Forward-Twice (LFT)** con box refinement attivo.
 
-## 1. Relazione tra DINO e Deformable DETR
+I risultati riportati in fondo sono invece **storici**: sono stati prodotti dalla precedente variante CDN-only e non misurano questa nuova implementazione.
 
-Leggendo il file ci si accorge subito di un dettaglio interessante: **DINO eredita direttamente le classi di `DeformableDetr` da Hugging Face.** Non ci sono classi `DinoModel` nel codice, bensì `DeformableDetrModel`.
+## Base RGB-IR e livelli di feature
 
-**Perché questa scelta?**
-DINO non è un'architettura completamente nuova rispetto a Deformable DETR. DINO introduce principalmente tre miglioramenti che si applicano però *esclusivamente durante l'addestramento*:
+La base resta `DeformableDetrFusionModel`:
 
-1. **Contrastive DeNoising Training**: aggiunta di rumore controllato ai bounding box reali (Ground Truth) da far predire alla rete, per accelerare la convergenza.
-2. **Mixed Query Selection**: inizializzazione non casuale delle *object query* per renderle più forti fin dall'inizio.
-3. **Look Forward Twice**: miglioramento sull'aggiornamento dei gradienti tra i layer del decoder.
-
-Siccome in fase di inference questi artifici spariscono, **l'architettura fisica di DINO è esattamente identica a quella di Deformable DETR**. Di conseguenza è possibile incapsulare i framework l'uno dentro l'altro, beneficiando però di eventuali pesi pre-addestrati con ricette DINO.
-
----
-
-## 2. Il problema: DINO accetta solo RGB
-
-Il dataset **WiSARD** fornisce immagini a doppio canale — **RGB** (visibile, 3 canali) e **IR** (infrarosso termico, 1 canale). DINO standard accetta solo immagini RGB. L'obiettivo di questo file è costruire una versione "fusion" che accetti entrambe le modalità e le combini in un'unica rappresentazione.
-
----
-
-## 3. Architettura: doppio backbone + fusione
-
-### Il problema dei canali di input
-
-Il primo layer Conv2d di una ResNet ha shape `[out_channels, in_channels, kH, kW]`. Per RGB servono 3 canali di input, per IR ne basta 1. Gli strati successivi sono identici — cambia solo il primo layer perché è l'unico che tocca i pixel raw.
-
-```
-RGB backbone — primo layer:
-  input:   [B,  3, H, W]
-  kernel:  [out_ch, 3, kH, kW]   ← tre "finestre" R, G, B
-
-IR backbone — primo layer:
-  input:   [B,  1, H, W]
-  kernel:  [out_ch, 1, kH, kW]   ← una sola finestra di intensità termica
+```text
+RGB [B, 3, H, W] ─┐
+                  ├─ ResNet C3/C4/C5 → FAM opzionale → channel fusion
+IR  [B, 1, H, W] ─┘
+                                      ↓
+                      quarto livello da Conv 3×3 stride 2 su C5 fusa
+                                      ↓
+                         encoder Deformable DETR a quattro livelli
 ```
 
-Questo si ottiene creando due configurazioni separate con `copy.deepcopy(config)` e impostando `backbone_kwargs["in_chans"]` a 3 e a 1 rispettivamente, prima di istanziare i due `DeformableDetrConvEncoder`.
+Le due ResNet producono tre feature map native; FAM e la fusione di canale agiscono su queste tre coppie. Con `num_feature_levels=4`, Deformable DETR genera poi il quarto livello a risoluzione più bassa dalla C5 fusa. La scelta rimane coerente con il checkpoint `SenseTime/deformable-detr`.
 
-### Output del backbone a più scale
+## Query DINO: encoder a due stadi e Mixed Query Selection
 
-Entrambi i backbone producono feature map a 4 livelli di scala (multi-scale detection, utile per oggetti di dimensioni diverse). Per un'immagine `800×600`:
-
-```
-Livello 0 (C3):  [B,  512, 100, 75]   stride 8
-Livello 1 (C4):  [B, 1024,  50, 38]   stride 16
-Livello 2 (C5):  [B, 2048,  25, 19]   stride 32
-Livello 3 (extra):[B,  256,  13, 10]  proiettato da C5
-```
-
-### Positional embeddings
-
-I positional embedding del backbone sono **sinusoidali e deterministici**: calcolati da formule fisse sulla griglia spaziale `[H/l, W/l]`, senza parametri appresi. `rgb_pos` e `ir_pos` sono quindi numericamente identici — dipendono solo dalla forma della feature map, non dal contenuto. Nel forward si usa `rgb_pos` per convenzione.
-
-`self.position_embedding = position_embeddings` viene salvato come attributo per compatibilità con il framework HuggingFace, che si aspetta che qualsiasi backbone esponga quell'attributo.
-
----
-
-## 4. La fusione: concatenazione canale + proiezione espressiva
-
-### Il modulo `channel_fusion`
+All'interno di `DINOFusionForObjectDetection.from_pretrained`, il checkpoint Deformable DETR one-stage viene convertito per il nuovo modello impostando:
 
 ```python
-self.channel_fusion = nn.ModuleList([
-    nn.Sequential(
-        nn.Conv2d(channels * 2, channels, kernel_size=1),
-        nn.GroupNorm(32, channels),
-        nn.ReLU(inplace=True)
-    )
-    for channels in self.intermediate_channel_sizes
-])
+config.two_stage = True
+config.two_stage_num_proposals = config.num_queries  # 300
+config.with_box_refine = True
 ```
 
-Un blocco separato per ciascuno dei 4 livelli di scala. Ogni blocco fa tre cose:
+L'encoder assegna classe e box a ogni proposta spaziale. Le 300 proposte con score di foreground più alto forniscono i **reference point** iniziali del decoder. MQS separa deliberatamente i due ruoli:
 
-1. **Conv2d 1×1** — comprime da `2C` a `C` canali. Impara come pesare e combinare le due modalità canale per canale.
-2. **GroupNorm(32, channels)** — normalizza dividendo i canali in 32 gruppi indipendenti. Stabile con `batch_size=1`, al contrario della BatchNorm che richiede batch grandi per stimare correttamente media e varianza.
-3. **ReLU** — introduce non-linearità.
+- le coordinate selezionate dall'encoder producono anchor e positional embedding;
+- il contenuto delle 300 query proviene da `mixed_query_content`, una embedding appresa indipendente dalle feature dell'encoder.
 
-### Il forward nel caso RGB+IR (4 canali)
+Questa è la mixed query selection: anchor informativi dall'encoder, contenuto di query appreso. In inference esistono soltanto queste 300 query di matching.
+
+## Look-Forward-Twice (LFT)
+
+Il decoder usa box refinement a ogni layer. Nel decoder Deformable DETR standard il nuovo reference point viene staccato dal grafo:
 
 ```python
-concat_feat = torch.cat([rgb_feat, ir_feat], dim=1)  # [B, 2C, H, W]
-fused_feat  = self.channel_fusion[level_idx](concat_feat)  # [B, C, H, W]
+reference_points = new_reference_points.detach()
 ```
 
-Per ogni livello di scala, le due feature map vengono concatenate lungo la dimensione dei canali e poi proiettate a `C`. Esempio per il livello 0:
-
-```
-rgb_feat:   [1,  512, 100, 75]
-ir_feat:    [1,  512, 100, 75]
-concat:     [1, 1024, 100, 75]   ← cat(dim=1)
-fused:      [1,  512, 100, 75]   ← Conv1×1 + GN + ReLU
-```
-
-Il forward gestisce anche i casi in cui una sola modalità è disponibile (modal dropout durante il training):
+`LFTDecoder` mantiene invece il tensore nel grafo:
 
 ```python
-if num_channels == 1:   # solo IR → ir_backbone
-if num_channels == 3:   # solo RGB → rgb_backbone
-if num_channels == 4:   # entrambi → fusione
+reference_points = new_reference_points
 ```
 
----
+Poiché `with_box_refine=True` viene forzato per questa variante, il refinement viene realmente eseguito e l'errore dei layer successivi può retropropagare attraverso i reference point prodotti dai layer precedenti. Le nuove teste di proposal dell'encoder e la settima copia delle teste (una per l'encoder oltre ai sei layer decoder) sono inizializzate ex novo; i pesi compatibili del checkpoint vengono comunque riutilizzati.
 
-## 5. Gerarchia delle classi
+## Contrastive DeNoising (CDN)
 
-```
-DeformableDetrForObjectDetection   (HuggingFace)
-└── DinoFusionForObjectDetection   (questo file)
-      │
-      └── model: DeformableDetrModel   (HuggingFace)
-            └── DinoFusionModel        (questo file)
-                  │
-                  └── backbone: DinoFusionBackbone   (questo file)
-                        ├── rgb_backbone  (ResNet50, in_chans=3)
-                        ├── ir_backbone   (ResNet50, in_chans=1)
-                        └── channel_fusion × 4 livelli
-```
+CDN è attivo solo durante il training e se il batch contiene annotazioni. Con $M$ ground truth massime nel batch e $G =$ `num_dn_groups`, vengono aggiunte:
 
-Le teste di classificazione (quale classe?) e di regressione (dove si trova?) appartengono a `DinoFusionForObjectDetection` — ereditano da HuggingFace e lavorano sugli output del decoder, non sulle feature map del backbone.
+$$N_{DN} = 2 \cdot G \cdot M$$
 
----
+query di denoising prima delle 300 matching query. Nella configurazione corrente $G=5$.
 
-## 6. Caricamento dei pesi pre-addestrati
+Per ciascun gruppo vengono create copie positive (rumore spaziale ridotto e label noise) e negative (rumore più ampio e target no-object). Il decoder riceve una maschera additiva quadrata che:
 
-### Cosa viene caricato
+- blocca gli scambi CDN ↔ matching;
+- blocca gli scambi tra gruppi CDN diversi;
+- consente le interazioni all'interno di un gruppo CDN e fra matching query.
 
-`from_pretrained` scarica un checkpoint `SenseTime/deformable-detr` pre-addestrato su COCO e copia i pesi dove le chiavi coincidono (`strict=False` ignora le mismatch).
+La self-attention del decoder è estesa esplicitamente per consumare questa maschera: non è solo costruita, ma effettivamente applicata. Le query CDN usano come positional embedding la stessa trasformazione degli anchor a quattro coordinate usata dalle query DINO; la loss CDN ricostruisce il box ground truth originale a partire dal reference point perturbato. Comprende classificazione, L1 e GIoU ed è moltiplicata per `cdn_loss_coef`.
 
-```
-Caricato da pretrained:
-  rgb_backbone.conv_encoder    ← pesi ResNet50 ImageNet/COCO
-  ir_backbone.conv_encoder     ← pesi adattati (vedi sotto)
-  encoder, decoder             ← pesi transformer COCO
-  input_proj                   ← proiezioni backbone→transformer
+Gli slot CDN sono rimossi prima delle predizioni e della valutazione standard. In inference non vengono creati, quindi il costo e l'interfaccia restano quelli delle 300 query di matching.
 
-Inizializzato random e appreso da zero:
-  channel_fusion               ← non esiste nel pretrained
-  class_labels_classifier      ← reinizializzata (1 classe invece di 80)
-```
+## Inizializzazione e configurazione
 
-### Adattamento dei pesi per l'IR backbone
+Il file da lanciare è [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml), rinominato in modo da non confondere le nuove run con quelle storiche:
 
-Non esistono modelli IR pre-addestrati su larga scala — tutti i grandi checkpoint usano ImageNet che è RGB. La soluzione è fare la media dei pesi RGB:
+| Parametro | Valore |
+| --- | --- |
+| esperimento | `DINO_Full_Fusion_DefDETR_FAM_SSJ_vis_ir` |
+| `num_feature_levels` | 4 |
+| query di matching | 300 (`config.num_queries`) |
+| `num_dn_groups` | 5 |
+| `label_noise_prob` | 0.5 |
+| `box_noise_scale` | 1.0 |
+| `cdn_loss_coef` | 1.0 |
+| `two_stage` | `true`, impostato dal codice DINO |
+| `with_box_refine` | `true`, impostato dal codice DINO |
+| `batch_size` | 1 |
+| modal dropout (IR / RGB / fusion) | 0.2 / 0.2 / 0.6 |
 
-```python
-for key, value in rgb_backbone_state.items():
-    if value.dim() == 4 and value.shape[1] == 3:
-        ir_backbone_state[key] = value.mean(dim=1, keepdim=True)
-```
+Il checkpoint COCO inizializza backbone RGB, backbone IR adattata mediando i tre canali della prima convoluzione, encoder, decoder e pesi compatibili delle teste. I blocchi di channel fusion, FAM, embedding CDN, contenuto MQS e moduli aggiuntivi two-stage sono appresi nei nuovi training.
 
-Solo il primo layer Conv2d ha `shape[1] == 3` (i 3 canali di input). La media sui canali produce un filtro `[out_ch, 1, kH, kW]` che mantiene le stesse capacità di rilevare bordi e texture del modello RGB, adatto all'immagine termica che non ha colore ma ha la stessa struttura di gradienti di intensità.
+## Risultati storici: non DINO completo
 
----
+Le seguenti run erano etichettate nei report come “DINO (CDN + LFT)”, ma usavano il codice precedente: `with_box_refine=false`, nessuna MQS e una maschera CDN che non raggiungeva la self-attention. Vanno quindi lette come risultati di una variante **CDN legacy**, non come risultati del modello definito sopra. Sono mediana [min--max] su cinque seed, mAP@50 a soglia 0.01.
 
-## 7. Flusso dati completo (batch_size=1, immagine 800×600)
+| Configurazione storica | VIS-only | IR-only | RGB-IR |
+| --- | --- | --- | --- |
+| CDN legacy | 0.177 [0.139--0.217] | 0.116 [0.077--0.146] | 0.251 [0.229--0.302] |
+| CDN legacy + FAM | 0.141 [0.117--0.175] | 0.113 [0.096--0.154] | 0.265 [0.209--0.299] |
+| CDN legacy + FAM + SSJ | 0.149 [0.075--0.193] | 0.071 [0.062--0.132] | 0.243 [0.105--0.277] |
 
-```
-Input [1, 4, 800, 600]
-  │
-  ├─ [:, :3] → rgb_backbone → 4 feature map  [1, 512/1024/2048/256, H/l, W/l]
-  └─ [:, 3:] → ir_backbone  → 4 feature map  [1, 512/1024/2048/256, H/l, W/l]
-                                    │
-                     per ogni livello: cat(dim=1) → Conv1×1 + GN + ReLU
-                                    │
-                              4 feature map fuse  [1, 512/1024/2048/256, H/l, W/l]
-                                    │
-                         input_proj → tutte a d_model=256
-                                    │
-                         flatten + concat → [1, ~10000, 256]  (sequenza token)
-                                    │
-                         Encoder transformer (6 layer) → [1, ~10000, 256]
-                                    │
-                         Decoder transformer (6 layer, 300 query) → [1, 300, 256]
-                                    │
-                    ┌───────────────┴────────────────┐
-              class head                        bbox head
-           [1, 300, 2]                        [1, 300, 4]
-        (person / no-object)              (cx, cy, w, h) normalizzati
-```
-
----
+Non si devono confrontare questi valori come ablation di LFT o MQS: entrambe le componenti mancavano o erano inattive. Le prossime run con `DINO_Full_*` costituiranno il primo risultato sperimentale del DINO completo nel progetto.
