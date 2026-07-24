@@ -169,8 +169,8 @@ def build_cdn_queries(
         DINO label-noise ratio; the official preparation samples flips with
         threshold ``label_noise_prob * 0.5``.
     box_noise_scale : float
-        Scale of coordinate noise. Positive slots get noise_scale/2, negative slots
-        get noise_scale (larger → harder negative).
+        Scale of the corner perturbation. Positive copies use magnitudes in [0, 1),
+        contrastive-negative copies use [1, 2).
     num_queries : int   N_match  (matching queries, unchanged)
     d_model     : int   Hidden dimension.
     num_classes : int   Number of foreground classes (without background/no-obj).

@@ -1,100 +1,88 @@
-# RT-DETR CMX: Cross-Modal Fusion Framework
+# RT-DETR + CMX: fusione cross-modale e variante ibrida
 
-Questo documento descrive l'implementazione del modello CMX (Cross-Modal Fusion) all'interno del framework RT-DETR. Rispetto all'approccio basato sul partizionamento geometrico (come il Feature Alignment Module), CMX si concentra sull'**interazione semantica bidirezionale** tra i sensori RGB e Infrarosso (IR).
+Questa nota documenta le due implementazioni CMX sperimentate con RT-DETR:
 
-Il file di riferimento per questa implementazione è: [sarfusion/models/rtdetr_cmx.py](../sarfusion/models/rtdetr_cmx.py).
+- **CMX puro**: [`sarfusion/models/rtdetr_cmx.py`](../sarfusion/models/rtdetr_cmx.py);
+- **CMX ibrido**: [`sarfusion/models/rtdetr_cmx_hybrid.py`](../sarfusion/models/rtdetr_cmx_hybrid.py), che antepone FAM e aggiunge positional encoding 2D.
 
-L'architettura si articola in due step fondamentali applicati a ciascun livello della piramide delle feature (P3, P4, P5): **Rettifica** e **Fusione**.
+Entrambe usano due `RTDetrConvEncoder` ResNet-50vd: una backbone RGB a tre canali e una IR a un canale. I pesi dello stem IR sono inizializzati dalla media dei canali dello stem RGB pre-addestrato. Le feature P3, P4 e P5 (512, 1024 e 2048 canali) sono quindi fuse prima dell'hybrid encoder e del decoder standard di RT-DETR.
 
----
+## CMX puro
 
-## 1. CM-FRM: Cross-Modal Feature Rectification Module
+Il modello puro applica a ogni livello della piramide due moduli del framework CMX.
 
-Il primo passaggio è la "rettifica", ovvero usare un sensore per calibrare ("pulire") il rumore presente nell'altro sensore *prima* di effettuare la fusione vera e propria.
+### CM-FRM: rettifica cross-modale
 
-Il modulo `CM_FRM` lavora su due livelli:
+Il *Cross-Modal Feature Rectification Module* calibra RGB e IR lungo due assi:
 
-1. **Rettifica Channel-wise (sui Canali)**:
-   - Estrae statistiche globali per ogni canale usando l'Average Pooling e il Max Pooling su entrambe le modalità (RGB e IR).
-   - Concatena queste 4 statistiche e le passa ad un MLP che genera dei pesi di ricalibrazione.
-   - I pesi estratti dall'IR calibrano l'RGB e viceversa ($rgb\_c = rgb \times w\_ir$).
+1. **Canali.** Average pooling e max pooling globali delle due modalità producono quattro vettori di statistiche. Un MLP con sigmoide genera due insiemi di pesi: quelli derivati dalle statistiche IR modulano RGB e viceversa.
+2. **Spazio.** Una piccola rete `Conv1×1 → ReLU → Conv1×1 → Sigmoid` riceve la concatenazione RGB–IR e produce due mappe di pesi spaziali, una per modalità.
 
-2. **Rettifica Spatial-wise (sullo Spazio)**:
-   - Identifica le regioni spazialmente importanti fondendo i tensori lungo l'asse dei canali.
-   - Una CNN con kernel $1 \times 1$ apprende coefficienti di attenzione per ogni singolo pixel.
+L'uscita conserva un residuale della feature originale:
 
-**Equazione di Skip-Connection Finale**:
-Il tensore restituito dal modulo ripristina il segnale originale affiancandogli le versioni calibrate:
-$$ Output_{rgb} = RGB_{orig} + 0.5 \cdot RGB_{channel\_rect} + 0.5 \cdot RGB_{spatial\_rect} $$
-(Lo stesso avviene simmetricamente per l'Infrarosso).
+$$
+F'_{RGB}=F_{RGB}+0.5(F_{RGB}\odot w_{IR}^{c})+0.5(F_{RGB}\odot w_{IR}^{s}),
+$$
 
----
+con la stessa operazione, a ruoli invertiti, per l'IR. La rettifica è utile se le feature corrispondenti sono già registrate (i pixel delle due immagini sono corrispondenti) poichè non corregge di per sé la parallasse fra sensori.
 
-## 2. FFM: Feature Fusion Module (Cross-Attention)
+### FFM: cross-attention e bypass P3
 
-Una volta che le feature RGB e IR sono state raffinate e pulite dal CM-FRM, passano al modulo di fusione `FFM`. L'idea alla base di CMX è che le due modalità si "interroghino" a vicenda per estrarre la semantica migliore.
+Il *Feature Fusion Module* usa RGB come query e IR come key/value. Le proiezioni `1×1` producono quattro teste di cross-attention, l'uscita attenzionale IR viene concatenata alle feature RGB e ricondotta a $C$ canali da una `Conv1×1`.
 
-Questo si ottiene tramite il paradigma della **Single-Head / Multi-Head Cross-Attention**:
-- **Query (Q)**: Provengono dalle feature RGB.
-- **Key (K) e Value (V)**: Provengono dalle feature IR.
-L'RGB "cerca" delle informazioni nell'IR e l'attenzione modula i valori di uscita.
+L'attenzione piena ha costo $O((HW)^2)$. Per $H\times W>1600$ — normalmente P3, il livello più importante per target piccoli — il codice evita l'OOM con un bypass `Conv1×1(Concat(RGB, IR))`, mentre per P4 e P5 usa `scaled_dot_product_attention`.
 
-### Il trucco contro l'esplosione della memoria
-Le architetture Transformer soffrono di una complessità computazionale e di memoria originariamente *quadratica* ($O(N^2)$) rispetto al numero di token (in questo caso il numero di token $N$ è dato da $Altezza \times Larghezza$ ($H \times W$)).
-Alla scala piramidale P3 (la più bassa semanticamente ma la più grande spazialmente), una risoluzione tipica $80 \times 80$ genera $6400$ token. Fare un'attenzione $6400 \times 6400$ consumerebbe decine di Gigabyte di memoria VRAM generando errori OOM (Out Of Memory).
+### Modalità mancanti
 
-Per evitarlo, nell'implementazione è stata posta una **soglia e un fallback lineare**:
-```python
-if h * w > 1600:
-    return self.out_conv(torch.cat([rgb, ir], dim=1))
-```
-Se l'area è troppo vasta, il modulo salta l'attenzione quadratica e si affida a una tradizionale e leggera Convoluzione $1 \times 1$ applicata alla concatenazione spaziale dei due tensori. In questo modo si mantengono i benefici della Cross-Attention alle alte scale piramidali (P4, P5), disinnescando l'esplosione per le scale ad alta risoluzione in ingresso.
+In input a quattro canali il modello separa RGB e IR. Con soli tre canali crea feature IR nulle, con il solo canale IR crea feature RGB nulle. I moduli CMX restano quindi nel percorso di inferenza anche in assenza di un sensore. Questo rende l'esecuzione possibile, ma non costituisce da solo una garanzia di robustezza: dipende anche da come il modello è stato addestrato.
 
----
+### Esito sperimentale
 
-## 3. Gestione Sensori Mancanti (Modality Dropout Nativo)
+Il CMX puro è stato fine-tuned per 25 epoche su WiSARD e ha ottenuto **0.032 mAP@50** in fusione a soglia 0.01, contro **0.357** del baseline RT-DETR. A soglia 0.10 il CMX puro non ha prodotto rilevazioni utili (0.000). Le prestazioni IR-only (0.081) superiori a quelle in fusione sono coerenti con un'interferenza fra modalità, ma non permettono di isolare una causa unica del collasso.
 
-All'interno di `RTDetrCMXBackbone` è stata implementata una logica di robustezza per aggirare ostacoli causati da malfunzionamenti hardware del sensore (es. IR rotto) o strategie di **Modality Dropout** durante l'addestramento.
+I fattori plausibili, osservati nel contesto sperimentale, sono il disallineamento RGB–IR, l'assenza di coordinate esplicite nell'attenzione e il sovraccarico di parametri/ottimizzazione su un dataset limitato. Il dato sperimentale supporta il fallimento del CMX puro.
 
-Se il `forward` riceve un sensore "castrato" dal Dataloader (es. num_canali = 3 invece di 4):
-```python
-elif num_ch == 3:
-    rgb_o = self.rgb_backbone(pixel_values, pixel_mask)
-    # Creiamo un "finto" IR di zeri per passare attraverso i moduli CMX
-    ir_o = [(torch.zeros_like(f), m) for f, m in rgb_o]
-```
-Invece di lanciare un'eccezione o bypassare l'intera architettura, il framework crea un "sensore fittizio" riempiendo tensori della dimensione esatta con zeri assoluti (`torch.zeros_like`). 
+| Modello | Test | Soglia | mAP@50 |
+| --- | --- | ---: | ---: |
+| CMX puro | $D_{RGB-IR}$ | 0.01 | 0.0320 |
+| CMX puro | $D_{IRo}$ | 0.01 | 0.0810 |
+| RT-DETR baseline | $D_{RGB-IR}$ | 0.01 | 0.3570 |
 
-Dato che i moduli successivi (CM-FRM e FFM) processeranno questo "nulla cosmico":
-1. L'architettura non si rompe.
-2. I pesi della rete imparano durante l'addestramento ad auto-bilanciarsi e non dipendere ciecamente sempre da entrambi i sensori, rendendo il rilevatore più affidabile e robusto.
+## CMX ibrido: FAM → CM-FRM → FFM + positional encoding
 
----
+Per ogni livello P3–P5 applica la pipeline:
 
-## 4. Wrapper Configuration
+$$
+[F_{RGB},F_{IR}]\xrightarrow{FAM}[F_{RGB},\widetilde{F}_{IR}]
+\xrightarrow{CM\text{-}FRM}[F'_{RGB},F'_{IR}]
+\xrightarrow{FFM+PE}F_{fused}.
+$$
 
-Il modello base, istanziato tramite `RTDetrCMXForObjectDetection`, si occupa poi di recuperare tutte queste feature bilanciate e multi-scala, agganciandole ai normali **Heads (Class & BBox Embed)** del framework standard Hugging Face RT-DETR, preservando le intatte capacità formidabili del decoder temporale.
-La media aritmetica sui canali per caricare correttamente i pesi dal ResNet pre-addestrato per l'Infrarosso avviene fluidamente all'interno della sovrascrittura di `.from_pretrained`.
+### FAM: allineamento dell'IR guidato da RGB
 
----
+Il *Feature Alignment Module* concatena le due feature e predice, con una convoluzione `3×3`, 18 offset e 9 maschere di modulazione per una `DeformConv2d` $3\times3$. La deformable convolution trasforma la sola feature IR rispetto al riferimento RGB. Gli offset sono limitati da `4·tanh(·)` e la maschera è una sigmoide clampata, scelte che limitano instabilità numeriche in AMP; gli input e gli output passano inoltre da `nan_to_num`.
 
-## 5. Limiti Architetturali e Miglioramenti Ibridi nel Contesto SAR
+> **Differenza rispetto agli altri FAM del progetto.** Questo bound è specifico del FAM del CMX ibrido. Nei FAM di RT-DETR e Deformable DETR, l'offset passato alla deformable convolution è l'output grezzo della convoluzione (`offset = out[:, :18]`): non passa da `4·tanh(·)`. Anche la maschera usa `sigmoid`, ma senza il `clamp(1e-4, 1-1e-4)`. Di conseguenza, soltanto qui ogni componente dell'offset è ristretta a circa $(-4,4)$ celle della feature map, negli altri due modelli non esiste un limite esplicito nel codice.
 
-Nonostante CMX sia un approccio "State of the Art" nel *Dense Scene Understanding*, applicato su dataset da droni (come WiSARD) per compiti di *Search and Rescue* può riscontrare criticità legate alle particolarità del dominio. Di seguito le analisi dei problemi riscontrati e le soluzioni ibride progettate per i futuri esperimenti.
+L'inizializzazione a zero della convoluzione che predice offset e maschera produce offset iniziali nulli e maschera circa 0.5. Non rende però il FAM un'identità: i pesi della `DeformConv2d` rimangono convoluzionali e apprendibili. Il suo scopo è rendere più probabile una corrispondenza spaziale utile prima della rettifica CMX, non garantire un allineamento pixel-perfect.
 
-### Problema 1: Disallineamento e Parallasse (Incompatibilità con CM-FRM)
-Sui droni, i sensori RGB e Termici non sono mai perfettamente allineati spazialmente a livello di pixel (parallasse, lenti diverse, leggero ritardo d'acquisizione). Il modulo CM-FRM assume un ambiente **Pixel-Perfect**: per "pulire" l'RGB usa le feature allocate alle medesime coordinate sull'IR. Se l'IR è spostato, si va a incrociare lo sfondo freddo termico con il bersaglio visivo, abbattendo radicalmente l'utilità del segnale (*Interferenza Distruttiva*).
+### FFM con coordinate 2D
 
-### Problema 2: Perdita di Contesto Spaziale (FFM)
-L'attenzione tradizionale utilizzata dal modulo di fusione ($F.scaled\_dot\_product\_attention$) srotola i token e li tratta come un "sacco". Senza la cognizione delle posizioni 2D relative (le feature vengono prelevate dalla CNN pura prima che RT-DETR applichi il Positional Encoding nativamente nel Decoder), si apre la strada al *Ghosting*, in cui l'RGB preleva feature termiche da parti casuali dell'immagine perché semanticamente affini.
+Nel ramo ibrido un *2D sine positional encoding* con temperatura 10000 viene aggiunto a RGB e IR prima delle proiezioni query e key. `GroupNorm(32)` normalizza query, key e value; la value IR non riceve il positional encoding. Per P4/P5, Q, K e V sono calcolati in `float32` dentro `scaled_dot_product_attention` e poi riportati al dtype originale. In questo modo l'attenzione mantiene informazione sulle coordinate, riducendo il rischio di associare regioni semanticamente simili ma spazialmente errate (*attention ghosting*).
 
-### Problema 3: "Schiacciamento" dei target piccoli in P3
-Per via della mole $O(N^2)$ richiesta dalla matrix multiplication dell'Attention, l'hardware va in *Out of Memory* sulle feature di primo livello ($P3: 80 \times 80 = 6400$ token). Il bypass imposto dal codice esegue per P3 una semplice concatenazione + convoluzione lineare $1 \times 1$. Purtroppo per il task *Search And Rescue*, i dispersi rientrano spesso come bersagli microscopici, ed è proprio in scala P3 che risiede la probabilità maggiore di trovarli. Eseguire una concatenazione lineare su due mappe disallineate produce la corruzione irrimediabile dei corpi di dimensione limitata.
+Il bypass P3 resta necessario per evitare il costo quadratico, ma ora riceve feature IR già trasformate dal FAM. È un'ipotesi architetturale più favorevole della concatenazione di mappe palesemente disallineate, non una prova che il bypass sia innocuo per ogni caso.
 
-### La Soluzione: Architettura Ibrida (FAM + CMX)
-Per risolvere contemporaneamente questi punti, è possibile implementare una variante Ibrida unendo i pregi del Modulo F.A.M. (Feature Alignment Module descritto per l'architettura originaria):
+## Risultati della variante ibrida
 
-1. **Pre-Allineamento (FAM)**: Inserendo le *Deformable Convolutions* **prima** della fase CMX (`[RGB, IR] -> FAM -> CM-FRM -> FFM`), la rete userebbe offset spaziali elastici per far coincidere le mappe termiche ai corrispettivi visivi.
-2. **Successo nel CM-FRM**: Quando le mappe giungono al Modulo CMX, ora sono state modellate *pixel-perfect*; la calibrazione e soppressione del rumore non distruggeranno i target, ma smorzeranno autenticamente solo gli artefatti come sperato teoricamente.
-3. **Fusione P3 Miracolata**: Se le feature sono pre-allineate, il bypass-lineare sul P3 diventa improvvisamente preziosissimo; la convoluzione pura concatenando un IR e un RGB che si ricalcano temporalmente e spazialmente in modo esatto costituirà una fusione robustissima sui target microscopici, arginando così del tutto sia gli effetti di parallasse che la deficienza computazionale.
-4. **Positional Encoding Iniettato**: Aggiungendo un *2D Sine Positional Encoding* personalizzato allo stadio *FFM*, la rete acquisirebbe la capacità spaziale locale per smaltire il ghosting.
+L'ibrido recupera una parte consistente del collasso del CMX puro: in fusione passa da **0.0320** a **0.1447 mAP@50** a soglia 0.01 (+352% relativo) e produce risultati non nulli anche a soglia 0.10. Resta però nettamente sotto il baseline RT-DETR (0.3570): FAM e positional encoding migliorano questa specifica integrazione CMX, senza renderla competitiva con la fusione additiva semplice sul dataset valutato.
+
+| Modello | Test | Soglia | mAP@50 |
+| --- | --- | ---: | ---: |
+| CMX ibrido | $D_{RGB-IR}$ | 0.01 | 0.1447 |
+| CMX ibrido | $D_{RGB-IR}$ | 0.10 | 0.0878 |
+| CMX ibrido | $D_{IRo}$ | 0.01 | 0.0944 |
+| CMX ibrido | $D_{IRo}$ | 0.10 | 0.0543 |
+| CMX ibrido | $D_{VISo}$ | 0.01 | 0.1023 |
+| CMX ibrido | $D_{VISo}$ | 0.10 | 0.0607 |
+| CMX puro | $D_{RGB-IR}$ | 0.01 | 0.0320 |
+| RT-DETR baseline | $D_{RGB-IR}$ | 0.01 | 0.3570 |

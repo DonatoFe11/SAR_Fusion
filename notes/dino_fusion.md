@@ -69,9 +69,10 @@ $$N_{DN} = 2 \cdot G \cdot M$$
 
 query di denoising prima delle 300 matching query. Nella configurazione corrente $G=5$.
 
-Per ciascun gruppo vengono create copie positive (rumore spaziale ridotto e label noise) e negative (rumore più ampio e target no-object). Il decoder riceve una maschera additiva quadrata che:
+Per ciascun gruppo vengono create copie positive e negative degli stessi target. Le prime ricevono una perturbazione dei corner di ampiezza in $[0, 1)$ volte il raggio del box, le seconde in $[1, 2)$; il tutto è scalato da `box_noise_scale`. Il label noise agisce sulle label in input, mentre entrambe le copie ricostruiscono label e box ground truth originali. Il decoder riceve una maschera additiva quadrata che:
 
-- blocca gli scambi CDN ↔ matching;
+- blocca gli scambi matching → CDN, così le query di detection non possono leggere i target noti;
+- consente CDN → matching, come nella maschera DINO originale;
 - blocca gli scambi tra gruppi CDN diversi;
 - consente le interazioni all'interno di un gruppo CDN e fra matching query.
 

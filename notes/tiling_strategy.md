@@ -1,6 +1,8 @@
-# Strategia di Tiling (Sliding Window Inference)
+# Strategia di Tiling (quadranti fissi 2×2)
 
 Questo documento spiega l'approccio di tiling (o patch splitting) implementato nell'architettura. Questa strategia è divisa in livelli logici che coprono il ciclo di vita del dato, dalla lettura per il dataloader fino all'aggregazione finale.
+
+> L'implementazione non è una sliding window generica con stride e sovrapposizione: divide ogni immagine ridimensionata a $640\times640$ in quattro quadranti fissi e non sovrapposti da $320\times320$.
 
 ## Fase 1: Generazione e Caricamento dei Tile (Dataset Layer)
 
@@ -10,7 +12,7 @@ L'immagine e le annotazioni vengono manipolate "alla base" del framework, durant
 
 ### Dinamiche di Training vs Testing
 Il tiling si comporta diversamente a seconda della fase di esecuzione:
-- **Training** (`use_tiling=True`): Il metodo `__getitem__` seleziona casualmente un solo quadrante per l'immagine (`quadrant = random.randint(0, 3)`). Questo agisce come **Data Augmentation**, costringendo il modello a specializzarsi nell'identificazione di piccoli dettagli ed evitando l'overfitting.
+- **Training** (`use_tiling=True`): Il metodo `__getitem__` seleziona casualmente un solo quadrante per l'immagine (`quadrant = random.randint(0, 3)`). Questo modifica la distribuzione degli input e può agire da data augmentation, ma riduce anche il contesto disponibile e la probabilità che un target cada nel tile selezionato.
 - **Testing/Evaluation** (`test_all_tiles=True`): Il dataset esplode le istanze (`expanded_items`). Per ciascuna immagine originale, il dataloader restituisce sistematicamente 4 item separati, uno per ciascun quadrante (0, 1, 2, 3). In output vengono esplicitamente allegati i metadati `original_idx` e `quadrant`, fondamentali per ricostruire l'immagine in Fase 3.
 
 ### La funzione di ritaglio: `_get_tile`
@@ -97,3 +99,24 @@ In questo metodo finale:
 
 ### 3. Safety Flush finale (`_process_remaining_tiles`)
 Se per caso il dataset contiene immagini incomplete (es. bug nel caricamento e un array si ferma a 3 quadranti), il ciclo principale finirebbe lasciandoli pendenti. La funzione `_process_remaining_tiles` è garantita per girare dopo la chiusura del loader, forzando l'aggregazione per ogni eventuale immagine frammentata rimasta nel buffer.
+
+## Esito sperimentale: il tiling non ha migliorato RT-DETR
+
+La procedura è stata implementata e valutata, ma non ha prodotto il miglioramento atteso per target piccoli. A soglia 0.01, il riferimento RT-DETR su immagine intera addestrato per 10 epoche ha raggiunto **0.357 mAP@50** in fusione, mentre la corrispondente configurazione con tiling ha ottenuto **0.151**. Anche dopo 25 epoche il tiling resta sotto il modello integrale confrontabile (0.302 contro 0.321).
+
+| Configurazione | Epoche | $D_{RGB-IR}$ mAP@50 |
+| --- | ---: | ---: |
+| RT-DETR, immagine intera | 10 | 0.357 |
+| RT-DETR, tiling 2×2 | 10 | 0.151 |
+| RT-DETR, immagine intera | 25 | 0.321 |
+| RT-DETR, tiling 2×2 | 25 | 0.302 |
+
+Il confronto include l'inferenza sui quattro quadranti e la successiva rimappatura/NMS: il calo non dipende quindi dal fatto che in valutazione siano state ignorate parti dell'immagine.
+
+Le spiegazioni più plausibili sono:
+
+- **Perdita di contesto globale.** Ogni predizione vede solo un quarto della scena; relazioni con ambiente, scala e porzioni del soggetto oltre il bordo del tile vengono rimosse.
+- **Minore frequenza di supervisione utile dei target.** In training viene processato un solo quadrante casuale per immagine. Un target il cui centro cade in uno specifico quadrante compare quindi soltanto quando viene estratto quel quadrante; rispetto all'immagine intera riceve meno esposizioni positive per immagine elaborata.
+- **Effetti ai confini.** La regola di assegnazione per centro e il clipping possono fornire esempi parziali vicino ai bordi; inoltre training su un solo tile e inferenza aggregata su quattro tile non coincidono perfettamente.
+
+I risultati supportano soprattutto l'ipotesi che, in questa configurazione, la perdita di contesto e la minore frequenza utile dei target superino il beneficio dell'aumento di scala apparente. Non isolano quantitativamente il contributo di ciascun fattore, né escludono varianti diverse del tiling (tile sovrapposti, campionamento target-aware o addestramento multi-tile).

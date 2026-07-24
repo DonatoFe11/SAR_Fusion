@@ -466,7 +466,7 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
     Extra constructor parameters (all have sensible defaults):
       num_dn_groups    : int   = 5     number of CDN groups
       label_noise_prob : float = 0.5   DINO label-noise ratio
-      box_noise_scale  : float = 1.0   noise scale (positive slots get /2, negative full)
+      box_noise_scale  : float = 1.0   scale of the positive/negative box perturbations
       cdn_loss_coef    : float = 1.0   multiplier on the total CDN loss term
     """
 
@@ -508,8 +508,8 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
         self.cdn_loss_coef    = cdn_loss_coef
 
         # Dedicated nn.Embedding for CDN content vectors.
-        # Maps class index (0..num_classes) → d_model vector.
-        # Size is num_classes+1 to include the "no-object" sentinel for negative DN slots.
+        # Maps the (possibly noised) foreground class index to a content vector.
+        # The spare final row preserves the original CDN embedding layout.
         # Must NOT be class_embed, which is a Linear(d_model → num_classes+1).
         self.dn_label_embeddings = nn.Embedding(
             len(config.id2label) + 1, config.d_model

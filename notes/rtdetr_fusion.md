@@ -1,5 +1,7 @@
 # RT-DETR Fusion with Feature Alignment Module (FAM): detailed explanation.
 
+> **Versione descritta.** La nota fa riferimento all'implementazione corrente in [`sarfusion/models/rtdetr_fusion.py`](../sarfusion/models/rtdetr_fusion.py). SSJ è già disponibile in questa versione, ma è opzionale (`spatial_jitter_std=0.0` di default): la descrizione del FAM qui sotto riguarda il percorso senza jitter; quando il parametro è maggiore di zero, il rumore viene sommato agli offset solo durante il training. Per la motivazione e i risultati delle varianti SSJ, vedi [fam_lazy_init_behavior.md](fam_lazy_init_behavior.md).
+
 ## Feature Alignment Module (FAM)
 Il modulo FAM è progettato per allineare le feature map IR con quelle RGB prima di fonderle. Questo è cruciale perché le due modalità (RGB e IR) possono essere disallineate a causa di differenze nella geometria, prospettiva o distorsioni ottiche.
 
@@ -10,10 +12,11 @@ Come prima cosa esaminiamo riga per riga la funzione `__init__` e capiamo a cosa
 
 ---
 
-### `def __init__(self, in_channels, freeze=False):`
+### `def __init__(self, in_channels, freeze=False, spatial_jitter_std=0.0):`
 Inizializza il modulo definendo i pesi che dovrà imparare (o congelare).
 - `in_channels`: È il numero di canali delle feature map in input. Ad esempio, se siamo in un livello profondo della backbone, in_channels potrebbe essere 256.
-- `freeze`: Se impostato a True, congela i gradienti del layer, bloccando l'aggiornamento dei pesi e forzando la rete a usare il FAM come una Random Projection fissa (ottimo per regolarizzazione o noise injection).
+- `freeze`: Se impostato a True, congela i gradienti del layer. Il FAM resta una trasformazione convoluzionale fissa, non un'identità.
+- `spatial_jitter_std`: Deviazione standard del rumore SSJ sugli offset. Con il valore predefinito `0.0` SSJ è disattivato.
 
 ### `super().__init__()`
 Chiama il costruttore della classe padre (`nn.Module`). È standard in PyTorch per far sì che il modulo venga registrato correttamente.
@@ -30,7 +33,17 @@ Come è fatto internamente:
   - Per ognuno dei 9 punti, la rete deve predire uno spostamento lungo $x$ ($\Delta x$) e uno lungo $y$ ($\Delta y$). Quindi $9 \times 2 = 18$ canali (gli "offsets").
   - Per ognuno dei 9 punti, la rete deve predire anche un "peso modulatore" (la `mask`), compreso tra 0 e 1, che decide quanto quel punto debba essere 'acceso' o 'spento'. Quindi altri $9$ canali.
   - Totale canali in uscita: $18 + 9 = 27$.
-- **`kernel_size=3`** e **`padding=1`**: Configurazione classica che mantiene inalterate le dimensioni spaziali di altezza ($H$) e larghezza ($W$) in output. I pesi interni di questo layer saranno un tensore di dimensione `[27, in_channels * 2, 3, 3]`.
+- **`kernel_size=3`** e **`padding=1`**: Configurazione classica che mantiene inalterate le dimensioni spaziali di altezza ($H$) e larghezza ($W$) in output. I pesi interni sono un tensore `[27, 2C, 3, 3]`, cioè `[canali_output, canali_input, altezza_kernel, larghezza_kernel]`. Gli ultimi due `3` sono quindi la finestra spaziale $3\times3$ su $H$ e $W$, non una dimensione che scorre lungo i canali. Per produrre ciascuno dei 27 canali di output, la convoluzione applica un filtro $3\times3$ separato a ognuno dei $2C$ canali in input e ne somma i contributi.
+
+**Esempio sul passaggio attraverso la profondità.** Con batch size 1 e $C=20$, la feature concatenata ha forma `[1, 40, 80, 80]`: i canali `0:20` sono RGB e `20:40` sono IR. Per calcolare un singolo valore, ad esempio `out[0, k, y, x]`, il kernel non scorre prima sui 20 canali RGB e poi sui 20 canali IR. Resta centrato nella stessa posizione spaziale `(y,x)`, prende una finestra $3\times3$ da **ciascuno** dei 40 canali e ne calcola una somma pesata. In forma compatta:
+
+$$
+out_{k,y,x} = b_k +
+\sum_{c=0}^{19}\langle W^{RGB}_{k,c},F^{RGB}_{c,y\pm1,x\pm1}\rangle+
+\sum_{c=0}^{19}\langle W^{IR}_{k,c},F^{IR}_{c,y\pm1,x\pm1}\rangle.
+$$
+
+Quindi il campo ricettivo del kernel attraversa tutta la profondità dei canali in un unico calcolo, mentre scorre soltanto su altezza e larghezza. Non accoppia automaticamente `RGB[c]` con `IR[c]`: eventuali relazioni fra canali delle due modalità devono essere apprese dai pesi della convoluzione.
 
 ---
 
@@ -47,7 +60,7 @@ Come è fatto internamente:
 
 ---
 
-## L'inizializzazione a zero e il Congelamento (identity mapping)
+## Offset iniziali nulli e congelamento
 Successivamente i pesi e i bias della `offset_conv` vengono inizializzati a `0`:
 ```python
 nn.init.constant_(self.offset_conv.weight, 0)
@@ -57,8 +70,8 @@ if freeze:
     for param in self.parameters():
         param.requires_grad = False
 ```
-**Perché l'inizializzazione a zero?** Se gli offset iniziali sono 0, la `DeformConv2d` si comporta esattamente come una normale convoluzione 3x3 statica (nessuna deformazione della griglia). Questo è un trucco standard chiamato **identity mapping iniziale**: evita che all'inizio dell'addestramento vengano previsti offset casuali che distruggerebbero le feature pre-addestrate. La rete impara a deformare l'immagine solo progressivamente e dove serve.
-**Perché il comando `freeze`?** Se si imposta a `True`, la backpropagation ignorerà questo modulo, i gradienti non si aggiorneranno e l'offset rimarrà sempre 0 (rendendo l'hardware una 3x3 statica con pesi convoluzionali *random* fissi, per l'effetto noise-injection).
+**Perché l'inizializzazione a zero?** Rende inizialmente nulli gli offset: sono l'output della sola `offset_conv`, quindi non dipendono dai pesi della `DeformConv2d`. La griglia di campionamento non viene deformata e la `DeformConv2d` opera sulle posizioni di una convoluzione $3\times3$ standard. Questo non rende però il FAM un'identità né preserva automaticamente i valori delle feature: la `DeformConv2d` conserva i propri pesi convoluzionali apprendibili, inizializzati separatamente, e la maschera iniziale vale circa $0.5$ (`sigmoid(0)`). L'inizializzazione a zero impedisce soltanto una deformazione geometrica casuale all'avvio; i pesi della `DeformConv2d` devono comunque essere appresi per trasformare utilmente le feature.
+**Perché il comando `freeze`?** Se impostato a `True`, congela sia la convoluzione che predice offset e maschera sia la `DeformConv2d`. Gli offset restano nulli e la maschera circa $0.5$, mentre la convoluzione deformabile rimane una trasformazione $3\times3$ a pesi fissi; non è un passaggio identitario.
 
 ---
 
@@ -68,7 +81,7 @@ Nel metodo `forward`, la rete prende in input le feature map RGB e IR, le concat
 ```python
 concat = torch.cat([rgb_feat, ir_feat], dim=1)  # [B, 2C, H, W]
 ```
-Concatenando l'RGB e l'IR lungo l'asse dei canali (`dim=1`), la rete "sovrappone" le due modalità. In questo modo la convoluzione successiva può confrontare le due mappe e dedurre dove gli oggetti termici sono disallineati rispetto agli oggetti visibili.
+La concatenazione non sovrappone né somma i valori RGB e IR: li dispone in due blocchi contigui sull'asse dei canali. Se ogni feature map ha $C$ canali, `concat` contiene prima `RGB[0:C]` e poi `IR[C:2C]`. A ogni posizione spaziale, `offset_conv` riceve comunque la finestra $3\times3$ di tutti i $2C$ canali e usa pesi distinti per il blocco RGB e per il blocco IR. Può quindi apprendere, dalla loss di detection, un campo di offset basato su pattern congiunti delle due modalità; non esegue però un matching o una correlazione esplicita fra esse.
 
 ```python
 out = self.offset_conv(concat)  # [B, 27, H, W]
@@ -87,7 +100,9 @@ Qui il tensore viene splittato:
 ir_aligned = self.deform_conv(ir_feat, offset, mask)
 return ir_aligned
 ```
-Infine, la `DeformConv2d` viene applicata **esclusivamente su `ir_feat`**, ma guidata dagli `offset` e `mask` calcolati guardando *entrambe* le immagini. L'output è una nuova mappa feature termica (`ir_aligned`), in cui gli elementi sono stati "tirati" o "spinti" spazialmente per allinearsi alla perfezione alla geometria della feature map RGB.
+Infine, la `DeformConv2d` viene applicata **esclusivamente su `ir_feat`**, ma guidata dagli `offset` e `mask` calcolati guardando *entrambe* le immagini. Questo fissa anche la direzione dell'allineamento: RGB resta nel proprio sistema di coordinate e `ir_aligned` deve produrre, alla posizione $p$, informazione IR utile da sommare a `rgb_feat[p]`. In seguito il codice esegue infatti `rgb_feat + ir_aligned`. Per allineare RGB a IR bisognerebbe invece applicare la deformable convolution a `rgb_feat` e lasciare IR come riferimento.
+
+Non esiste una supervisione diretta del campo di offset: la direzione è imposta dal flusso dei tensori, mentre i valori degli offset vengono appresi dalla loss di detection. L'output è una nuova mappa feature termica (`ir_aligned`), i cui punti di campionamento possono essere "tirati" o "spinti" spazialmente verso il riferimento RGB. Il modulo apprende un allineamento utile al task, senza garantire una corrispondenza perfetta per ogni posizione o la vera trasformazione fisica fra sensori.
 
 ---
 
@@ -114,10 +129,12 @@ Questa classe è il vero "motore" dell'estrazione delle feature. Gestisce due es
 ### Costruttore `__init__`
 
 ```python
-def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+def __init__(self, config: RTDetrConfig, use_fam: bool = False,
+             freeze_fam: bool = False, ir_dropout_rate: float = 0.0,
+             spatial_jitter_std: float = 0.0):
     super().__init__()
 ```
-Riceve in input la configurazione standard di RT-DETR e un flag `use_fam` per decidere se attivare o meno l'allineamento tramite deformazione.
+Riceve la configurazione standard di RT-DETR e i flag delle varianti sperimentali: `use_fam` abilita l'allineamento, `freeze_fam` congela il FAM, `ir_dropout_rate` abilita lo Spatial Dropout e `spatial_jitter_std` abilita SSJ. Con i valori predefiniti è attiva la fusione base senza FAM, dropout o jitter.
 
 ```python
     # RGB backbone (standard)
@@ -140,15 +157,19 @@ Fa esattamente la stessa cosa per l'IR, ma imposta i canali in ingresso a 1. Dop
 ```python
     self.use_fam = use_fam
     self.freeze_fam = freeze_fam
+    self.ir_dropout_rate = ir_dropout_rate
+    self.spatial_jitter_std = spatial_jitter_std
     if self.use_fam:
         feature_channels = getattr(config, "encoder_in_channels", None)
         self.fam_modules = nn.ModuleList(
-            [FeatureAlignmentModule(ch, freeze=self.freeze_fam) for ch in feature_channels]
+            [FeatureAlignmentModule(ch, freeze=self.freeze_fam,
+                                    spatial_jitter_std=self.spatial_jitter_std)
+             for ch in feature_channels]
         )
     else:
         self.fam_modules = None
 ```
-**Inizializzazione Eager (Immediata)**: A differenza di implementazioni passate che usavano la "lazy initialization" (causando problemi con il tracciamento dei gradienti negando gli update al modulo FAM), qui i moduli vengono istanziati **in modo esplicito (eagerly)**. Leggendo i numeri di canale da `config.encoder_in_channels`, la rete crea da subito tante copie del modulo quanti sono i livelli estratti, risolvendo il problema dell'ottimizzatore. Inoltre, `freeze_fam` permette di "congelare" esplicitamente i pesi del FAM qualora si volesse sfruttare l'allineamento casuale come regolarizzatore formale.
+**Inizializzazione Eager (Immediata)**: A differenza di implementazioni passate che usavano la "lazy initialization" (causando problemi con il tracciamento dei gradienti negando gli update al modulo FAM), qui i moduli vengono istanziati **in modo esplicito (eagerly)**. Leggendo i numeri di canale da `config.encoder_in_channels`, la rete crea da subito tante copie del modulo quanti sono i livelli estratti, risolvendo il problema dell'ottimizzatore. Inoltre, `freeze_fam` permette di congelare esplicitamente i pesi del FAM; la trasformazione risultante resta fissa, non è un allineamento casuale aggiornato dal training.
 
 ---
 
@@ -217,7 +238,7 @@ Ecco l'attivazione *eager* all'opera. Nel costruttore, la rete ha già creato un
                 fused_feats.append((r_feat + i_aligned, r_mask))
             return fused_feats
 ```
-Cicla sui 3 livelli. Tramite il modulo FAM specifico di quel livello, allinea la mappa termica (`i_feat`) a quella visiva (`r_feat`). Infine applica una **Fusione Additiva** (`r_feat + i_aligned`): somma punto-a-punto i canali dei due tensori per arricchire l'informazione ottica con il contrasto termico perfettamente allineato.
+Cicla sui 3 livelli. Tramite il modulo FAM specifico di quel livello, trasforma la mappa termica (`i_feat`) usando RGB come guida. Infine applica una **Fusione Additiva** (`r_feat + i_aligned`): somma punto-a-punto i canali dei due tensori, combinando l'informazione ottica con la feature termica dopo l'allineamento appreso.
 
 #### Ramo Base (Senza FAM)
 ```python
@@ -238,9 +259,14 @@ Dopo aver definito la backbone che estrae le feature fuse, dobbiamo calare quest
 ### Il Modello Intermedio (`RTDetrFusionModel`)
 ```python
 class RTDetrFusionModel(RTDetrModel):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False,
+                 freeze_fam: bool = False, ir_dropout_rate: float = 0.0,
+                 spatial_jitter_std: float = 0.0):
         super().__init__(config)
-        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam)
+        self.backbone = RTDetrFusionBackbone(
+            config, use_fam=use_fam, freeze_fam=freeze_fam,
+            ir_dropout_rate=ir_dropout_rate,
+            spatial_jitter_std=spatial_jitter_std)
         self.post_init()
 ```
 Questa classe è estremamente compatta: eredita dal modello completo RT-DETR (senza le teste di detection). L'unico override che fa è sostituire la `self.backbone` originale (che si aspetterebbe solo un'immagine a 3 canali) con la nostra nuova e fiammante `RTDetrFusionBackbone`. 
@@ -260,7 +286,9 @@ In architetture moderne come RT-DETR (o i vari YOLO), la rete è divisa concettu
 
 #### Costruttore e Trick delle Teste
 ```python
-def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False):
+def __init__(self, config: RTDetrConfig, use_fam: bool = False,
+             freeze_fam: bool = False, ir_dropout_rate: float = 0.0,
+             spatial_jitter_std: float = 0.0):
     # Trick: inizializziamo come RGB standard
     tmp_cfg = copy.deepcopy(config)
     tmp_cfg.num_channels = 3
@@ -274,7 +302,10 @@ Poiché il nostro input sarà un tensore a 4 canali (RGB + IR), se passassimo la
     saved_bbox_embed = self.bbox_embed
 
     # Sostituiamo il modello 
-    self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam)
+    self.model = RTDetrFusionModel(
+        config, use_fam=use_fam, freeze_fam=freeze_fam,
+        ir_dropout_rate=ir_dropout_rate,
+        spatial_jitter_std=spatial_jitter_std)
 
     # Ripristiniamo le teste nel decoder del nuovo corpo
     self.model.decoder.class_embed = saved_class_embed
@@ -282,6 +313,8 @@ Poiché il nostro input sarà un tensore a 4 canali (RGB + IR), se passassimo la
     self.config = config
     self.use_fam = use_fam
     self.freeze_fam = freeze_fam
+    self.ir_dropout_rate = ir_dropout_rate
+    self.spatial_jitter_std = spatial_jitter_std
 ```
 Ecco cosa succede riga per riga in questo passaggio:
 1. Poco fa, istanziando il `super().__init__`, la libreria ha creato automaticamente le Teste (gli strati finali `self.class_embed` e `self.bbox_embed`). Prima di toccare qualsiasi cosa, **ne salviamo una copia** in due variabili temporanee (`saved_...`).
@@ -300,7 +333,10 @@ La vera "magia" della gestione dei pesi avviene in questo costruttore alternativ
 
 ```python
 @classmethod
-def from_pretrained(cls, pretrained_model_name, id2label, label2id, ignore_mismatched_sizes=True, use_fam=False):
+def from_pretrained(cls, pretrained_model_name, id2label, label2id,
+                    ignore_mismatched_sizes=True, use_fam=False,
+                    freeze_fam=False, ir_dropout_rate=0.0,
+                    spatial_jitter_std=0.0):
     # Diciamo alla libreria base di scaricare i pesi RGB normali
     base = RTDetrForObjectDetection.from_pretrained(
         pretrained_model_name, ...
@@ -312,7 +348,9 @@ Qui diciamo a HuggingFace di scaricare ed inizializzare un modello RT-DETR *pura
     # Istanziamo il nostro modello a 4 canali "vuoto"
     config = base.config
     config.num_channels = 4
-    instance = cls(config, use_fam=use_fam)
+    instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam,
+                   ir_dropout_rate=ir_dropout_rate,
+                   spatial_jitter_std=spatial_jitter_std)
     
     # Carichiamo tutti i pesi comuni (Encoder, Decoder, Teste d'uscita)
     instance.load_state_dict(base.state_dict())
@@ -386,7 +424,7 @@ Siamo ancora dentro `RTDetrFusionBackbone`, nel ramo in cui il modulo FAM è att
 Si avvia un ciclo `for` che scorre "a coppie" i 3 livelli appena estratti.
 
 Prendiamo ad esempio il livello $C4$ (1024 canali, risoluzione 40x40):
-- **Allineamento**: Il tensore RGB e quello IR del livello $C4$ vengono fusi e passati in input al modulo FAM corrispondente a quel livello. La convoluzione stima gli "offset". Il modulo `DeformConv2d` prende questi offset e modifica solo le feature IR, riallineandone i pattern geometrici, creando la feature map: `ir_aligned`. Questa feature map mantiene inalterate le dimensioni `[Batch, 1024, 40, 40]`, ma ora è semanticamente speculare e allineata rispetto alla geometria dell'RGB.
+- **Allineamento**: Il tensore RGB e quello IR del livello $C4$ vengono concatenati e passati in input al modulo FAM corrispondente a quel livello. La convoluzione stima gli "offset". Il modulo `DeformConv2d` usa questi offset per trasformare solo le feature IR, creando la feature map `ir_aligned`. Questa feature map mantiene le dimensioni `[Batch, 1024, 40, 40]`; l'addestramento determina in quale misura risulti meglio registrata rispetto alla geometria RGB.
 - **Fusione Additiva**: Viene eseguita la fusione tra i due mondi tramite una banale ma efficacissima sommma algebrica per elemento: `fused_C4 = r_feat + ir_aligned`. La nuova mappa, densa delle informazioni fiorite da entrambe le bande elettro-magnetiche originarie, resta di dimensioni `[Batch, 1024, 40, 40]`.
 
 Questa operazione di *FAM + Fusione additiva* viene eseguita su tutti i livelli ($C3$, $C4$, $C5$). Alla fine del ciclo, la `RTDetrFusionBackbone` raggruppa le tre mappe fuse in una singola *lista finale* pronta da servire e le restituisce in output.
