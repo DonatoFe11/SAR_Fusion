@@ -77,7 +77,7 @@ Parametri esperimento con grid search 2 × 3 = 6 run:
 | False | 0.5 | No FAM + SSJ |
 | False | 1.0 | No FAM + SSJ |
 
-Iperparametri: lr0=1e-4, lrf=1e-5, optimizer=AdamW, 200 epoche, patience=30, batch=16, imgsz=640, single_cls=True, pretrained=False, augment_vis_ir=False, mosaic=0.0
+Iperparametri: lr0=1e-4, lrf=1e-5, optimizer=AdamW, 200 epoche, patience=30, batch=16, imgsz=640, single_cls=True, `model.params.pretrained=True`, `parameters.pretrained=False`, augment_vis_ir=False, mosaic=0.0. Il primo flag abilita l'inizializzazione interna COCO del modello custom; il secondo disabilita il caricamento standard del trainer Ultralytics, evitando un secondo tentativo di pretraining.
 
 ## Metriche del modello
 
@@ -151,7 +151,7 @@ Il modello funziona in single-class e raggiunge performance comparabili all'espe
 | FAM, SSJ=1.0 | 0.396 | 0.3331 |
 | No FAM | 0.413 | 0.3776 |
 
-La variante FAM+SSJ=0.0 in single-class (0.4074) supera la corrispondente multi-classe (0.348), suggerendo che l'addestramento su una sola classe ben definita aiuta l'allineamento FAM. Il No FAM scende da 0.413 a 0.3776 — entrambi gli esperimenti usavano `pretrained=False`, quindi la differenza è attribuibile ad altri fattori (diversa inizializzazione random, dataset leggermente diverso, o semplicemente varianza statistica).
+La variante FAM+SSJ=0.0 in single-class (0.4074) supera la corrispondente multi-classe (0.348), suggerendo che l'addestramento su una sola classe ben definita aiuta l'allineamento FAM. Il No FAM scende da 0.413 a 0.3776. Entrambi gli esperimenti caricavano internamente i pesi COCO di `jameslahm/yolov10s`; il `pretrained=False` presente al livello principale dei parametri riguardava soltanto il trainer Ultralytics. La differenza va quindi attribuita al diverso task/dataset o alla variabilità delle singole run, non alla presenza o assenza del pretraining COCO.
 
 ## Verifiche superate
 
@@ -170,6 +170,9 @@ python main.py experiment --parameters parameters/YOLO/30.yolov10-fam.yaml --yol
 
 # Solo creazione file di configurazione (senza esecuzione)
 python main.py experiment --parameters parameters/YOLO/30.yolov10-fam.yaml --yolo --only-create
+
+# Ripetizione della stessa grid con modal dropout 20% IR / 20% RGB / 60% fusion
+python main.py experiment --parameters parameters/YOLO/31.yolov10-fam-modal-dropout.yaml --yolo
 ```
 
 ## Verifica diagnostica del FAM (fam_alignment_check.py) sui checkpoint single-class
@@ -243,15 +246,15 @@ Eseguito con `eval_yolo_modalities.py` sui 4 checkpoint indipendenti (Grid, Grid
 
 3. ~~Fixare il grid search engine~~ — **non è un bug**: Grid4/5/6 identici sono il comportamento atteso di seed fisso + `deterministic: True` + un iperparametro senza effetto quando `use_fam=False` (vedi nota sopra).
 
-4. **Rilasciare un nuovo grid** con `pretrained=True` per valutare se i pesi COCO migliorano ulteriormente le performance.
+4. ~~**Rilasciare un nuovo grid con `pretrained=True`**~~ — **non necessario**: anche la grid originale caricava già internamente i pesi COCO di `jameslahm/yolov10s`, perché `YOLOv10FusionFAM` ha `pretrained=True` come default. Le configurazioni 30 e 31 ora dichiarano esplicitamente `model.params.pretrained=True`. Un'eventuale ablation futura utile sarebbe invece il confronto controllato con `model.params.pretrained=False`, cioè training realmente da zero.
 
-5. **Abilitare modal dropout per YOLO** (richiede prima il fix del padding a 4ch mancante in `WiSARDYOLODataset`, non solo nello script di valutazione) per verificare se risolve il crollo quasi-totale su IR-only.
+5. ~~**Abilitare modal dropout per YOLO**~~ — **implementato** in `WiSARDYOLODataset` come percorso separato dal legacy `augment_vis_ir`. Le probabilità sono configurabili in ordine `[IR-only, RGB-only, fusion]`; la grid dedicata usa `[0.2, 0.2, 0.6]`. Il mascheramento viene applicato dopo le trasformazioni, preserva sempre l'input a 4 canali (`[0,0,0,IR]` oppure `[RGB,0]`) ed è forzatamente disabilitato su validation/test dal dataset builder. La grid contiene quattro run informative: tre con FAM e SSJ `0.0/0.5/1.0`, più una sola baseline no-FAM con SSJ `0.0`. Config di retraining: `parameters/YOLO/31.yolov10-fam-modal-dropout.yaml`.
 
 6. **Diagnosticare il bug della val mAP** (`WisardTrainer`/`WisardValidator`, discrepanza nota tra val e test sullo stesso checkpoint) — resta aperto e non affrontato, rilevante per la fiducia nella selezione del checkpoint "best" usato in tutte le analisi sopra.
 
 ## Note tecniche
 
-- **Caricamento pesi COCO**: il costruttore carica automaticamente `jameslahm/yolov10s` via `YOLOv10WiSARD.from_pretrained()`. Attualmente disabilitato da `pretrained=False` nei parametri esperimento. Di 1478 chiavi totali: 847 caricate (backbone RGB + IR + neck parziale), 631 mancanti sono della testa (`v10Detect`) — il checkpoint COCO ha `nc=80`, noi `nc=1`.
+- **Caricamento pesi COCO**: il costruttore carica `jameslahm/yolov10s` via `YOLOv10WiSARD.from_pretrained()` quando `model.params.pretrained=True`. Di 1478 chiavi totali: 847 vengono caricate (backbone RGB + IR + neck parziale); le 631 mancanti appartengono principalmente alla testa `v10Detect`, perché il checkpoint COCO usa `nc=80` mentre l'esperimento usa `nc=1`. Il flag separato `parameters.pretrained=False` appartiene al trainer Ultralytics e non disabilita questo caricamento interno.
 - La loss `v10DetectLoss` usa `TaskAlignedAssigner` e `BboxLoss` con DFL.
 - Se la GPU ha poca VRAM, ridurre `batch` da 16 a 8.
 - Compatibile con `torch.cuda.amp`.

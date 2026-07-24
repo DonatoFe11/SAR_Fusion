@@ -786,7 +786,75 @@ def verify_image_label(args):
 class WiSARDYOLODataset(YOLODataset):
     def __init__(self, *args, **kwargs):
         self.augment_vis_ir = kwargs.pop("augment_vis_ir", False)
+        self.modal_dropout = kwargs.pop("modal_dropout", False)
+        self.modal_dropout_probs = kwargs.pop(
+            "modal_dropout_probs", [0.2, 0.2, 0.6]
+        )
+        self._validate_modal_dropout_config()
         super().__init__(*args, **kwargs)
+
+    def _validate_modal_dropout_config(self):
+        """Validate the YOLO modal-dropout configuration.
+
+        Probability order matches ``WiSARDDataset``: IR-only, RGB-only,
+        RGB-IR fusion.
+        """
+        if self.augment_vis_ir and self.modal_dropout:
+            raise ValueError(
+                "augment_vis_ir and modal_dropout are mutually exclusive. "
+                "Use modal_dropout for YOLO-FAM 4-channel training."
+            )
+
+        probs = self.modal_dropout_probs
+        if not isinstance(probs, (list, tuple)) or len(probs) != 3:
+            raise ValueError(
+                "modal_dropout_probs must contain exactly three values in "
+                "[IR-only, RGB-only, fusion] order."
+            )
+
+        self.modal_dropout_probs = [float(prob) for prob in probs]
+        if any(prob < 0.0 for prob in self.modal_dropout_probs):
+            raise ValueError("modal_dropout_probs values must be non-negative.")
+        if not np.isclose(sum(self.modal_dropout_probs), 1.0):
+            raise ValueError("modal_dropout_probs must sum to 1.0.")
+
+    def _sample_modal_dropout_mode(self):
+        """Sample IR-only, RGB-only, or fusion using configured weights."""
+        return random.choices(
+            ("ir", "rgb", "fusion"),
+            weights=self.modal_dropout_probs,
+            k=1,
+        )[0]
+
+    @staticmethod
+    def _apply_modal_dropout(img, mode):
+        """Mask one input modality while preserving the 4-channel contract."""
+        if not isinstance(img, torch.Tensor) or img.ndim != 3 or img.shape[0] != 4:
+            shape = getattr(img, "shape", None)
+            raise ValueError(
+                "YOLO modal dropout requires a transformed 4-channel tensor "
+                f"[RGB, IR], got shape {shape}."
+            )
+
+        if mode == "fusion":
+            return img
+
+        img = img.clone()
+        if mode == "ir":
+            img[:3].zero_()
+        elif mode == "rgb":
+            img[3:4].zero_()
+        else:
+            raise ValueError(f"Unsupported modal-dropout mode: {mode}")
+        return img
+
+    def __getitem__(self, index):
+        """Return one sample, optionally masking a modality after transforms."""
+        sample = super().__getitem__(index)
+        if self.modal_dropout and isinstance(self.im_files[index], (tuple, list)):
+            mode = self._sample_modal_dropout_mode()
+            sample["img"] = self._apply_modal_dropout(sample["img"], mode)
+        return sample
 
     def get_labels(self):
         """Returns dictionary of labels for YOLO training."""

@@ -1,8 +1,10 @@
-# YOLOv10 + FAM — Grid Search Experiment
-# Tests dual backbone + FAM(additive fusion) with SSJ regularization.
-# Baseline (use_fam=False) = dual backbone without alignment.
+# YOLOv10 + FAM — Modal Dropout Grid Search Experiment
+# Repeats parameters/YOLO/30.yolov10-fam.yaml with the same
+# IR/RGB/fusion sampling protocol used by the DETR-family experiments.
+# Four informative runs: FAM with SSJ 0.0/0.5/1.0, plus one no-FAM
+# baseline at SSJ 0.0 (SSJ is inactive when FAM is disabled).
 #
-# Dataset: RGB+IR synced pairs (vis_all_ir_sync), test on VIS
+# Modal-dropout probability order: [IR-only, RGB-only, RGB-IR fusion].
 experiment:
   continue_with_errors: False
 
@@ -15,7 +17,7 @@ parameters:
     name: [yolov10_fusion_fam]
     params:
       cfg: [cfg/yolov10-fusion-fam-s.yaml]
-      use_fam: [True, False]
+      use_fam: [True]
       spatial_jitter_std: [0.0, 0.5, 1.0]
       ir_dropout_rate: [0.0]
       freeze_fam: [False]
@@ -31,15 +33,22 @@ parameters:
   val_period: [1]
   cache: [False]
   workers: [4]
-  project: [SarYOLOSingleClass]
-  name: [YOLOv10-sc-FAM-Grid]
+  project: [SarYOLOSingleClassModalDropout]
+  name: [YOLOv10-sc-FAM-MD-Grid]
   exist_ok: [False]
   pretrained: [False]  # Ultralytics trainer flag; custom-model pretraining is controlled above
   optimizer: [AdamW]
   verbose: [True]
   seed: [42]
   deterministic: [True]
-  augment_vis_ir: [False]  # Legacy variable-channel dropout; experiment 31 uses the new 4ch modal_dropout path
+
+  # Missing-modality training: 20% IR-only, 20% RGB-only, 60% fusion.
+  # augment_vis_ir is the legacy variable-channel implementation and must
+  # remain disabled for the 4-channel YOLO-FAM architecture.
+  augment_vis_ir: [False]
+  modal_dropout: [True]
+  modal_dropout_probs: [[0.2, 0.2, 0.6]]
+
   single_cls: [True]
   rect: [False]
   cos_lr: [False]
@@ -51,7 +60,7 @@ parameters:
   freeze: [None]
   multi_scale: [False]
 
-  # Val/Test
+  # Val/Test — modal dropout is disabled by the YOLO dataset builder here.
   val: [True]
   split: [val]
   save_json: [False]
@@ -62,7 +71,7 @@ parameters:
   dnn: [False]
   plots: [True]
 
-  # Hyperparameters
+  # Hyperparameters (kept identical to experiment 30).
   lr0: [0.0001]
   lrf: [0.00001]
   momentum: [0.937]
@@ -86,11 +95,17 @@ parameters:
   flipud: [0.0]
   fliplr: [0.5]
   bgr: [0.0]
-  mosaic: [0.0]  # Disabled — RGB+IR pairs can't be mosaiced
+  mosaic: [0.0]
   mixup: [0.0]
   copy_paste: [0.0]
   auto_augment: [randaugment]
   erasing: [0.4]
   crop_fraction: [1.0]
 
-other_grids: []
+other_grids:
+  # A single no-FAM baseline is sufficient because spatial_jitter_std is
+  # never read when the FAM modules are disabled.
+  - model:
+      params:
+        use_fam: [False]
+        spatial_jitter_std: [0.0]
