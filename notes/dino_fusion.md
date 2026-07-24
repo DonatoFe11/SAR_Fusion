@@ -69,7 +69,7 @@ $$N_{DN} = 2 \cdot G \cdot M$$
 
 query di denoising prima delle 300 matching query. Nella configurazione corrente $G=5$.
 
-Per ciascun gruppo vengono create copie positive e negative degli stessi target. Le prime ricevono una perturbazione dei corner di ampiezza in $[0, 1)$ volte il raggio del box, le seconde in $[1, 2)$; il tutto è scalato da `box_noise_scale`. Il label noise agisce sulle label in input, mentre entrambe le copie ricostruiscono label e box ground truth originali. Il decoder riceve una maschera additiva quadrata che:
+Per ciascun gruppo vengono create copie positive e negative degli stessi target. Le prime ricevono una perturbazione dei corner di ampiezza in $[0, 1)$ volte il raggio del box, le seconde in $[1, 2)$; il tutto è scalato da `box_noise_scale`. Il label noise agisce sulle label in input. Le copie positive ricostruiscono label e box ground truth originali; quelle negative sono supervisionate come background nel solo ramo di classificazione e non ricevono loss L1/GIoU. Il decoder riceve una maschera additiva quadrata che:
 
 - blocca gli scambi matching → CDN, così le query di detection non possono leggere i target noti;
 - consente CDN → matching, come nella maschera DINO originale;
@@ -86,7 +86,7 @@ Il file da lanciare è [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml), 
 
 | Parametro | Valore |
 | --- | --- |
-| esperimento | `DINO_Full_Fusion_DefDETR_FAM_SSJ_vis_ir` |
+| esperimento | `DINO_Full_Corrected_Fusion_DefDETR_FAM_SSJ_vis_ir` |
 | `num_feature_levels` | 4 |
 | query di matching | 300 (`config.num_queries`) |
 | `num_dn_groups` | 5 |

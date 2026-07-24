@@ -382,8 +382,8 @@ def compute_cdn_loss(
     """
     Compute CDN auxiliary loss on the denoising slots.
 
-    Both positive and contrastive-negative copies reconstruct their original
-    label and box, matching DINO's known-target auxiliary losses.
+    Positive copies reconstruct their original label and box. Contrastive
+    negative copies are classification background and receive no box loss.
 
     Returns a dict of scalar losses:
         "loss_cdn_class", "loss_cdn_bbox", "loss_cdn_giou"
@@ -393,7 +393,8 @@ def compute_cdn_loss(
     total_bbox_loss = dn_hidden_states.new_zeros(())
     total_giou_loss = dn_hidden_states.new_zeros(())
     valid = cdn_targets.valid_slot_mask
-    num_valid = max(int(valid.sum().item()), 1)
+    positive = valid & cdn_targets.pos_neg_flag.bool()
+    num_positive = max(int(positive.sum().item()), 1)
 
     for layer_idx in range(num_layers):
         ref = (
@@ -406,25 +407,30 @@ def compute_cdn_loss(
         delta_bbox = bbox_embed[layer_idx](hs)
         pred_boxes = (delta_bbox + _inverse_sigmoid(ref)).sigmoid()
 
-        pred_valid = pred_boxes[valid]
-        target_boxes = cdn_targets.dn_target_boxes[valid]
+        pred_positive = pred_boxes[positive]
+        target_boxes = cdn_targets.dn_target_boxes[positive]
         logits_valid = pred_logits[valid]
-        target_labels = cdn_targets.dn_target_labels[valid]
         target_onehot = torch.zeros_like(logits_valid)
-        target_onehot.scatter_(1, target_labels[:, None], 1.0)
+        # `valid` flattens slots in row-major order. Select the positive rows
+        # inside that flattened subset; all other valid rows remain background.
+        positive_within_valid = cdn_targets.pos_neg_flag.bool()[valid]
+        positive_labels = cdn_targets.dn_target_labels[positive]
+        target_onehot[
+            positive_within_valid, positive_labels
+        ] = 1.0
 
-        # Each decoder layer has its own denoising auxiliary loss in DINO.
-        # Normalise each layer by the number of known target copies and sum
-        # layers, consistently with the regular auxiliary decoder losses.
+        # DINO attaches a denoising auxiliary loss to every decoder layer.
+        # Classification sees positive and contrastive-negative valid slots;
+        # regression sees positives only. Padding contributes to neither.
         total_class_loss += _sigmoid_focal_loss(
-            logits_valid, target_onehot, num_boxes=num_valid
+            logits_valid, target_onehot, num_boxes=num_positive
         ) * pred_logits.shape[1]
         total_bbox_loss += F.l1_loss(
-            pred_valid, target_boxes, reduction="sum"
-        ) / num_valid
+            pred_positive, target_boxes, reduction="sum"
+        ) / num_positive
         total_giou_loss += (
-            1.0 - _box_iou_union(pred_valid, target_boxes)
-        ).sum() / num_valid
+            1.0 - _box_iou_union(pred_positive, target_boxes)
+        ).sum() / num_positive
 
     return {
         "loss_cdn_class": loss_coef_class * total_class_loss,
@@ -608,6 +614,49 @@ if __name__ == "__main__":
     giou_far = _box_iou_union(b3, b4)
     assert giou_far.item() < 0.0, "GIoU of non-overlapping far boxes should be < 0"
     print("✅ Test 4 passed – GIoU utility correct")
+
+    # ------ Test 5: contrastive negatives never receive box regression ------
+    num_layers = 2
+    class_heads = torch.nn.ModuleList(
+        [torch.nn.Linear(D, NC) for _ in range(num_layers)]
+    )
+    bbox_heads = torch.nn.ModuleList(
+        [torch.nn.Linear(D, 4) for _ in range(num_layers)]
+    )
+    for head in bbox_heads:
+        torch.nn.init.zeros_(head.weight)
+        torch.nn.init.zeros_(head.bias)
+    dn_hidden = torch.randn(B, num_layers, N_dn, D)
+    dn_refs = cdn.dn_ref_points[:, None].expand(-1, num_layers, -1, -1).clone()
+    loss_before = compute_cdn_loss(
+        dn_hidden, dn_refs, cdn.dn_ref_points, cdn,
+        class_heads, bbox_heads, NC,
+    )
+    original_targets = cdn.dn_target_boxes.clone()
+    original_target_labels = cdn.dn_target_labels.clone()
+    negative_valid = cdn.valid_slot_mask & ~cdn.pos_neg_flag.bool()
+    cdn.dn_target_boxes[negative_valid] = torch.rand_like(
+        cdn.dn_target_boxes[negative_valid]
+    )
+    # A sentinel outside the class range proves that negative target labels
+    # are not accidentally used as foreground classification targets.
+    cdn.dn_target_labels[negative_valid] = NC + 100
+    loss_after = compute_cdn_loss(
+        dn_hidden, dn_refs, cdn.dn_ref_points, cdn,
+        class_heads, bbox_heads, NC,
+    )
+    assert torch.allclose(
+        loss_before["loss_cdn_class"], loss_after["loss_cdn_class"]
+    ), "negative target labels must remain classification background"
+    assert torch.allclose(
+        loss_before["loss_cdn_bbox"], loss_after["loss_cdn_bbox"]
+    ), "negative target boxes must not affect CDN L1"
+    assert torch.allclose(
+        loss_before["loss_cdn_giou"], loss_after["loss_cdn_giou"]
+    ), "negative target boxes must not affect CDN GIoU"
+    cdn.dn_target_boxes.copy_(original_targets)
+    cdn.dn_target_labels.copy_(original_target_labels)
+    print("✅ Test 5 passed – negative CDN slots are background without box loss")
 
     print()
     print("All tests passed ✅")
