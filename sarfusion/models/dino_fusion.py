@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Optional
 
 import torch
@@ -514,8 +515,13 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
         # The base constructor attached these heads to the model it created.
         # Re-attach them after replacing it, otherwise LFT and two-stage
         # proposal selection would silently have no prediction heads.
-        self.model.decoder.bbox_embed = self.bbox_embed
-        self.model.decoder.class_embed = self.class_embed
+        # The decoder needs the very same heads used by the outer detection
+        # module for iterative refinement.  Bypass nn.Module.__setattr__ here:
+        # registering the ModuleLists a second time made Accelerate remove
+        # dozens of "shared tensors" at every checkpoint save.  The heads stay
+        # registered (and serialized) once, on this detection module.
+        object.__setattr__(self.model.decoder, "bbox_embed", self.bbox_embed)
+        object.__setattr__(self.model.decoder, "class_embed", self.class_embed)
         self.num_dn_groups    = num_dn_groups
         self.label_noise_prob = label_noise_prob
         self.box_noise_scale  = box_noise_scale
@@ -768,6 +774,26 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
         # Load all directly compatible pretrained weights.
         model.load_state_dict(base_model.state_dict(), strict=False)
 
+        # MQS replaces the one-stage learned queries only on the positional
+        # side: its decoder content is still a learned query table.  Warm-start
+        # that table from the content half of the pretrained Deformable-DETR
+        # queries instead of discarding it and starting all 300 queries from
+        # random values.  This is essential when converting a one-stage
+        # checkpoint on a relatively small downstream dataset.
+        pretrained_queries = base_model.model.query_position_embeddings.weight
+        _, pretrained_query_content = torch.split(
+            pretrained_queries, model.config.d_model, dim=1
+        )
+        with torch.no_grad():
+            model.model.mixed_query_content.weight.copy_(pretrained_query_content)
+
+        # The two-stage encoder transform does not exist in the one-stage
+        # checkpoint.  An identity warm start preserves the already useful
+        # encoder representation; a random projection destroyed it before the
+        # newly initialized proposal heads could learn to rank anchors.
+        nn.init.eye_(model.model.enc_output.weight)
+        nn.init.zeros_(model.model.enc_output.bias)
+
         # The one-stage checkpoint owns one prediction head, whereas iterative
         # refinement uses one independent copy per decoder layer plus one for
         # encoder proposals. Their state-dict keys do not match automatically.
@@ -787,6 +813,17 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
             nn.init.zeros_(bbox_head.layers[-1].bias)
         for class_head in model.class_embed:
             class_head.load_state_dict(pretrained_class_head.state_dict())
+            # DINO/Deformable-DETR use sigmoid focal classification.  After
+            # adapting the COCO head (91 classes) to WiSARD (one class), HF
+            # creates a fresh bias close to zero.  That assigns ~50% foreground
+            # probability to every one of the 300 queries and makes background
+            # focal loss overwhelm all localization signals.  Restore DINO's
+            # standard 1% foreground prior for decoder and encoder heads.
+            prior_probability = 0.01
+            nn.init.constant_(
+                class_head.bias,
+                -math.log((1.0 - prior_probability) / prior_probability),
+            )
 
         # Copy position embeddings to both RGB and IR backbones
         position_emb_state = {

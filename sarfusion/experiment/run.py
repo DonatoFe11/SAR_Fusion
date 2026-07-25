@@ -150,8 +150,8 @@ class Run:
             "dn_label_embeddings",
             "enc_output",
             "pos_trans",
-            "decoder.bbox_embed",
-            "decoder.class_embed",
+            "bbox_embed",
+            "class_embed",
         )
         for name, param in self.model.named_parameters():
             if any(k in name for k in dino_parameter_names):

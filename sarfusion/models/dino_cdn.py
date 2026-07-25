@@ -424,7 +424,7 @@ def compute_cdn_loss(
         # regression sees positives only. Padding contributes to neither.
         total_class_loss += _sigmoid_focal_loss(
             logits_valid, target_onehot, num_boxes=num_positive
-        ) * pred_logits.shape[1]
+        )
         total_bbox_loss += F.l1_loss(
             pred_positive, target_boxes, reduction="sum"
         ) / num_positive
@@ -657,6 +657,26 @@ if __name__ == "__main__":
     cdn.dn_target_boxes.copy_(original_targets)
     cdn.dn_target_labels.copy_(original_target_labels)
     print("✅ Test 5 passed – negative CDN slots are background without box loss")
+
+    # ------ Test 6: CDN classification is not multiplied by query count ------
+    valid = cdn.valid_slot_mask
+    positive = valid & cdn.pos_neg_flag.bool()
+    num_positive = max(int(positive.sum().item()), 1)
+    expected_class = dn_hidden.new_zeros(())
+    for layer_idx in range(num_layers):
+        logits_valid = class_heads[layer_idx](dn_hidden[:, layer_idx])[valid]
+        target_onehot = torch.zeros_like(logits_valid)
+        positive_within_valid = cdn.pos_neg_flag.bool()[valid]
+        target_onehot[
+            positive_within_valid, cdn.dn_target_labels[positive]
+        ] = 1.0
+        expected_class += _sigmoid_focal_loss(
+            logits_valid, target_onehot, num_boxes=num_positive
+        )
+    assert torch.allclose(
+        loss_before["loss_cdn_class"], expected_class
+    ), "CDN focal loss must not be multiplied by the number of DN queries"
+    print("✅ Test 6 passed – CDN classification has the correct normalization")
 
     print()
     print("All tests passed ✅")
