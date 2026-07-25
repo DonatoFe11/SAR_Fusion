@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Full_StableInit_Fusion_DefDETR_FAM_SSJ_vis_ir
+  name: DINO_Base_Fusion_DefDETR_vis_ir
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -24,7 +24,6 @@ parameters:
     dino_lr: [0.0001]
     optimizer: [AdamW]
     watch_metric: [map]
-    gradient_clip_norm: [0.1]
     gradient_accumulation_steps: [4]
     time_probe_interval: [100]
     time_probe_sync: [True]
@@ -38,10 +37,10 @@ parameters:
         0: [person]
       threshold: [0.01]
       num_feature_levels: [4]
-      use_fam: [true]
+      use_fam: [false]
       freeze_fam: [false]
       ir_dropout_rate: [0.0]
-      spatial_jitter_std: [0.5]
+      spatial_jitter_std: [0.0]
       num_dn_groups: [5]
       label_noise_prob: [0.5]
       box_noise_scale: [1.0]
