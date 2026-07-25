@@ -140,11 +140,23 @@ class Run:
         logger.info("Creating optimizer")
         
         backbone_lr = self.train_params.get("backbone_lr", self.train_params["initial_lr"])
+        dino_lr = self.train_params.get("dino_lr", self.train_params["initial_lr"])
         new_module_params = []
+        dino_params = []
         backbone_params = []
 
+        dino_parameter_names = (
+            "mixed_query_content",
+            "dn_label_embeddings",
+            "enc_output",
+            "pos_trans",
+            "decoder.bbox_embed",
+            "decoder.class_embed",
+        )
         for name, param in self.model.named_parameters():
-            if any(k in name for k in ["ir_backbone", "channel_fusion"]):
+            if any(k in name for k in dino_parameter_names):
+                dino_params.append(param)
+            elif any(k in name for k in ["ir_backbone", "channel_fusion"]):
                 new_module_params.append(param)
             else:
                 backbone_params.append(param)
@@ -169,16 +181,19 @@ class Run:
 
         logger.info(
             f"New module params: {len(new_module_params)}, "
+            f"DINO params: {len(dino_params)}, "
             f"Backbone params: {len(backbone_params)}"
         )
         logger.info(
             f"LR for new modules: {self.train_params['initial_lr']}, "
+            f"LR for DINO modules: {dino_lr}, "
             f"LR for backbone: {backbone_lr}"
         )
 
         self.optimizer = AdamW([
             {"params": backbone_params, "lr": backbone_lr},
             {"params": new_module_params, "lr": self.train_params["initial_lr"]},
+            {"params": dino_params, "lr": dino_lr},
         ])
 
         scheduler_params = self.train_params.get("scheduler", None)
@@ -539,6 +554,7 @@ class Run:
 
             self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
             self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
+            self.tracker.log_metric("lr_dino", self.optimizer.param_groups[2]["lr"])
 
             self._update_train_metrics(
                 result_dict,

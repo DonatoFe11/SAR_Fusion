@@ -186,6 +186,7 @@ class LFTDecoder(DeformableDetrDecoder):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         position_embeddings=None,
+        query_position_fn=None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -220,9 +221,17 @@ class LFTDecoder(DeformableDetrDecoder):
             else:
                 raise ValueError(f"Last dim of reference_points must be 2 or 4, got {num_coordinates}")
 
+            # DINO positional queries are generated from the current dynamic
+            # anchor, not frozen from the initial encoder proposal.
+            layer_position_embeddings = (
+                query_position_fn(reference_points)
+                if query_position_fn is not None
+                else position_embeddings
+            )
+
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=layer_position_embeddings,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
@@ -307,6 +316,17 @@ class DINOFusionModel(DeformableDetrFusionModel):
         # DINO mixed query selection: encoder proposals provide the anchors,
         # while the decoder content comes from independent learned queries.
         self.mixed_query_content = nn.Embedding(config.num_queries, config.d_model)
+
+    def get_dynamic_query_position(
+        self, reference_points: torch.Tensor
+    ) -> torch.Tensor:
+        """Generate a positional query from the current 4-D DINO anchor."""
+        reference_logits = inverse_sigmoid(reference_points)
+        position = self.pos_trans_norm(
+            self.pos_trans(self.get_proposal_pos_embed(reference_logits))
+        )
+        position, _ = torch.split(position, self.config.d_model, dim=2)
+        return position
 
     def forward(
         self,
@@ -399,27 +419,21 @@ class DINOFusionModel(DeformableDetrFusionModel):
             enc_outputs_coord_logits, 1, topk_indices.unsqueeze(-1).expand(-1, -1, 4)
         ).detach()
         matching_reference_points = topk_coords_logits.sigmoid()
-        matching_pos = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
-        matching_pos, _ = torch.split(matching_pos, self.config.d_model, dim=2)
         matching_target = self.mixed_query_content.weight.unsqueeze(0).expand(batch_size, -1, -1)
 
         if cdn_targets is not None:
-            dn_logits = inverse_sigmoid(cdn_targets.dn_ref_points)
-            dn_pos = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(dn_logits)))
-            dn_pos, _ = torch.split(dn_pos, self.config.d_model, dim=2)
             reference_points = torch.cat([cdn_targets.dn_ref_points, matching_reference_points], dim=1)
-            position_embeddings = torch.cat([dn_pos, matching_pos], dim=1)
             target = torch.cat([cdn_targets.dn_content, matching_target], dim=1)
         else:
             reference_points = matching_reference_points
-            position_embeddings = matching_pos
             target = matching_target
 
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=mask_flatten,
-            position_embeddings=position_embeddings,
+            position_embeddings=None,
+            query_position_fn=self.get_dynamic_query_position,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
@@ -751,8 +765,28 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
             cdn_loss_coef=cdn_loss_coef,
         )
 
-        # Permissive weight load (backbone shapes will mismatch — that's expected)
+        # Load all directly compatible pretrained weights.
         model.load_state_dict(base_model.state_dict(), strict=False)
+
+        # The one-stage checkpoint owns one prediction head, whereas iterative
+        # refinement uses one independent copy per decoder layer plus one for
+        # encoder proposals. Their state-dict keys do not match automatically.
+        #
+        # Reuse the hidden MLP transforms, but do NOT copy the output layer:
+        # one-stage predicts width/height around a 2-D reference, while DINO
+        # predicts four deltas around a 4-D anchor. A zero output layer is the
+        # stable conversion: every initial refined box equals its proposal.
+        pretrained_bbox_head = base_model.bbox_embed[0]
+        pretrained_class_head = base_model.class_embed[0]
+        for bbox_head in model.bbox_embed:
+            for layer_idx in range(len(bbox_head.layers) - 1):
+                bbox_head.layers[layer_idx].load_state_dict(
+                    pretrained_bbox_head.layers[layer_idx].state_dict()
+                )
+            nn.init.zeros_(bbox_head.layers[-1].weight)
+            nn.init.zeros_(bbox_head.layers[-1].bias)
+        for class_head in model.class_embed:
+            class_head.load_state_dict(pretrained_class_head.state_dict())
 
         # Copy position embeddings to both RGB and IR backbones
         position_emb_state = {

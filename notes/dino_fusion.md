@@ -57,9 +57,11 @@ deformable attention; la seconda resta nel grafo e fa sì che la loss della
 predizione al layer seguente aggiorni anche la testa box del layer precedente.
 Questo collegamento fra loss adiacenti è il Look-Forward-Twice. Poiché
 `with_box_refine=True` viene forzato, il refinement viene realmente eseguito.
-Le nuove teste di proposal dell'encoder e la settima copia delle teste (una per
-l'encoder oltre ai sei layer decoder) sono inizializzate ex novo; i pesi
-compatibili del checkpoint vengono comunque riutilizzati.
+Le sette teste box (sei decoder e una encoder) riusano i layer interni della
+testa one-stage pretrained, mentre l'ultimo layer è azzerato: ogni raffinamento
+parte quindi dall'anchor corrente senza applicare un delta casuale o un delta
+one-stage incompatibile. La positional query viene rigenerata dall'anchor
+raffinato prima di ogni decoder layer.
 
 ## Contrastive DeNoising (CDN)
 
@@ -86,7 +88,7 @@ Il file da lanciare è [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml), 
 
 | Parametro | Valore |
 | --- | --- |
-| esperimento | `DINO_Full_Corrected_Fusion_DefDETR_FAM_SSJ_vis_ir` |
+| esperimento | `DINO_Full_StableInit_Fusion_DefDETR_FAM_SSJ_vis_ir` |
 | `num_feature_levels` | 4 |
 | query di matching | 300 (`config.num_queries`) |
 | `num_dn_groups` | 5 |
@@ -95,10 +97,16 @@ Il file da lanciare è [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml), 
 | `cdn_loss_coef` | 1.0 |
 | `two_stage` | `true`, impostato dal codice DINO |
 | `with_box_refine` | `true`, impostato dal codice DINO |
+| learning rate pretrained/fusion | 0.00002 |
+| learning rate nuovi moduli DINO | 0.0001 |
 | `batch_size` | 1 |
 | modal dropout (IR / RGB / fusion) | 0.2 / 0.2 / 0.6 |
 
-Il checkpoint COCO inizializza backbone RGB, backbone IR adattata mediando i tre canali della prima convoluzione, encoder, decoder e pesi compatibili delle teste. I blocchi di channel fusion, FAM, embedding CDN, contenuto MQS e moduli aggiuntivi two-stage sono appresi nei nuovi training.
+Il checkpoint COCO inizializza backbone RGB, backbone IR adattata mediando i tre
+canali della prima convoluzione, encoder, decoder e i layer interni delle teste
+box. I blocchi di channel fusion, FAM, embedding CDN, contenuto MQS, trasformazioni
+two-stage e gli output layer di raffinamento sono appresi nei nuovi training con
+il learning rate dedicato.
 
 ## Risultati storici: non DINO completo
 

@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_Full_Corrected_Fusion_DefDETR_FAM_SSJ_vis_ir
+  name: DINO_Full_StableInit_Fusion_DefDETR_FAM_SSJ_vis_ir
   group: DINO_Investigation
   continue_with_errors: False
   start_from_grid: 0
@@ -18,6 +18,10 @@ parameters:
     max_epochs: [10]
     compile: [False]
     initial_lr: [0.00002]
+    # Newly introduced two-stage/MQS/CDN/refinement modules need the
+    # standard DINO transformer learning rate; the pretrained backbone and
+    # fusion path retain the historical fine-tuning rate.
+    dino_lr: [0.0001]
     optimizer: [AdamW]
     watch_metric: [map]
     gradient_clip_norm: [0.1]
