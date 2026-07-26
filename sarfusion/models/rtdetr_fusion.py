@@ -43,7 +43,7 @@ class FeatureAlignmentModule(nn.Module):
             padding=1
         )
         
-        # Initialize offset to zero (identity mapping initially)
+        # Initialize offset to zero so that the deformable conv starts as a standard conv
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
 
