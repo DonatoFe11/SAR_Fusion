@@ -43,9 +43,31 @@ RGB Backbone            IR Backbone
          (one2one + one2many)
 ```
 
+### Due YAML, due responsabilità
+
+`parameters/YOLO/30.yolov10-fam.yaml` è la configurazione dell'**esperimento**: seleziona il registry entry `yolov10_fusion_fam`, indica dataset, epoche, batch, ottimizzatore e la griglia dei parametri. Il riferimento
+
+```yaml
+model.params.cfg: cfg/yolov10-fusion-fam-s.yaml
+```
+
+porta invece al YAML di **architettura** `cfg/yolov10-fusion-fam-s.yaml`, che descrive il grafo YOLOv10-s: layer della backbone, neck FPN/PAN e testa `v10Detect`.
+
+### Perché i punti di fusione sono `[4, 6, 10]`
+
+Gli indici sono posizioni dei layer nel grafo della backbone, non il numero dei livelli di piramide. Il layer 3 effettua il downsampling a P3/8 e il `C2f` al layer 4 raffina la feature mantenendo la stessa risoluzione; analogamente 5→6 produce/raffina P4/16 e 7→10 produce/raffina P5/32. Per questo si fondono le uscite raffinate `4`, `6` e `10` (rispettivamente 128, 256 e 512 canali), che sono esattamente le tre feature laterali lette dal neck.
+
+`C2f` è il blocco CSP (*Cross Stage Partial*) compatto di YOLO: raffina le feature senza cambiare la loro risoluzione spaziale. In `P3/8`, il valore 8 è lo stride rispetto all'immagine di input; per esempio, con input 640×640, P3/8 è 80×80.
+
+### Neck FPN/PAN e routing delle feature fuse
+
+Il neck è posto tra backbone e detection head. La parte FPN propaga contesto dall'alto verso il basso (P5 → P4 → P3) con `Upsample + Concat + C2f`; la parte PAN riporta le feature arricchite dal basso verso l'alto (P3 → P4 → P5) con `Conv/SCDown + Concat + C2f`.
+
+Nel forward custom, `y[4]`, `y[6]` e `y[10]` contengono rispettivamente `RGB + IR_allineato`; il neck legge quindi feature già fuse nei suoi `Concat`, ad esempio `[-1, 6]` significa “output precedente e P4 fusa salvata al layer 6”, concatenati lungo i canali. Non somma una seconda volta RGB originale e feature fusa.
+
 ## File creati
 
-### `sarfusion/models/yolo_fusion_fam.py` (~280 linee)
+### `sarfusion/models/yolo_fusion_fam.py` (~360 linee)
 
 Classe `YOLOv10FusionFAM(nn.Module)`:
 
@@ -74,8 +96,8 @@ Parametri esperimento con grid search 2 × 3 = 6 run:
 | True | 0.5 | FAM con SSJ moderato |
 | True | 1.0 | FAM con SSJ forte |
 | False | 0.0 | Baseline: dual backbone senza allineamento |
-| False | 0.5 | No FAM + SSJ |
-| False | 1.0 | No FAM + SSJ |
+| False | 0.5 | Duplicato funzionale della baseline: SSJ non viene applicato |
+| False | 1.0 | Duplicato funzionale della baseline: SSJ non viene applicato |
 
 Iperparametri: lr0=1e-4, lrf=1e-5, optimizer=AdamW, 200 epoche, patience=30, batch=16, imgsz=640, single_cls=True, `model.params.pretrained=True`, `parameters.pretrained=False`, augment_vis_ir=False, mosaic=0.0. Il primo flag abilita l'inizializzazione interna COCO del modello custom; il secondo disabilita il caricamento standard del trainer Ultralytics, evitando un secondo tentativo di pretraining.
 
@@ -240,21 +262,12 @@ Eseguito con `eval_yolo_modalities.py` sui 4 checkpoint indipendenti (Grid, Grid
 
 ## Prossimi passi
 
-1. ~~Test su $D_\text{RGB-IR}$, $D_\text{IRo}$, $D_\text{VISo}$~~ — **completato** (vedi sezioni sopra).
-
-2. ~~`fam_alignment_check.py` sul checkpoint Grid~~ — **completato** (vedi "Verifica diagnostica del FAM" sopra). Offset più grandi di RT-DETR (9-70px vs 2-5px), collasso spaziale confermato ma non sempre dannoso al netto del mAP.
-
-3. ~~Fixare il grid search engine~~ — **non è un bug**: Grid4/5/6 identici sono il comportamento atteso di seed fisso + `deterministic: True` + un iperparametro senza effetto quando `use_fam=False` (vedi nota sopra).
-
-4. ~~**Rilasciare un nuovo grid con `pretrained=True`**~~ — **non necessario**: anche la grid originale caricava già internamente i pesi COCO di `jameslahm/yolov10s`, perché `YOLOv10FusionFAM` ha `pretrained=True` come default. Le configurazioni 30 e 31 ora dichiarano esplicitamente `model.params.pretrained=True`. Un'eventuale ablation futura utile sarebbe invece il confronto controllato con `model.params.pretrained=False`, cioè training realmente da zero.
-
-5. ~~**Abilitare modal dropout per YOLO**~~ — **implementato** in `WiSARDYOLODataset` come percorso separato dal legacy `augment_vis_ir`. Le probabilità sono configurabili in ordine `[IR-only, RGB-only, fusion]`; la grid dedicata usa `[0.2, 0.2, 0.6]`. Il mascheramento viene applicato dopo le trasformazioni, preserva sempre l'input a 4 canali (`[0,0,0,IR]` oppure `[RGB,0]`) ed è forzatamente disabilitato su validation/test dal dataset builder. La grid contiene quattro run informative: tre con FAM e SSJ `0.0/0.5/1.0`, più una sola baseline no-FAM con SSJ `0.0`. Config di retraining: `parameters/YOLO/31.yolov10-fam-modal-dropout.yaml`.
-
-6. **Diagnosticare il bug della val mAP** (`WisardTrainer`/`WisardValidator`, discrepanza nota tra val e test sullo stesso checkpoint) — resta aperto e non affrontato, rilevante per la fiducia nella selezione del checkpoint "best" usato in tutte le analisi sopra.
+1. **Diagnosticare il bug della val mAP** (`WisardTrainer`/`WisardValidator`, discrepanza nota tra val e test sullo stesso checkpoint) — resta aperto e non affrontato, rilevante per la fiducia nella selezione del checkpoint "best" usato in tutte le analisi sopra.
 
 ## Note tecniche
 
 - **Caricamento pesi COCO**: il costruttore carica `jameslahm/yolov10s` via `YOLOv10WiSARD.from_pretrained()` quando `model.params.pretrained=True`. Di 1478 chiavi totali: 847 vengono caricate (backbone RGB + IR + neck parziale); le 631 mancanti appartengono principalmente alla testa `v10Detect`, perché il checkpoint COCO usa `nc=80` mentre l'esperimento usa `nc=1`. Il flag separato `parameters.pretrained=False` appartiene al trainer Ultralytics e non disabilita questo caricamento interno.
-- La loss `v10DetectLoss` usa `TaskAlignedAssigner` e `BboxLoss` con DFL.
+- **Inizializzazione FAM**: il checkpoint COCO non contiene moduli FAM, quindi `offset_conv` e `deform_conv` non ricevono pesi preaddestrati. `offset_conv` è inizializzato a zero, per cui gli offset iniziali sono nulli e la mask iniziale vale 0.5; `deform_conv` mantiene invece la sua inizializzazione standard. Offset nulli non rendono dunque il FAM un'identità matematica perfetta: preservano la geometria iniziale, ma la feature IR viene già filtrata dalla deformable convolution.
+- La loss `v10DetectLoss` usa `TaskAlignedAssigner` e `BboxLoss` con DFL. Durante training combina entrambi i rami `one2many` e `one2one`; `one2many` viene selezionato da `_compute_stride()` solo per misurare gli stride `[8, 16, 32]`, non per escludere l'altro ramo dalla loss.
 - Se la GPU ha poca VRAM, ridurre `batch` da 16 a 8.
 - Compatibile con `torch.cuda.amp`.

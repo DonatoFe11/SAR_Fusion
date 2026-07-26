@@ -2,22 +2,22 @@
 YOLOv10-Fusion-FAM: Dual RGB+IR backbone with FeatureAlignmentModule.
 
 Architecture:
-    Input (4ch: RGB[0:3] + IR[3])
-           ↓                    ↓
+         Input (4ch: RGB[0:3] + IR[3])
+           ↓                      ↓
     RGB Backbone            IR Backbone
     (YOLOv10-s, 3ch)        (YOLOv10-s, 1ch, adapted)
-           ↓                    ↓
+           ↓                      ↓
       feat[4]  (P3)          feat[4]  (P3)
       feat[6]  (P4)          feat[6]  (P4)
       feat[10] (P5)          feat[10] (P5)
            │         FAM          │
-           └──→ ir_aligned ←──────┘
-                    ↓
-        Fused = rgb + ir_aligned  (additive fusion)
-                    ↓
-             YOLO Neck (FPN+PAN)
-                    ↓
-             v10Detect Head (one2one + one2many)
+           └────→ ir_aligned ←────┘
+                      ↓
+      Fused = rgb + ir_aligned  (additive fusion)
+                      ↓
+              YOLO Neck (FPN+PAN)
+                      ↓
+         v10Detect Head (one2one + one2many)
 
 Compatible with ultralytics trainer: forward() accepts batch dicts
 and delegates to loss() for training, predict() for inference.
@@ -125,9 +125,6 @@ class YOLOv10FusionFAM(nn.Module):
 
         # --- Compute stride using full model forward ---
         self._compute_stride()
-
-        # --- Loss criterion (set lazily by trainer) ---
-        self._criterion = None
 
     # ------------------------------------------------------------------
     #  Initialization helpers
@@ -290,7 +287,7 @@ class YOLOv10FusionFAM(nn.Module):
         - Neck+head (full_model layers 11+): direct copy
         - IR backbone (ir_layers): copy RGB backbone weights, adapting
           the first Conv from 3ch to 1ch via channel-wise mean
-        - FAM modules: left at zero initialization (identity mapping)
+        - FAM modules: left at zero initialization 
         """
         from sarfusion.models.yolov10 import YOLOv10WiSARD
 
