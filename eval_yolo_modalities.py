@@ -2,17 +2,18 @@
 eval_yolo_modalities.py
 ------------------------
 Valuta un checkpoint YOLOv10FusionFAM (.pt ultralytics) su un dataset a
-scelta (vis, ir, vis_ir), senza modificare wisard.py e senza ritrainare.
+scelta (vis, ir, vis_ir).
 
 Motivazione (padding a 4ch): YOLOv10FusionFAM.predict() instrada un input
 3ch al forward standard single-backbone, bypassando completamente FAM e
 backbone IR; un input 1ch non e' gestito affatto. WiSARDDataset (pipeline
 HF, usata da RT-DETR) padda gia' nativamente a 4ch le immagini mono-modali
 (vedi RGB_ITEM/IR_ITEM in sarfusion/data/wisard.py); WiSARDYOLODataset no.
-Per testare l'effetto del FAM anche in condizione mono-modale (non solo
-sul dataset fusion vis_ir), qui si usa PaddedWiSARDYOLODataset: una
-sottoclasse di sola valutazione che interviene solo su load_image(),
-lasciando wisard.py invariato per il training.
+Per mantenere il contratto di input a 4 canali anche in valutazione
+mono-modale, qui si usa PaddedWiSARDYOLODataset. La modalità viene passata
+esplicitamente al modello: RGB-only usa soltanto il backbone RGB, IR-only
+soltanto il backbone IR (con FAM bypassato), mentre vis_ir mantiene FAM e
+fusione additiva.
 
 Motivazione (metrica standalone invece di DetectionEvaluator): le label di
 WiSARDYOLODataset (xywh normalizzato relativo all'immagine letterboxed) e
@@ -34,6 +35,7 @@ Uso:
         --run-index 0 \
         --checkpoint SarYOLO/YOLOv10-FAM-Grid8/weights/best.pt \
         --data-yaml wisards_vis.yaml \
+        --modality auto \
         --split test \
         --batch-size 8
 
@@ -193,7 +195,7 @@ def postprocess_v10(preds, max_det, nc):
 # 4. Loop di valutazione
 # ---------------------------------------------------------------------------
 
-def evaluate(model, loader, device, max_det=300):
+def evaluate(model, loader, device, modality, max_det=300):
     # NOTA: model.nc (attributo top-level) NON e' affidabile come fonte del
     # numero di classi reale della testa di detection. Ultralytics lo
     # sovrascrive dopo la costruzione del modello con trainer.data["nc"]
@@ -216,7 +218,13 @@ def evaluate(model, loader, device, max_det=300):
             img = batch["img"].to(device)
             img = img.float() / 255.0 if img.dtype == torch.uint8 else img.float()
 
-            raw_preds = model(img)
+            masks = {
+                "fusion": (1.0, 1.0),
+                "rgb": (1.0, 0.0),
+                "ir": (0.0, 1.0),
+            }
+            modality_mask = img.new_tensor(masks[modality]).expand(img.shape[0], -1)
+            raw_preds = model(img, modality_mask=modality_mask)
             preds = postprocess_v10(raw_preds, max_det=max_det, nc=nc)  # (B, max_det, 6) in coordinate imgsz
 
             imgsz = img.shape[2:]  # (H, W) del tensore di inferenza (letterboxed)
@@ -274,6 +282,12 @@ def main():
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--max-det", type=int, default=300)
+    parser.add_argument(
+        "--modality",
+        choices=["auto", "fusion", "rgb", "ir"],
+        default="auto",
+        help="Percorso feature da usare; auto lo deduce dal nome del data YAML.",
+    )
     parser.add_argument("--out", default=None, help="path opzionale per salvare i risultati in JSON")
     args = parser.parse_args()
 
@@ -284,9 +298,27 @@ def main():
 
     model = load_yolo_model(args.checkpoint, device)
     loader, dataset = build_dataloader(args.data_yaml, run_config, args.split, args.batch_size, args.workers)
-    print(f"Dataset: {args.data_yaml} | split: {args.split} | n. immagini: {len(dataset)}")
+    modality = args.modality
+    if modality == "auto":
+        data_name = Path(args.data_yaml).stem.lower()
+        if "vis_ir" in data_name:
+            modality = "fusion"
+        elif data_name.endswith("_ir") or data_name == "ir":
+            modality = "ir"
+        else:
+            modality = "rgb"
+    print(
+        f"Dataset: {args.data_yaml} | modalità: {modality} | "
+        f"split: {args.split} | n. immagini: {len(dataset)}"
+    )
 
-    results = evaluate(model, loader, device, max_det=args.max_det)
+    results = evaluate(
+        model,
+        loader,
+        device,
+        modality=modality,
+        max_det=args.max_det,
+    )
 
     print("\n=== Risultati ===")
     for k in ["map", "map_50", "map_75", "map_small", "map_medium", "map_large", "mar_1", "mar_10", "mar_100"]:

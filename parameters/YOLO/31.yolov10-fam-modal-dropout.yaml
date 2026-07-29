@@ -4,7 +4,9 @@
 # Four informative runs: FAM with SSJ 0.0/0.5/1.0, plus one no-FAM
 # baseline at SSJ 0.0 (SSJ is inactive when FAM is disabled).
 #
-# Modal-dropout probability order: [IR-only, RGB-only, RGB-IR fusion].
+# Feature-gated modal-dropout probability order:
+# [IR-only, RGB-only, RGB-IR fusion]. The dataset supplies an explicit
+# availability mask; missing samples are excluded from their backbone and FAM.
 experiment:
   continue_with_errors: False
 

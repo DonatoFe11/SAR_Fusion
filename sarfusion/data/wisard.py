@@ -784,6 +784,12 @@ def verify_image_label(args):
 
 
 class WiSARDYOLODataset(YOLODataset):
+    MODALITY_MASKS = {
+        "ir": (0.0, 1.0),
+        "rgb": (1.0, 0.0),
+        "fusion": (1.0, 1.0),
+    }
+
     def __init__(self, *args, **kwargs):
         self.augment_vis_ir = kwargs.pop("augment_vis_ir", False)
         self.modal_dropout = kwargs.pop("modal_dropout", False)
@@ -849,11 +855,20 @@ class WiSARDYOLODataset(YOLODataset):
         return img
 
     def __getitem__(self, index):
-        """Return one sample, optionally masking a modality after transforms."""
+        """Return one sample with an explicit [RGB, IR] availability mask."""
         sample = super().__getitem__(index)
-        if self.modal_dropout and isinstance(self.im_files[index], (tuple, list)):
-            mode = self._sample_modal_dropout_mode()
+        is_multimodal = isinstance(self.im_files[index], (tuple, list))
+        mode = (
+            self._sample_modal_dropout_mode()
+            if self.modal_dropout and is_multimodal
+            else "fusion"
+        )
+        if self.modal_dropout and is_multimodal:
             sample["img"] = self._apply_modal_dropout(sample["img"], mode)
+        sample["modality_mask"] = torch.tensor(
+            self.MODALITY_MASKS[mode],
+            dtype=torch.float32,
+        )
         return sample
 
     def get_labels(self):
@@ -1128,6 +1143,8 @@ class WiSARDYOLODataset(YOLODataset):
             value = values[i]
             if k == "img":
                 value = collate_images(value)
+            if k == "modality_mask":
+                value = torch.stack(value, 0)
             if k in ["masks", "keypoints", "bboxes", "cls", "segments", "obb"]:
                 value = torch.cat(value, 0)
             new_batch[k] = value

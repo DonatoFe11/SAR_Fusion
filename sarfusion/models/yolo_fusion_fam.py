@@ -224,15 +224,55 @@ class YOLOv10FusionFAM(nn.Module):
         Extra kwargs (augment, etc.) from ultralytics validator are ignored."""
         if isinstance(x, dict):
             return self.loss(x)
-        return self.predict(x)
+        return self.predict(x, modality_mask=kwargs.get("modality_mask"))
 
-    def predict(self, x: torch.Tensor):
+    @staticmethod
+    def _normalize_modality_mask(
+        modality_mask,
+        batch_size: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        """Validate and normalize an explicit [RGB present, IR present] mask."""
+        if modality_mask is None:
+            return torch.ones((batch_size, 2), device=device, dtype=dtype)
+
+        mask = torch.as_tensor(modality_mask, device=device, dtype=dtype)
+        if mask.ndim == 1:
+            mask = mask.unsqueeze(0)
+        if mask.shape != (batch_size, 2):
+            raise ValueError(
+                "modality_mask must have shape [B, 2] in [RGB, IR] order, "
+                f"got {tuple(mask.shape)} for batch size {batch_size}."
+            )
+        if not torch.all((mask == 0) | (mask == 1)):
+            raise ValueError("modality_mask values must be binary (0 or 1).")
+        if torch.any(mask.sum(dim=1) == 0):
+            raise ValueError("Each sample must contain at least one modality.")
+        return mask
+
+    @staticmethod
+    def _scatter_feature_batch(
+        features: list,
+        level_idx: int,
+        present: torch.Tensor,
+        batch_size: int,
+    ):
+        """Restore a backbone sub-batch to the original batch layout."""
+        feature = features[level_idx]
+        restored = feature.new_zeros((batch_size, *feature.shape[1:]))
+        return restored.index_copy(0, present.nonzero(as_tuple=False).flatten(), feature)
+
+    def predict(self, x: torch.Tensor, modality_mask=None):
         """
         Forward pass with dual backbone, FAM, and additive fusion.
 
         Args:
             x: [B, C, H, W] — C=4 (RGB ch0-2 + IR ch3) for fusion,
                 C=3 for warmup/standard single-modality inference
+            modality_mask: Optional [B, 2] binary tensor in [RGB, IR] order.
+                Defaults to full fusion. Missing branches are excluded before
+                their backbones, and FAM runs only on full-fusion samples.
 
         Returns:
             YOLOv10 detection output (dict with one2one + one2many during
@@ -240,27 +280,80 @@ class YOLOv10FusionFAM(nn.Module):
         """
         if x.shape[1] == 3:
             return self._forward_single(x, None)
+        if x.shape[1] != 4:
+            raise ValueError(
+                "YOLOv10FusionFAM expects either a 3-channel warmup input or "
+                f"a 4-channel [RGB, IR] input, got {x.shape[1]} channels."
+            )
 
         rgb = x[:, :3].contiguous()
         ir = x[:, 3:4].contiguous()
 
-        rgb_feats = self._run_backbone(rgb)
-        ir_feats = self._run_ir_backbone(ir)
+        modality_mask = self._normalize_modality_mask(
+            modality_mask,
+            batch_size=x.shape[0],
+            device=x.device,
+            dtype=x.dtype,
+        )
+        rgb_present = modality_mask[:, 0].bool()
+        ir_present = modality_mask[:, 1].bool()
+        fusion_present = rgb_present & ir_present
+
+        # Run each backbone only for samples where its sensor is available.
+        # This prevents zero-filled missing inputs from contaminating BatchNorm.
+        rgb_feats = self._run_backbone(rgb[rgb_present]) if rgb_present.any() else None
+        ir_feats = self._run_ir_backbone(ir[ir_present]) if ir_present.any() else None
 
         fused = {}
         for i, lvl_idx in enumerate(self.feat_indices):
-            r = rgb_feats[lvl_idx]
-            i_f = ir_feats[lvl_idx]
-            if self.use_fam:
-                i_f = self.fam_modules[i](r, i_f)
-            if self.ir_dropout is not None and self.training:
-                i_f = self.ir_dropout(i_f)
+            if rgb_feats is not None:
+                r = self._scatter_feature_batch(
+                    rgb_feats, lvl_idx, rgb_present, x.shape[0]
+                )
+            else:
+                ir_template = ir_feats[lvl_idx]
+                r = ir_template.new_zeros((x.shape[0], *ir_template.shape[1:]))
+
+            if ir_feats is not None:
+                i_f = self._scatter_feature_batch(
+                    ir_feats, lvl_idx, ir_present, x.shape[0]
+                )
+            else:
+                i_f = r.new_zeros(r.shape)
+
+            # IR-only uses raw IR features. FAM and IR feature dropout apply
+            # exclusively to samples where both real modalities are present.
+            if self.use_fam and fusion_present.any():
+                aligned = self.fam_modules[i](
+                    r[fusion_present],
+                    i_f[fusion_present],
+                )
+                if self.ir_dropout is not None and self.training:
+                    aligned = self.ir_dropout(aligned)
+                i_f = i_f.index_copy(
+                    0,
+                    fusion_present.nonzero(as_tuple=False).flatten(),
+                    aligned,
+                )
+            elif (
+                not self.use_fam
+                and self.ir_dropout is not None
+                and self.training
+                and fusion_present.any()
+            ):
+                dropped = self.ir_dropout(i_f[fusion_present])
+                i_f = i_f.index_copy(
+                    0,
+                    fusion_present.nonzero(as_tuple=False).flatten(),
+                    dropped,
+                )
+
             fused[lvl_idx] = r + i_f
 
         total = len(self.full_model)
         y = [None] * total
-        for idx in range(self.num_backbone_layers):
-            y[idx] = fused.get(idx, rgb_feats[idx])
+        for idx, feature in fused.items():
+            y[idx] = feature
 
         prev = y[10]
         for i in range(self.neck_start, total):
@@ -353,7 +446,10 @@ class YOLOv10FusionFAM(nn.Module):
     def loss(self, batch, preds=None):
         """Compute loss from batch dict. Compatible with ultralytics trainer."""
         if preds is None:
-            preds = self.predict(batch["img"])
+            preds = self.predict(
+                batch["img"],
+                modality_mask=batch.get("modality_mask"),
+            )
         if not hasattr(self, "criterion") or self.criterion is None:
             self.criterion = self.init_criterion()
         return self.criterion(preds, batch)
