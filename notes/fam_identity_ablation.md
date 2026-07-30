@@ -1,0 +1,106 @@
+# Ablation FAM: DCNv2 identity e warp diretto
+
+Questa nota descrive le due varianti aggiunte a RT-DETR per separare l'effetto
+dell'allineamento geometrico da quello della convoluzione aggiuntiva del FAM.
+Il comportamento storico resta disponibile come `fam_variant:
+current_dcnv2` ed è ancora il valore predefinito, così i checkpoint del Modello
+B non cambiano significato.
+
+## Varianti
+
+### `identity_dcnv2`
+
+La struttura coincide con il FAM DCNv2 corrente: una convoluzione sulle
+feature concatenate RGB--IR predice 18 offset e 9 logit di mask, poi una
+`DeformConv2d` 3x3 trasforma l'IR. L'inizializzazione differisce come segue:
+
+- pesi e bias del predittore di offset/mask a zero;
+- pesi DCNv2 nulli fuori dal centro del kernel;
+- matrice diagonale tra canali al centro;
+- valore della diagonale pari a 2;
+- bias DCNv2 nullo.
+
+Poiché i logit iniziali della mask sono zero, la mask vale
+`sigmoid(0) = 0.5`. La diagonale pari a 2 compensa esattamente questo fattore:
+prima del primo aggiornamento il solo campione centrale contribuisce
+all'uscita e `FAM(RGB, IR) = IR`.
+
+### `grid_sample`
+
+Una convoluzione 3x3 sulle feature concatenate predice un solo spostamento
+`(dx, dy)` per ogni posizione. Gli spostamenti sono espressi in pixel della
+feature map e convertiti nelle coordinate normalizzate richieste da
+`grid_sample`. Il warp usa:
+
+- `mode="bilinear"`;
+- `padding_mode="zeros"`;
+- `align_corners=False`;
+- griglia base costruita sui centri dei pixel;
+- predittore degli offset inizializzato a zero.
+
+Questa variante non contiene una convoluzione che filtra l'IR dopo il
+campionamento: il suo contributo appreso è soltanto geometrico.
+
+Entrambe le varianti rifiutano `spatial_jitter_std != 0`, perché lo SSJ
+romperebbe l'identità nello stato iniziale e introdurrebbe una seconda
+variabile nell'ablation.
+
+## Verifica numerica
+
+La suite `tests/test_rtdetr_fam_identity.py` controlla entrambe le varianti su
+dimensioni pari e dispari analoghe ai livelli P3, P4 e P5:
+
+- shape invariata;
+- valori finiti;
+- errore assoluto massimo inferiore a `1e-5`;
+- errore L2 relativo inferiore a `1e-5`;
+- identità invariata su forward ripetuti senza update;
+- gradienti finiti sull'IR e sui parametri addestrabili;
+- possibilità di abbandonare l'identità dopo un `optimizer.step()`;
+- rifiuto esplicito dello SSJ.
+
+Nell'ambiente `sarfusion`:
+
+```bash
+python -m unittest discover -s tests -p 'test_rtdetr_fam_identity.py'
+```
+
+## Training
+
+La configurazione `parameters/RTDETR/fam_ablation_identity_grid.yaml` genera
+due run, una per variante, mantenendo:
+
+- seed 42;
+- 10 epoche;
+- AdamW con learning rate `2e-5`;
+- pretrained `PekingU/rtdetr_r50vd`;
+- single class e split WiSARD già usati;
+- modal dropout IR/RGB/fusion pari a 20/20/60;
+- nessuno spatial dropout e nessuno SSJ;
+- selezione del checkpoint tramite mAP.
+
+Prima del training va eseguita la suite numerica; poi le due run si lanciano
+con:
+
+```bash
+python main.py experiment \
+  --parameters parameters/RTDETR/fam_ablation_identity_grid.yaml
+```
+
+Dopo aver copiato i due checkpoint selezionati nei percorsi indicati in
+`parameters/RTDETR/fam_ablation_eval.yaml`, la valutazione genera le sei run
+correttamente accoppiate (tre modalità per ciascuna architettura):
+
+```bash
+python main.py experiment \
+  --parameters parameters/RTDETR/fam_ablation_eval.yaml
+```
+
+Il confronto finale da completare è:
+
+| Variante RT-DETR | Fusion | IR-only | VIS-only |
+|---|---:|---:|---:|
+| Additive Fusion senza FAM | 0.357 | 0.252 | 0.246 |
+| FAM DCNv2 corrente, Modello B | 0.396 | 0.263 | 0.262 |
+| FAM DCNv2 identity | da misurare | da misurare | da misurare |
+| Warp diretto `grid_sample` | da misurare | da misurare | da misurare |

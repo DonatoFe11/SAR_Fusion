@@ -1,6 +1,7 @@
 import copy
 import torch
 from torch import nn
+from torch.nn import functional as F
 from typing import Optional
 from torchvision.ops import DeformConv2d
 
@@ -83,6 +84,153 @@ class FeatureAlignmentModule(nn.Module):
         return ir_aligned
 
 
+class IdentityInitializedFeatureAlignmentModule(FeatureAlignmentModule):
+    """
+    DCNv2 FAM whose initial mapping is exactly the identity on the IR feature.
+
+    The offset predictor starts at zero, hence all offsets are zero and all
+    modulation masks are sigmoid(0) = 0.5.  The deformable-convolution kernel
+    is therefore zero everywhere except for a 2 * identity matrix at its
+    centre.  The factor 2 compensates the initial 0.5 mask.
+    """
+
+    def __init__(self, in_channels, freeze=False, spatial_jitter_std=0.0):
+        if spatial_jitter_std != 0.0:
+            raise ValueError(
+                "Identity-initialized FAM requires spatial_jitter_std=0.0 "
+                "to remain an identity before the first optimizer step."
+            )
+        super().__init__(
+            in_channels,
+            freeze=False,
+            spatial_jitter_std=spatial_jitter_std,
+        )
+        self.reset_identity_parameters()
+
+        if freeze:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def reset_identity_parameters(self):
+        with torch.no_grad():
+            self.offset_conv.weight.zero_()
+            self.offset_conv.bias.zero_()
+            self.deform_conv.weight.zero_()
+            channel_indices = torch.arange(
+                self.deform_conv.in_channels,
+                device=self.deform_conv.weight.device,
+            )
+            self.deform_conv.weight[channel_indices, channel_indices, 1, 1] = 2.0
+            if self.deform_conv.bias is not None:
+                self.deform_conv.bias.zero_()
+
+
+class GridSampleFeatureAlignmentModule(nn.Module):
+    """
+    Direct IR warp with one learned (dx, dy) displacement per feature pixel.
+
+    Displacements are expressed in feature-map pixels.  A zero-initialized
+    predictor combined with an align_corners=False pixel-centre grid makes the
+    initial mapping an identity without an additional convolutional filter.
+    """
+
+    def __init__(self, in_channels, freeze=False, spatial_jitter_std=0.0):
+        super().__init__()
+        if spatial_jitter_std != 0.0:
+            raise ValueError(
+                "Grid-sample FAM requires spatial_jitter_std=0.0 for this "
+                "ablation."
+            )
+        self.spatial_jitter_std = spatial_jitter_std
+        self.offset_conv = nn.Conv2d(
+            in_channels * 2,
+            2,
+            kernel_size=3,
+            padding=1,
+        )
+        self.reset_identity_parameters()
+
+        if freeze:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def reset_identity_parameters(self):
+        with torch.no_grad():
+            self.offset_conv.weight.zero_()
+            self.offset_conv.bias.zero_()
+
+    @staticmethod
+    def _identity_grid(ir_feat):
+        batch_size, _, height, width = ir_feat.shape
+        # align_corners=False maps pixel centre j to (2*j + 1)/size - 1.
+        y = (
+            (2 * torch.arange(height, device=ir_feat.device, dtype=ir_feat.dtype) + 1)
+            / height
+            - 1
+        )
+        x = (
+            (2 * torch.arange(width, device=ir_feat.device, dtype=ir_feat.dtype) + 1)
+            / width
+            - 1
+        )
+        grid_y, grid_x = torch.meshgrid(y, x, indexing="ij")
+        return torch.stack((grid_x, grid_y), dim=-1).unsqueeze(0).expand(
+            batch_size, -1, -1, -1
+        )
+
+    def forward(self, rgb_feat, ir_feat):
+        if rgb_feat.shape != ir_feat.shape:
+            raise ValueError(
+                "Grid-sample FAM requires RGB and IR features with the same "
+                f"shape, got {tuple(rgb_feat.shape)} and {tuple(ir_feat.shape)}."
+            )
+
+        _, _, height, width = ir_feat.shape
+        offsets_px = self.offset_conv(torch.cat([rgb_feat, ir_feat], dim=1))
+        offsets = torch.stack(
+            (
+                offsets_px[:, 0] * (2.0 / width),
+                offsets_px[:, 1] * (2.0 / height),
+            ),
+            dim=-1,
+        )
+        grid = self._identity_grid(ir_feat) + offsets
+        return F.grid_sample(
+            ir_feat,
+            grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+
+
+FAM_VARIANTS = {
+    "current_dcnv2": FeatureAlignmentModule,
+    "identity_dcnv2": IdentityInitializedFeatureAlignmentModule,
+    "grid_sample": GridSampleFeatureAlignmentModule,
+}
+
+
+def build_feature_alignment_module(
+    variant,
+    in_channels,
+    freeze=False,
+    spatial_jitter_std=0.0,
+):
+    try:
+        module_class = FAM_VARIANTS[variant]
+    except KeyError as exc:
+        choices = ", ".join(sorted(FAM_VARIANTS))
+        raise ValueError(
+            f"Unknown FAM variant {variant!r}. Expected one of: {choices}."
+        ) from exc
+    return module_class(
+        in_channels,
+        freeze=freeze,
+        spatial_jitter_std=spatial_jitter_std,
+    )
+
+
 # ============================================================
 # 2. FUSION BACKBONE (RT-DETR + FAM)
 #    - RGB and IR processed separately
@@ -91,7 +239,7 @@ class FeatureAlignmentModule(nn.Module):
 #    - Geometry preserved
 # ============================================================
 class RTDetrFusionBackbone(nn.Module):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0, fam_variant: str = "current_dcnv2"):
         super().__init__()
 
         # RGB backbone (standard)
@@ -111,6 +259,7 @@ class RTDetrFusionBackbone(nn.Module):
         self.freeze_fam = freeze_fam
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
+        self.fam_variant = fam_variant
         
         if self.ir_dropout_rate > 0.0:
             # Dropout2d azzera randomicamente interi canali della feature map (Spatial Dropout)
@@ -127,7 +276,15 @@ class RTDetrFusionBackbone(nn.Module):
                     "RTDetrFusionBackbone requires config.encoder_in_channels when use_fam=True"
                 )
             self.fam_modules = nn.ModuleList(
-                [FeatureAlignmentModule(ch, freeze=self.freeze_fam, spatial_jitter_std=self.spatial_jitter_std) for ch in feature_channels]
+                [
+                    build_feature_alignment_module(
+                        self.fam_variant,
+                        ch,
+                        freeze=self.freeze_fam,
+                        spatial_jitter_std=self.spatial_jitter_std,
+                    )
+                    for ch in feature_channels
+                ]
             )
         else:
             self.fam_modules = None
@@ -208,17 +365,22 @@ class RTDetrFusionBackbone(nn.Module):
 # 3. RT-DETR MODEL (NO forward override!)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0, fam_variant: str = "current_dcnv2"):
         super().__init__(config)
-        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
+        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
         self.post_init()
+        # Hugging Face post_init may visit newly attached modules. Restore the
+        # ablation's defining initialization after that global initialization.
+        if fam_variant != "current_dcnv2" and self.backbone.fam_modules is not None:
+            for fam_module in self.backbone.fam_modules:
+                fam_module.reset_identity_parameters()
 
 
 # ============================================================
 # 4. OBJECT DETECTION WRAPPER
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0):
+    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0, fam_variant: str = "current_dcnv2"):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
@@ -229,7 +391,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         saved_bbox_embed = self.bbox_embed
 
         # Replace the model
-        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
+        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
 
         # Restore heads in decoder
         self.model.decoder.class_embed = saved_class_embed
@@ -239,6 +401,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         self.freeze_fam = freeze_fam
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
+        self.fam_variant = fam_variant
 
     def load_state_dict(self, state_dict, strict=True):
         # Permissive loading (necessary for IR)
@@ -255,6 +418,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         freeze_fam=False,
         ir_dropout_rate=0.0,
         spatial_jitter_std=0.0,
+        fam_variant="current_dcnv2",
     ):
         # Standard RT-DETR model
         base = RTDetrForObjectDetection.from_pretrained(
@@ -266,7 +430,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
 
         config = base.config
         config.num_channels = 4
-        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std)
+        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
 
         # Load everything (decoder, encoder, etc.)
         instance.load_state_dict(base.state_dict())
