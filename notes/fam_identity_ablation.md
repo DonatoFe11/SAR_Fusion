@@ -40,6 +40,18 @@ feature map e convertiti nelle coordinate normalizzate richieste da
 
 Questa variante non contiene una convoluzione che filtra l'IR dopo il
 campionamento: il suo contributo appreso è soltanto geometrico.
+Poiché `grid_sample` in float32 può introdurre un errore di interpolazione
+dell'ordine di qualche `1e-5` su dimensioni dispari anche usando la griglia
+corretta, l'output sottrae il campionamento numerico della griglia base:
+
+```text
+IR + grid_sample(IR, identity_grid + offset)
+   - grid_sample(IR, identity_grid)
+```
+
+A offset zero i due campionamenti sono identici e si cancellano esattamente.
+Il ramo deformato resta nel grafo, quindi il predittore degli offset continua
+a ricevere gradienti e può abbandonare l'identità dopo il primo update.
 
 Entrambe le varianti rifiutano `spatial_jitter_std != 0`, perché lo SSJ
 romperebbe l'identità nello stato iniziale e introdurrebbe una seconda
@@ -62,8 +74,13 @@ dimensioni pari e dispari analoghe ai livelli P3, P4 e P5:
 Nell'ambiente `sarfusion`:
 
 ```bash
-python -m unittest discover -s tests -p 'test_rtdetr_fam_identity.py'
+python -m unittest discover -s tests -p 'test_rtdetr_fam_identity.py' &&
+python main.py experiment \
+  --parameters parameters/RTDETR/fam_ablation_identity_grid.yaml
 ```
+
+L'operatore `&&` impedisce l'avvio del training se anche un solo controllo
+numerico fallisce.
 
 ## Training
 
@@ -78,14 +95,6 @@ due run, una per variante, mantenendo:
 - modal dropout IR/RGB/fusion pari a 20/20/60;
 - nessuno spatial dropout e nessuno SSJ;
 - selezione del checkpoint tramite mAP.
-
-Prima del training va eseguita la suite numerica; poi le due run si lanciano
-con:
-
-```bash
-python main.py experiment \
-  --parameters parameters/RTDETR/fam_ablation_identity_grid.yaml
-```
 
 Dopo aver copiato i due checkpoint selezionati nei percorsi indicati in
 `parameters/RTDETR/fam_ablation_eval.yaml`, la valutazione genera le sei run

@@ -194,14 +194,29 @@ class GridSampleFeatureAlignmentModule(nn.Module):
             ),
             dim=-1,
         )
-        grid = self._identity_grid(ir_feat) + offsets
-        return F.grid_sample(
+        identity_grid = self._identity_grid(ir_feat)
+        grid = identity_grid + offsets
+        warped = F.grid_sample(
             ir_feat,
             grid,
             mode="bilinear",
             padding_mode="zeros",
             align_corners=False,
         )
+        # Even a pixel-centre identity grid can accumulate a few 1e-5 of
+        # interpolation error in float32 for some odd spatial sizes. Subtract
+        # the same operation on the undeformed grid so that zero offsets are
+        # an exact identity while preserving gradients through the learned
+        # warp. Once offsets change, this remains a direct spatial warp plus
+        # only its deterministic floating-point identity correction.
+        identity_warp = F.grid_sample(
+            ir_feat,
+            identity_grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+        return ir_feat + (warped - identity_warp)
 
 
 FAM_VARIANTS = {
