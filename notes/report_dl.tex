@@ -1,0 +1,668 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[italian]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{adjustbox}
+\usepackage{hyperref}
+\usepackage{float} 
+\usepackage{titlesec}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+
+% Setup link colors
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=magenta,      
+    urlcolor=blue,
+    citecolor=blue,
+    pdftitle={Report Rilevamento Multimodale},
+    pdfauthor={Donato Festa}
+}
+
+% Title Format
+\titleformat{\section}
+  {\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+\begin{document}
+
+% =========================================================
+% FRONTESPIZIO
+% =========================================================
+\begin{titlepage}
+    \begin{center}
+        \includegraphics[scale=0.48]{uniba_logo.png}\\
+        \vspace{1cm}
+        {\Large \textbf{Dipartimento di Informatica}}\\
+        \vspace{0.5cm}
+        {\Large \textbf{Laurea Magistrale in Computer Science}}\\
+        \hrulefill \\
+        \vspace{2cm}
+        {\Large Deep Learning}\\
+        \vspace{25pt}
+        {\huge \textbf{Modal Dropout e RT-DETR per Search and Rescue tramite UAV}}
+        \\ 
+        \vspace{0.5cm}
+   
+        \vfill
+        \centering
+        \begin{tabularx}{\textwidth}{@{}Xr@{}}
+          {\large Studente:} &
+          {\large Donato Festa} \\[0.5cm] 
+          {\large Professore:} &
+          {\large Gennaro Vessio} \\ 
+        \end{tabularx}
+        \textcolor{white}{.} \\ 
+        \hrulefill \\
+        \vspace{0.2cm}
+        {\large \textbf{Anno Accademico 2025-2026}}
+    \end{center}
+  \end{titlepage}
+
+% =========================================================
+% ABSTRACT & INDICE
+% =========================================================
+\newpage
+
+\tableofcontents
+\newpage
+
+\thispagestyle{plain}
+\begin{abstract}
+    Le operazioni di ricerca e soccorso (SAR) in ambienti ostili richiedono sistemi di visione artificiale robusti, capaci di operare sia nello spettro visibile (RGB) che in quello termico (IR). Tuttavia, l'addestramento su dati multimodali spesso porta a una forte dipendenza dalla presenza simultanea di entrambi i sensori, causando un drastico calo delle prestazioni qualora uno dei due non fosse disponibile. Questo report analizza l'efficacia della tecnica di \textit{Modal Dropout} applicata ad architetture Transformer-based (DETR) per mitigare tale problema. Successivamente, la ricerca si focalizza sull'ottimizzazione per l'inferenza in tempo reale, proponendo l'adozione dell'architettura \textbf{RT-DETR}. Vengono confrontate diverse strategie di fusione (Additive vs CMX) e tecniche di gestione della scala (Tiling). I risultati dimostrano che l'uso del Modal Dropout, combinato con RT-DETR e fusione additiva, offre il miglior compromesso tra robustezza operativa e velocità di inferenza, ponendo le basi per futuri sviluppi legati all'allineamento geometrico delle feature.
+\end{abstract}
+
+\newpage
+
+% =========================================================
+% SEZIONE 1: INTRODUZIONE
+% =========================================================
+\section{Introduzione}
+
+L'obiettivo di questo progetto è lo sviluppo di un modello di deep learning multimodale in grado di identificare persone in pericolo in ambienti selvaggi, utilizzando dati provenienti da droni (UAV) equipaggiati con sensori RGB e Termici.
+
+\subsection{Contesto e Problemi Aperti}
+Il dataset di riferimento, WiSARD (Wilderness Search and Rescue Dataset), presenta sfide uniche:
+\begin{itemize}
+    \item \textbf{Disallineamento dei sensori:} Le immagini RGB e IR non sono perfettamente sovrapposte geometricamente.
+    \item \textbf{Dimensioni dei target:} I soggetti umani occupano porzioni minime dell'immagine a causa dell'altitudine di volo.
+    \item \textbf{Affidabilità dei dati:} In scenari reali, uno dei due sensori potrebbe non essere disponibile o leggibile (es. buio totale per RGB, crossover termico per IR).
+\end{itemize}
+
+Un problema critico osservato nei modelli multimodali classici è il "collasso modale": la rete tende a specializzarsi sulla combinazione delle due modalità, fallendo miseramente quando testata su una singola fonte (es. solo IR).
+
+\vspace{0.5cm}
+
+\noindent Il presente lavoro si concentra su due contributi principali:
+\begin{enumerate}
+    \item Validare l'efficacia del \textbf{Modal Dropout} per garantire robustezza in scenari di input parziale (Single Modality).
+    \item Adattare l'architettura per l'inferenza \textbf{Real-Time (RT-DETR)}, analizzando il trade-off tra complessità dei moduli di fusione e accuratezza.
+\end{enumerate}
+
+
+\newpage
+
+% =========================================================
+% SEZIONE 2: METODOLOGIA
+% =========================================================
+\section{Metodologia}
+
+In questa sezione vengono descritte le strategie adottate per la gestione del dataset, la tecnica di regolarizzazione utilizzata per garantire la robustezza ai guasti dei sensori e l'architettura di rete selezionata per il rilevamento in tempo reale.
+
+\subsection{Organizzazione del Dataset e Nomenclatura}
+Per valutare rigorosamente le prestazioni del modello in diversi scenari operativi, il dataset WiSARD è stato riorganizzato fisicamente in sottocartelle distinte. Questa suddivisione ci permette di definire protocolli di test precisi che simulano la perdita di un sensore, condizioni ambientali avverse o la disponibilità parziale di dati.
+
+Nel corso del report e nelle tabelle dei risultati, verrà utilizzata la seguente nomenclatura per riferirsi ai sottoinsiemi di dati:
+
+\begin{itemize}
+    \item $\boldsymbol{D_{\text{RGBa--IRs}}}$ (\textit{Full RGB + Sync IR}): Questo set combina tutte le immagini RGB disponibili (incluse quelle non appaiate, $D_{RGB}$) con la parte sincronizzata termica ($D_{RGB-IR}$). È stato progettato per massimizzare l'uso dell'informazione visiva.
+    
+    \item $\boldsymbol{D_{\text{RGBs--IRa}}}$ (\textit{Full IR + Sync RGB}): Questo set combina tutte le immagini IR disponibili (incluse quelle non appaiate, $D_{IR}$) con la parte sincronizzata RGB ($D_{RGB-IR}$). È speculare al precedente e serve a valutare l'impatto di un training set sbilanciato verso la modalità termica.
+
+    \item $\boldsymbol{D_{\text{RGB--IR}}}$ (\textit{Strictly Paired}): Sottoinsieme contenente \textbf{esclusivamente} le coppie di immagini RGB e IR perfettamente sincronizzate ($D_{RGB-IR}$). A differenza dei precedenti, esclude qualsiasi immagine per cui manchi una delle due modalità. Viene utilizzato per isolare l'efficacia della fusione pura senza il bias introdotto dai dati monomodali.
+
+    \item $\boldsymbol{D}$ (\textit{Whole Dataset}): L'unione completa di tutti i dati disponibili: immagini solo RGB, immagini solo IR e coppie sincronizzate. Rappresenta lo scenario più vario e complesso per la generalizzazione del modello.
+
+    \item $\boldsymbol{D_{\text{IRo}}}$ (\textit{IR-only}): Sottoinsieme di test in cui l'informazione visibile è stata rimossa o oscurata, simulando uno scenario notturno o un malfunzionamento della camera RGB. Il modello riceve in input solo il canale termico.
+
+    \item $\boldsymbol{D_{\text{VISo}}}$ (\textit{Visible-only}): Sottoinsieme di test in cui l'informazione termica è assente (es. crossover termico o guasto del sensore IR). Il modello opera esclusivamente sullo spettro visibile.
+\end{itemize}
+
+Questa distinzione è cruciale per l'analisi: confrontare i risultati su questi diversi sottoinsiemi ci permette di capire se l'inclusione di immagini non appaiate (RGB o IR) aiuti o ostacoli l'apprendimento della fusione e la robustezza del modello.
+
+\newpage
+
+\subsection{Strategia di Modal Dropout}
+L'addestramento standard su coppie multimodali tende a far convergere la rete verso una dipendenza dalla presenza simultanea di entrambi i flussi. Per mitigare questo problema, è stata implementata una strategia di \textbf{Modal Dropout} a livello di Data Loader.
+
+Durante il training, per ogni coppia di immagini sincronizzate $(x_{RGB}, x_{IR})$, il sistema decide stocasticamente quale input fornire alla rete in base a probabilità predefinite:
+
+\begin{equation}
+    Input = \begin{cases} 
+    (x_{RGB}, \mathbf{0}_{IR}) & \text{con probabilità } P(RGB) \\
+    (\mathbf{0}_{RGB}, x_{IR}) & \text{con probabilità } P(IR) \\
+    (x_{RGB}, x_{IR}) & \text{con probabilità } P(Fusion) 
+    \end{cases}
+\end{equation}
+
+Dove $\mathbf{0}$ rappresenta un tensore vuoto o di zeri. Questa tecnica forza il modello a disaccoppiare l'estrazione delle feature, imparando rappresentazioni discriminative indipendenti per ogni modalità. La configurazione ottimale individuata sperimentalmente, utilizzata per i training definitivi, è: $P(IR)=20\%$, $P(RGB)=20\%$ e $P(Fusion)=60\%$.
+
+\subsection{Architettura RT-DETR e Fusione Additiva}
+Dopo una prima fase di validazione su DETR, la ricerca si è spostata sull'architettura \textbf{RT-DETR} (Real-Time DEtection TRansformer). A differenza dei Transformer classici, RT-DETR utilizza un encoder ibrido efficiente che gestisce feature multiscala disaccoppiando l'elaborazione intra-scala (AIFI) e inter-scala (CCFM), riducendo drasticamente la latenza di inferenza.
+
+Per adattare RT-DETR al contesto multimodale, è stata sviluppata una variante basata su \textbf{Additive Feature Fusion}:
+\begin{enumerate}
+    \item \textbf{Dual Backbone:} Vengono utilizzate due backbone ResNet-50vd separate (una per RGB, una per IR) per estrarre le feature map a diverse scale ($P3, P4, P5$).
+    \item \textbf{Fusione:} Le feature map corrispondenti vengono fuse tramite somma elemento per elemento:
+    $$ F_{fused}^{(i)} = F_{RGB}^{(i)} + F_{IR}^{(i)} \quad \text{per } i \in \{P3, P4, P5\} $$
+    \item \textbf{Hybrid Encoder:} Le feature fuse vengono passate all'encoder ibrido standard di RT-DETR.
+\end{enumerate}
+
+Questa strategia di fusione è stata preferita rispetto a metodi come la concatenazione perché preserva l'allineamento nativo e la geometria spaziale richiesta dall'hybrid encoeder, garantendo stabilità durante il training.
+
+\newpage
+
+
+% =========================================================
+% SEZIONE 3: RISULTATI MODAL DROPOUT
+% =========================================================
+\section{Risultati Sperimentali: Modal Dropout su DETR}
+
+In questa sezione vengono riportati i risultati ottenuti applicando il Modal Dropout al modello DETR base~\cite{detr}. L'obiettivo era risolvere il problema per cui un modello addestrato su dati multimodali otteneva mAP pari a 0 se testato su una singola modalità.
+
+Durante la fase di valutazione, la modalità di input viene campionata in base a probabilità predefinite $P(\text{IR})$, $P(\text{RGB})$ e $P(\text{Fusion})$, seguendo il principio del \emph{missing modality learning}~\cite{missing_modality}.
+
+% -------------------------------------------------------------------------
+% SOTTOSEZIONE 1: STRICTLY PAIRED (VIS_IR)
+% Dati basati su screenshot TRAINED ON VIS_IR
+% -------------------------------------------------------------------------
+\subsection{Analisi dell'Addestramento su \texorpdfstring{$D_{\text{RGB--IR}}$}{D\_RGB-IR} (Strictly Paired)}
+
+In questo primo scenario, il modello è stato addestrato esclusivamente sulle coppie di immagini perfettamente sincronizzate ($D_{\text{RGB--IR}}$). 
+I risultati mostrano che questa configurazione favorisce le prestazioni sulla modalità combinata (\textbf{Fusion}), raggiungendo il picco massimo di mAP.
+
+La configurazione bilanciata ($P(\text{IR})=20\%, P(\text{RGB})=20\%, P(\text{Fusion})=60\%$) si conferma la migliore:
+\begin{itemize}
+    \item Ottiene il miglior risultato assoluto su $D_{\text{RGB--IR}}$ con \textbf{0.417 mAP}.
+    \item Permette una generalizzazione sufficiente su $D_{\text{IRo}}$ (\textbf{0.173 mAP}), sebbene inferiore rispetto ad altre strategie di training che includono più dati termici non appaiati.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\caption{Risultati del modello addestrato su $D_{\text{RGB--IR}}$ (Strictly Paired) con diverse configurazioni di modal dropout.}
+\label{tab:rgb_ir_paired}
+\begin{tabular}{lcccc}
+\toprule
+Testato su & $P(\text{IR})$ & $P(\text{RGB})$ & $P(\text{Fusion})$ & mAP@50 \\
+\midrule
+$D_{\text{IRo}}$ & 100 & 0 & 0 & 0.138 \\
+$D_{\text{IRo}}$ & 90 & 0 & 10 & 0.132 \\
+$D_{\text{IRo}}$ & 50 & 50 & 0 & 0.163 \\
+$D_{\text{IRo}}$ & 37.5 & 37.5 & 25 & 0.132 \\
+$D_{\text{IRo}}$ & 25 & 25 & 50 & 0.159 \\
+$D_{\text{IRo}}$ & 12.5 & 12.5 & 75 & 0.000 \\
+$D_{\text{IRo}}$ & 20 & 20 & 60 & \textbf{0.173} \\
+\midrule
+$D_{\text{RGB--IR}}$ & 100 & 0 & 0 & 0.379 \\
+$D_{\text{RGB--IR}}$ & 90 & 0 & 10 & 0.300 \\
+$D_{\text{RGB--IR}}$ & 50 & 50 & 0 & 0.388 \\
+$D_{\text{RGB--IR}}$ & 37.5 & 37.5 & 25 & 0.302 \\
+$D_{\text{RGB--IR}}$ & 25 & 25 & 50 & 0.377 \\
+$D_{\text{RGB--IR}}$ & 12.5 & 12.5 & 75 & 0.000 \\
+$D_{\text{RGB--IR}}$ & 20 & 20 & 60 & \textbf{0.417} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+
+
+% -------------------------------------------------------------------------
+% SOTTOSEZIONE 2: FULL IR + SYNCED RGB (VIS_SYNC_IR_ALL)
+% Dati basati su screenshot TRAINED ON VIS_SYNC_IR_ALL
+% -------------------------------------------------------------------------
+\subsection{Analisi dell'Addestramento su \texorpdfstring{$D_{\text{RGBs--IRa}}$}{D\_RGBs-IRa} (Full IR + Sync RGB)}
+
+In questo secondo scenario, il training set include \textbf{tutte le immagini IR disponibili} (anche quelle non sincronizzate) insieme alla parte RGB sincronizzata. Questo crea uno sbilanciamento informativo verso lo spettro termico.
+
+Come evidenziato dai dati, l'abbondanza di esempi IR permette al modello di apprendere feature termiche molto più robuste. Una strategia di dropout più aggressiva verso le singole modalità ($37.5\%$ IR / $37.5\%$ RGB) ha prodotto il miglior risultato su $D_{\text{IRo}}$ (\textbf{0.306 mAP}), quasi raddoppiando le prestazioni rispetto al training \textit{strictly paired} (0.173). 
+Il trade-off è un calo delle prestazioni in modalità Fusion (0.280 mAP vs 0.417 mAP), dovuto alla minor presenza relativa di contesti RGB appaiati.
+
+\begin{table}[H]
+\centering
+\caption{Risultati del modello addestrato su $D_{\text{RGBs--IRa}}$ (Full IR + Sync RGB) con diverse configurazioni di modal dropout.}
+\label{tab:full_ir_synced_rgb}
+\begin{tabular}{lcccc}
+\toprule
+Testato su & $P(\text{IR})$ & $P(\text{RGB})$ & $P(\text{Fusion})$ & mAP@50 \\
+\midrule
+$D_{\text{IRo}}$ & 100 & 0 & 0 & 0.224 \\
+$D_{\text{IRo}}$ & 90 & 0 & 10 & 0.261 \\
+$D_{\text{IRo}}$ & 50 & 50 & 0 & 0.227 \\
+$D_{\text{IRo}}$ & 37.5 & 37.5 & 25 & \textbf{0.306} \\
+$D_{\text{IRo}}$ & 25 & 25 & 50 & 0.247 \\
+$D_{\text{IRo}}$ & 12.5 & 12.5 & 75 & 0.196 \\
+$D_{\text{IRo}}$ & 20 & 20 & 60 & 0.200 \\
+\midrule
+$D_{\text{RGBs--IRa}}$ & 100 & 0 & 0 & 0.224 \\
+$D_{\text{RGBs--IRa}}$ & 90 & 0 & 10 & 0.252 \\
+$D_{\text{RGBs--IRa}}$ & 50 & 50 & 0 & 0.219 \\
+$D_{\text{RGBs--IRa}}$ & 37.5 & 37.5 & 25 & \textbf{0.280} \\
+$D_{\text{RGBs--IRa}}$ & 25 & 25 & 50 & 0.233 \\
+$D_{\text{RGBs--IRa}}$ & 12.5 & 12.5 & 75 & 0.205 \\
+$D_{\text{RGBs--IRa}}$ & 20 & 20 & 60 & 0.220 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+
+% -------------------------------------------------------------------------
+% SOTTOSEZIONE 3: DATASET COMPLETO (D)
+% -------------------------------------------------------------------------
+\subsection{Analisi dell'Addestramento su \texorpdfstring{$D$}{D} (Dataset Completo)}
+
+Utilizzando l'intero dataset $D$, le prestazioni generali beneficiano della massima varietà dei dati. È interessante notare come una forte polarizzazione verso l'IR in fase di training ($P(\text{IR})=90\%$) permetta di massimizzare ulteriormente la sensibilità termica (\textbf{0.320 mAP} su $D_{\text{IRo}}$).
+
+Tuttavia, la configurazione bilanciata ($20/20/60$) si conferma la scelta più solida per un sistema \textit{general-purpose}, offrendo un ottimo compromesso con \textbf{0.256 mAP} su IR-only e \textbf{0.323 mAP} su Fusion.
+
+\begin{table}[H]
+\centering
+\caption{Risultati del modello addestrato su $D$ (Dataset Completo) con diverse configurazioni di modal dropout.}
+\label{tab:all_train}
+\begin{tabular}{lcccc}
+\toprule
+Testato su & $P(\text{IR})$ & $P(\text{RGB})$ & $P(\text{Fusion})$ & mAP@50 \\
+\midrule
+$D_{\text{IRo}}$ & 100 & 0 & 0 & 0.270 \\
+$D_{\text{IRo}}$ & 90 & 0 & 10 & \textbf{0.320} \\
+$D_{\text{IRo}}$ & 50 & 50 & 0 & 0.275 \\
+$D_{\text{IRo}}$ & 37.5 & 37.5 & 25 & 0.293 \\
+$D_{\text{IRo}}$ & 25 & 25 & 50 & 0.270 \\
+$D_{\text{IRo}}$ & 12.5 & 12.5 & 75 & 0.158 \\
+$D_{\text{IRo}}$ & 20 & 20 & 60 & 0.256 \\
+\midrule
+$D$ & 100 & 0 & 0 & 0.322 \\
+$D$ & 90 & 0 & 10 & \textbf{0.361} \\
+$D$ & 50 & 50 & 0 & 0.331 \\
+$D$ & 37.5 & 37.5 & 25 & 0.333 \\
+$D$ & 25 & 25 & 50 & 0.325 \\
+$D$ & 12.5 & 12.5 & 75 & 0.286 \\
+$D$ & 20 & 20 & 60 & 0.323 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -------------------------------------------------------------------------
+% DISCUSSIONE FINALE
+% -------------------------------------------------------------------------
+\subsection*{Discussione dei Risultati}
+
+\begin{table}[H]
+\centering
+\caption{Confronto diretto tra il training Standard (100\% Fusion) e il migliore con Modal Dropout.}
+\label{tab:summary_comparison}
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{Trainato su} & \textbf{Testato su} & $\boldsymbol{P(\text{IR})}$ & $\boldsymbol{P(\text{RGB})}$ & $\boldsymbol{P(\text{Fusion})}$ & \textbf{mAP@50} \\
+\midrule
+\multirow{4}{*}{$D$} 
+ & $D$ & 0 & 0 & 100 & \textbf{0.372} \\
+ & $D$ & 90 & 0 & 10 & 0.361 \\
+ \cmidrule(l){2-6} 
+ & $D_{\text{IRo}}$ & 0 & 0 & 100 & 0.233 \\
+ & $D_{\text{IRo}}$ & 90 & 0 & 10 & \textbf{0.320} \\
+\midrule
+\multirow{2}{*}{$D_{\text{RGBs--IRa}}$} 
+ & $D_{\text{IRo}}$ & 0 & 0 & 100 & 0.292 \\
+ & $D_{\text{IRo}}$ & 37.5 & 37.5 & 25 & \textbf{0.306} \\
+\midrule
+\multirow{2}{*}{$D_{\text{RGB--IR}}$} 
+ & $D_{\text{IRo}}$ & 0 & 0 & 100 & 0.000 \\
+ & $D_{\text{IRo}}$ & 20 & 20 & 60 & \textbf{0.173} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+L'analisi comparativa evidenzia come l'impatto del \textbf{Modal Dropout} vari a seconda della composizione del dataset di training:
+
+\begin{itemize}
+    \item Nel caso \textbf{Strictly Paired} ($D_{\text{RGB--IR}}$), dove le immagini sono sempre accoppiate, il dropout è \textit{critico}: permette di passare da un mAP nullo (0.000) a un mAP operativo (\textbf{0.173}), abilitando di fatto la funzionalità IR-only che altrimenti sarebbe assente.
+    \item Nel caso \textbf{Full IR} ($D_{\text{RGBs--IRa}}$), il modello ha già accesso a immagini IR non appaiate, quindi parte da una buona base (0.292). Qui il dropout agisce come ottimizzazione, raffinando ulteriormente la robustezza fino a \textbf{0.306 mAP}.
+\end{itemize}
+
+
+\newpage
+% =========================================================
+% SEZIONE 4: RISULTATI RT-DETR
+% =========================================================
+\section{Ottimizzazione Real-Time con RT-DETR}
+
+Validata la strategia di training, l'attenzione si è spostata sull'architettura. L'obiettivo era mantenere i benefici del Modal Dropout aumentando però il frame rate e, possibilmente, l'accuratezza, per questo si è testata l'architettura RT-DETR \cite{rtdetr}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{rtdetr_schema.png} 
+    \caption{\textbf{Schema di RT-DETR con Fusione Additiva.} Le feature map estratte dalle due backbone (RGB e IR) vengono sommate elemento per elemento prima di entrare nell'Encoder Ibrido.}
+    \label{fig:rtdetr_arch}
+\end{figure}
+
+\subsection{RT-DETR con Additive Feature Fusion}
+Questa architettura utilizza una \textbf{doppia backbone} (ResNet-50vd) per elaborare separatamente le modalità RGB e IR. Le feature maps estratte vengono fuse tramite \textbf{somma elemento per elemento} senza allineamento spaziale esplicito. Questa scelta preserva la geometria delle feature e non introduce parametri addizionali, garantendo stabilità nell'addestramento su dataset di dimensione limitata.
+
+Il modello è stato addestrato per 10 e 25 epoche utilizzando la strategia di \emph{modal dropout} ottimale (0.2 IR, 0.2 RGB, 0.6 Fusion).
+
+\begin{table}[H]
+\centering
+\caption{Risultati RT-DETR (Fusion) trainato per 10 epoche su immagine integrale.}
+\label{tab:rtdetr_base_10}
+\begin{tabular}{lcccc}
+\toprule
+Testato su & Threshold & mAP@50 (RT-DETR) & mAP@50 (DETR) \\
+\midrule
+$D_{\text{RGB--IR}}$ & 0.01 & 0.357 & \multirow{3}{*}{0.417} \\
+$D_{\text{RGB--IR}}$ & 0.05 & 0.357 & \\
+$D_{\text{RGB--IR}}$ & 0.10 & 0.356 & \\
+\midrule
+$D_{\text{IRo}}$ & 0.01 & 0.252 & 0.173 \\
+$D_{\text{VISo}}$ & 0.01 & 0.246 & - \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Risultati RT-DETR (Fusion) trainato per 25 epoche su immagine integrale.}
+\label{tab:rtdetr_base_25}
+\begin{tabular}{lcccc}
+\toprule
+Testato su & Threshold & mAP@50 (RT-DETR) & mAP@50 (DETR) \\
+\midrule
+$D_{\text{RGB--IR}}$ & 0.01 & 0.321 & \multirow{3}{*}{0.417} \\
+$D_{\text{RGB--IR}}$ & 0.05 & 0.287 & \\
+$D_{\text{RGB--IR}}$ & 0.10 & 0.246 & \\
+\midrule
+$D_{\text{IRo}}$ & 0.01 & 0.262 & 0.173 \\
+$D_{\text{VISo}}$ & 0.01 & 0.264 & - \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% --- INSERIMENTO FIGURA QUALITATIVA ---
+\begin{figure}[H]
+    \centering
+
+    % =======================
+    % TITOLI DI COLONNA
+    % =======================
+    \begin{minipage}{0.42\textwidth}
+        \centering \textbf{\small Ground Truth}
+    \end{minipage}
+    \hspace{0.02\textwidth}
+    \begin{minipage}{0.42\textwidth}
+        \centering \textbf{\small Prediction (RT-DETR)}
+    \end{minipage}
+
+    \vspace{0.15cm}
+
+    % =======================
+    % RIGA 1 — FUSION
+    % =======================
+    \begin{subfigure}[t]{0.42\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{gt_rgb.png}
+    \end{subfigure}
+    \hspace{0.02\textwidth}
+    \begin{subfigure}[t]{0.42\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pred_rgb.png}
+    \end{subfigure}
+
+    \vspace{0.05cm}
+    {\small\textit{(a) Scenario Fusion (Input RGB + IR)}}
+
+    \vspace{0.2cm}
+
+    % =======================
+    % RIGA 2 — IR ONLY
+    % =======================
+    \begin{subfigure}[t]{0.42\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{gt_ir.png}
+    \end{subfigure}
+    \hspace{0.02\textwidth}
+    \begin{subfigure}[t]{0.42\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pred_ir.png}
+    \end{subfigure}
+
+    \vspace{0.05cm}
+    {\small\textit{(b) Scenario IR-only}}
+
+    % =======================
+    % CAPTION GLOBALE
+    % =======================
+    \caption{\textbf{Analisi qualitativa.} Confronto tra annotazioni reali (sinistra) e predizioni del modello RT-DETR (destra). Nello scenario Fusion (a), il modello sfrutta congiuntamente informazione RGB e termica; nello scenario IR-only (b), riesce comunque a individuare correttamente il soggetto nonostante l’assenza del canale visibile. Le bounding box mostrate corrispondono alle \textit{raw predictions}, con confidenza visiva ridotta ma localizzazione spaziale coerente.}
+    
+    \label{fig:qualitative_matrix}
+\end{figure}
+
+
+% --------------------------------------
+
+\paragraph{Analisi dei Risultati:}
+\begin{itemize}
+    \item \textbf{Early stopping ottimale:} Il modello addestrato per 10 epoche supera quello a 25 epoche sul dataset fusion (0.357 vs 0.321, +11\%), suggerendo un fenomeno di overfitting dopo la decima epoca. Questo comportamento è coerente con la dimensione limitata del dataset WiSARD.
+    
+    \item \textbf{Robustezza alla threshold:} A 10 epoche, le prestazioni sono quasi identiche per threshold da 0.01 a 0.10 (0.357 → 0.356), indicando un'elevata confidenza nelle predizioni. A 25 epoche, invece, la sensibilità alla threshold aumenta significativamente (0.321 → 0.246), sintomo di instabilità nelle predizioni.
+    
+    \item \textbf{Generalizzazione multimodale:} Come confermato visivamente in Figura \ref{fig:qualitative_matrix}, RT-DETR migliora notevolmente le prestazioni sulle singole modalità rispetto a DETR classico (IR: 0.252 vs 0.173, +46\%), dimostrando una migliore capacità di transfer learning cross-modale grazie al modal dropout.
+    
+    \item \textbf{Trade-off fusion vs real-time:} Sebbene RT-DETR mostri un leggero calo rispetto a DETR sul dataset fusion (0.357 vs 0.417, -14\%), questo è compensato dalla velocità di esecuzione real-time e dalla migliore generalizzazione sulle modalità singole.
+\end{itemize}
+
+
+\subsection{Strategia di Tiling e Fallimento di CMX}
+
+Durante la ricerca delle cause dell'insufficiente accuratezza, sono state investigate due ipotesi principali tramite varianti sperimentali:
+\begin{enumerate}
+    \item \textbf{Disallineamento tra modalità:} La non-perfetta registrazione spaziale tra immagini RGB e termiche potrebbe degradare significativamente le prestazioni.
+    \item \textbf{Piccola scala dei soggetti:} La ridotta dimensione relativa delle persone nell'immagine potrebbe impedire al modello di estrarre caratteristiche discriminative.
+\end{enumerate}
+
+\subsubsection{Tiling: Validazione dell'Ipotesi sulla Scala}
+
+Per discriminare tra queste due cause, è stata implementata una strategia di tiling (SAHI-style) \cite{sahi_paper}: le immagini di ingresso (640×640 pixel) sono state automaticamente divise in 4 quadranti (320×320 pixel), raddoppiando la scala relativa degli oggetti. Questo approccio mira a:
+\begin{itemize}
+    \item \textbf{Aumentare la scala relativa:} Poiché i soggetti occupano uno spazio maggiore all'interno di ogni quadrante rispetto all'immagine intera, il modello dovrebbe disporre di una risoluzione effettiva superiore per la classificazione.
+    \item \textbf{Preservare il disallineamento:} Il tiling non modifica la registrazione tra RGB e IR, mantenendo invariato il grado di disallineamento presente nei dati.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\makebox[\textwidth][c]{%
+\begin{tikzpicture}[
+    node distance=1cm,
+    image_box/.style={draw, line width=1pt, minimum size=4cm, fill=gray!10},
+    tile_box/.style={draw, line width=0.8pt, minimum size=1.95cm, fill=blue!5}
+]
+
+    % === PARTE SINISTRA: Immagine Originale ===
+    \node[image_box] (original) at (0,0) {};
+    \node[below=0.1cm of original] {\small Originale ($640 \times 640$)};
+    
+    \draw[dashed, gray] (original.north) -- (original.south);
+    \draw[dashed, gray] (original.west) -- (original.east);
+
+    % === Freccia ===
+    \draw[-{Stealth[scale=1.5]}, line width=1.5pt]
+        (2.5,0) -- (4.5,0)
+        node[midway, above] {\footnotesize Tiling};
+
+    % === Tile ===
+    \begin{scope}[shift={(7,0)}]
+        \node[tile_box] (t0) at (-1, 1) {\scriptsize Tile 0};
+        \node[tile_box] (t1) at ( 1, 1) {\scriptsize Tile 1};
+        \node[tile_box] (t2) at (-1,-1) {\scriptsize Tile 2};
+        \node[tile_box] (t3) at ( 1,-1) {\scriptsize Tile 3};
+
+        \node at (0,-2.4) {\small 4 Quadranti ($320 \times 320$)};
+    \end{scope}
+
+\end{tikzpicture}%
+}
+\caption{\textbf{Schema della strategia di Tiling.} L'immagine originale viene suddivisa in 4 quadranti per raddoppiare la scala relativa dei soggetti. Il caricamento dei tile avviene in modo stocastico durante il training e tramite aggregazione globale durante l'inferenza.}
+\end{figure}
+
+
+\paragraph{Implementazione:} 
+Il tiling è stato integrato nel data loader mediante un parametro configurabile. Durante la fase di caricamento del batch, per ogni immagine viene estratto casualmente uno dei 4 quadranti (top-left, top-right, bottom-left, bottom-right). Le coordinate dei bounding box vengono automaticamente trasformate dal sistema di coordinate dell'immagine originale a quello del quadrante estratto. Durante la valutazione, tutti e 4 i quadranti vengono processati e le predizioni risultanti sono aggregate mediante Non-Maximum Suppression (NMS) globale, ricalcolando le coordinate delle bounding box nello spazio dell'immagine intera. Questa procedura mantiene trasparente l'operazione di tiling dal punto di vista dell'architettura del modello.
+
+Se il problema fosse primariamente la piccola scala dei soggetti, il tiling avrebbe dovuto garantire un miglioramento significativo. Conversamente, se il disallineamento fosse il fattore limitante, le prestazioni sarebbero rimaste degradate nonostante l'aumento di scala.
+
+\begin{table}[H]
+\centering
+\caption{Confronto della robustezza multimodale: RT-DETR Integrale vs RT-DETR con Tiling su diversi dataset di test.}
+\label{tab:rtdetr_comparison_tiling}
+\begin{adjustbox}{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Test Dataset} & \textbf{Modello Integrale} & \textbf{Modello Tiling (25 ep.)} & \textbf{Modello Tiling (10 ep.)}\\
+& (mAP@50) & (mAP@50) & (mAP@50) \\
+\midrule
+$D_{\text{RGB--IR}}$ & \textbf{0.321} & 0.302 & 0.151 \\
+$D_{\text{IRo}}$ & \textbf{0.262} & 0.133 & 0.105 \\
+$D_{\text{VISo}}$ & \textbf{0.264} & 0.082 & 0.050\\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+Come si evince dalla Tabella \ref{tab:rtdetr_comparison_tiling}, il modello su immagine integrale ha costantemente surclassato la strategia di tiling su tutti i dataset di test, con prestazioni degradate indipendentemente dal numero di epoche di training. In particolare:
+\begin{itemize}
+    \item Il tiling a 10 epoche produce un crollo prestazionale drammatico (fino al -81\% su $D_{\text{VISo}}$), evidenziando che il modello fatica ad adattarsi a questa configurazione.
+    \item Anche il tiling a 25 epoche, pur mostrando un miglioramento rispetto alla variante a 10 epoche, rimane significativamente inferiore al modello integrale (-6\% su $D_{\text{RGB--IR}}$, -49\% su $D_{\text{IRo}}$, -69\% su $D_{\text{VISo}}$).
+\end{itemize}
+
+Questi risultati indicano che la perdita di contesto globale indotta dal tiling supera i benefici dell'aumento di scala relativa degli oggetti ed il disallineamento tra le modalità RGB e termiche rimane il fattore limitante predominante, indipendentemente dalla risoluzione dell'oggetto.
+
+
+Dunque questo risultato supporta l'interpretazione secondo cui il degradamento prestazionale deriva principalmente dalla scarsa corrispondenza spaziale tra le immagini, piuttosto che dalla dimensione assoluta dei soggetti.
+
+\subsubsection{Framework CMX e Fallimento della Fusione Complessa}
+
+Il framework CMX \cite{cmx_paper} rappresenta un approccio stato-dell'arte per la fusione RGB-T basato su Transformer, composto da due moduli principali:
+\begin{itemize}
+    \item \textbf{CM-FRM (Cross-Modal Feature Rectification Module):} Effettua una calibrazione reciproca tra le modalità tramite meccanismi di ponderazione channel-wise e spatial-wise, con l'obiettivo di rettificare il rumore e il disallineamento sensoriale.
+    \item \textbf{FFM (Flexible Fusion Module):} Implementa una fusione basata su cross-attention multi-head che interroga una modalità usando l'altra come chiave e valore.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{cmx_scheme.png} 
+    \caption{\textbf{Architettura del framework CMX.} (a) Panoramica del framework multimodale; (b) Dettaglio del modulo di rettifica CM-FRM; (c) Schema del modulo di fusione FFM basato su due stadi di elaborazione delle feature.}
+    \label{fig:cmx_arch}
+\end{figure}
+
+\paragraph{Implementazione:}
+Il framework CMX è stato integrato nel modello RT-DETR tramite una backbone personalizzata (file \texttt{rtdetr\_cmx.py}) che sostituisce l'encoder standard. L'architettura processa le modalità RGB (3 canali) e IR (1 canale) attraverso backbone separate, quindi le combina tramite tre stadi di rectification e fusion corrispondenti alle scale multi-risoluzione di RT-DETR (P3, P4, P5). I moduli sono implementati per gestire modalità mancanti durante l'inferenza, creando feature fittizie di zeri quando una modalità non è disponibile. Il modello è stato pre-addestrato su dati ImageNet e fine-tuned sul dataset WiSARD per 25 epoche.
+
+Tuttavia, nonostante la sofisticazione teorica dell'approccio, i risultati sperimentali hanno evidenziato un fallimento critico:
+
+\begin{table}[H]
+\centering
+\caption{Confronto degli approcci di fusione: RT-DETR Integrale vs CMX.}
+\label{tab:rtdetr_cmx_comparison}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Configurazione} & \textbf{mAP@50 (Fusion)} \\
+\midrule
+RT-DETR Integrale & \textbf{0.357} \\
+RT-DETR + CMX (25 epoche) & 0.032 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Il modello CMX ha subito un crollo prestazionale drammatico (0.032 vs 0.357, \textbf{--91\%}), rappresentando il peggior risultato tra tutti gli esperimenti condotti. Questo fallimento può essere attribuito a:
+\begin{itemize}
+    \item \textbf{Overfitting dovuto a complessità parametrica:} Il framework CMX introduce numerosi moduli supplementari (rectifiers, fusers, attention layers) il cui numero complessivo di parametri supera significativamente la capacità di generalizzazione offerta dalle immagini del dataset WiSARD.
+    \item \textbf{Disallineamento come problema non-lineare:} Sebbene CMX sia stato progettato specificamente per affrontare il disallineamento sensoriale tramite rectification e attention, l'implementazione di questi meccanismi all'interno di una architettura già complessa introduce instabilità numerica e conflitti tra gli obiettivi di optimizzazione dei diversi moduli.
+    \item \textbf{Insufficienza del dataset per il fine-tuning:} Le 25 epoche di training su un dataset relativamente piccolo (WiSARD) risultano insufficienti per regolarizzare i parametri aggiuntivi introdotti da CMX, particolarmente considerando che il disallineamento residuo nei dati ostacola ulteriormente la convergenza.
+\end{itemize}
+
+Questi risultati suggeriscono che, nel contesto di dataset multimodali di questo tipo, con disallineamento sensoriale, approcci di fusione più semplici forniscono una migliore stabilità e generalizzazione rispetto a metodi sofisticati come CMX.
+
+\newpage
+
+% =========================================================
+% SEZIONE 5: CONCLUSIONI
+% =========================================================
+\section{Conclusioni e Sviluppi Futuri}
+
+In conclusione, l'architettura \textbf{RT-DETR Fusion con Somma Additiva}, addestrata tramite \textbf{Modal Dropout}, rappresenta il miglior compromesso attuale. Garantisce:
+\begin{itemize}
+    \item \textbf{Robustezza:} Prestazioni solide anche sulle singole modalità ($\approx 0.25$ mAP).
+    \item \textbf{Efficienza:} Elaborazione fluida adatta all'hardware di bordo dei droni.
+    \item \textbf{Semplicità:} Evita l'overfitting osservato con moduli di fusione complessi come CMX.
+\end{itemize}
+
+\subsection*{Prospettive per il lavoro futuro}
+Nonostante la solidità della soluzione RT-DETR proposta, rimane un gap prestazionale rispetto al DETR originale nella modalità combinata (0.357 vs 0.417). Come abbiamo potuto vedere, i test effettuati suggeriscono che tale divario sia dovuto ai disallineamenti geometrici non corretti dalla semplice somma additiva.
+
+Per il prosieguo della ricerca sono stati identificati i seguenti step evolutivi:
+\begin{enumerate}
+    \item \textbf{Feature Alignment Module (FAM):} Sviluppo di un modulo basato su convoluzioni deformabili che utilizzi la modalità RGB come guida per "distorcere" e allineare le feature map termiche prima della fusione.
+    \item \textbf{Adozione di DINO:} Sviluppo dell'architettura DINO \cite{dino} per sfruttare le tecniche di \textit{contrastive denoising}, che promettono una convergenza più rapida e stabile.
+    \item \textbf{Adaptive Gating:} Per evitare che l'allineamento geometrico (FAM) danneggi le prestazioni in modalità IR-only (dove la guida RGB manca), si prevede lo studio di meccanismi di attivazione condizionale del modulo di allineamento.
+\end{enumerate}
+
+\section{Code Availability}
+
+All code, preprocessing scripts, model implementations, and experimental configurations are publicly available at:
+
+\noindent \url{https://github.com/DonatoFe11/SAR_Fusion}
+
+\begin{thebibliography}{9}
+
+\bibitem{detr}
+N. Carion et al.,
+\textit{End-to-End Object Detection with Transformers},
+ECCV, 2020.
+
+\bibitem{missing_modality}
+N. Neverova et al.,
+\textit{ModDrop: Adaptive Multi-Modal Gesture Recognition},
+IEEE TPAMI, 2015.
+
+\bibitem{rtdetr}
+H. Xu et al.,
+\textit{RT-DETR: Real-Time Detection Transformer},
+arXiv:2304.08069, 2023.
+
+\bibitem{sahi_paper} Akyon, F. C., Altinuc, S. O., \& Temizel, A. (2022). Sliced Aided Hyper Inference for Small Object Detection. 
+In \textit{IEEE/CVF International Conference on Computer Vision (ICCV) Workshops}.
+
+\bibitem{cmx_paper} 
+Hu, Z., Nie, Y., Zhu, H., \& Tan, X. (2023). Cross-Modal Fusion Transformers for RGB-X Semantic Segmentation. 
+In \textit{IEEE/CVF International Conference on Computer Vision (ICCV)}.
+
+\bibitem{dino}
+H. Zhang et al.,
+\textit{DINO: DETR with Improved DeNoising Anchor Boxes},
+ICLR, 2023.
+
+\end{thebibliography}
+
+\end{document}

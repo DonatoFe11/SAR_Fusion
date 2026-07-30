@@ -1,34 +1,36 @@
 """
-Verifica dell'allineamento del FAM (Feature Alignment Module) tramite
-visualizzazione PCA delle feature map, stile DINOv2/DINOv3.
+fam_alignment_check.py
+-----------------------
+Validates FAM (Feature Alignment Module) alignment through PCA
+visualization of feature maps, in the style of DINOv2/DINOv3.
 
-Per un modello fusion con use_fam=True, cattura via forward hook le feature
-RGB/IR immediatamente prima e dopo ciascun FeatureAlignmentModule della
-backbone, e le proietta a colori RGB con PCA (3 componenti principali ->
-canali R,G,B), con isolamento opzionale del foreground tramite la prima
-componente (lo stesso trucco usato nelle visualizzazioni DINOv2/v3).
+Supports two model families:
+  --model-type hf    (default) RT-DETR / Deformable DETR / DINO fusion,
+                      loaded from .safetensors + an HF grid-search YAML config.
+  --model-type yolo  YOLOv10FusionFAM, loaded from an Ultralytics .pt checkpoint
+                      (the complete model instance is pickled in the checkpoint,
+                      so build_model()+load_state_dict() is not needed).
 
-Per ogni livello della piramide di feature produce una figura con:
+For a fusion model with use_fam=True, forward hooks capture RGB/IR features
+immediately before and after every FeatureAlignmentModule in the backbone.
+The features are projected to RGB with PCA (three principal components ->
+R, G, B channels), with optional foreground isolation based on the first
+component (the same technique used in DINOv2/v3 visualizations).
+
+For each feature-pyramid level, the script produces a figure containing:
   (a) PCA(feature RGB)
   (b) PCA(feature IR)              -- pre-FAM
-  (c) PCA(feature FAM(IR))         -- post-FAM, l'input reale del decoder
-  (d) overlay RGB+IR               -- blend alpha, mostra il disallineamento
-  (e) overlay RGB+FAM(IR)          -- blend alpha, post-allineamento
-  (f) campo di offset del FAM      -- bonus diagnostico, quiver plot
+  (c) PCA(feature FAM(IR))         -- post-FAM, the actual decoder/neck input
+  (d) RGB+IR overlay                -- alpha blend, shows pre-alignment differences
+  (e) RGB+FAM(IR) overlay           -- alpha blend after alignment
+  (f) FAM offset field              -- additional diagnostic quiver plot
 
-Verificato contro rtdetr_fusion.py: FeatureAlignmentModule.forward(rgb_feat,
-ir_feat) e' chiamato con argomenti posizionali (self.fam_modules[idx](r_feat,
-i_feat)), esattamente come in deformable_detr_fusion.py.
+Hooks are registered by CLASS NAME (FeatureAlignmentModule), rather than by a
+fixed path. The script is therefore compatible, without modification, with any
+architecture that reuses this class (rtdetr_fusion.py,
+deformable_detr_fusion.py, yolo_fusion_fam.py).
 
-I file di run (tipo fusion_rtdetr.yaml) sono nel formato "grid search" di
-sarfusion.experiment.Experimenter: {experiment, parameters, other_grids},
-con ogni valore terminale dentro "parameters" wrappato in una lista (l'asse
-di grid search). Per ricostruire la configurazione di un run specifico si
-riusa direttamente sarfusion.utils.grid.make_grid (stessa funzione usata da
-Experimenter), non una reimplementazione: se il file produce piu' di una
-combinazione, seleziona quella con --run-index (default 0).
-
-Uso:
+Usage (HF):
     python fam_alignment_check.py \
         --config /path/to/fusion_rtdetr.yaml \
         --checkpoint /path/to/tracking_dir/<run>/best/model.safetensors \
@@ -37,7 +39,18 @@ Uso:
         --split val \
         --out-dir ./fam_alignment_vis
 
-Dipendenze extra rispetto all'ambiente sarfusion: scikit-learn, matplotlib
+Usage (YOLO):
+    python fam_alignment_check.py \
+        --model-type yolo \
+        --config parameters/YOLO/30.yolov10-fam.yaml \
+        --run-index 2 \
+        --checkpoint SarYOLO/YOLOv10-FAM-Grid2/weights/best.pt \
+        --data-yaml wisards_vis_ir.yaml \
+        --sample-idx 0 1 2 \
+        --split val \
+        --out-dir ./fam_alignment_vis_yolo
+
+Additional dependencies beyond the sarfusion environment: scikit-learn, matplotlib
     pip install scikit-learn matplotlib --break-system-packages
 """
 
@@ -56,49 +69,86 @@ from sarfusion.data import get_dataloaders
 from sarfusion.utils.utils import load_yaml
 from sarfusion.utils.grid import make_grid
 
+# --- YOLO-specific imports (used only with --model-type yolo) ---
+from ultralytics.data.utils import check_det_dataset
+from ultralytics.cfg import cfg2dict, IterableSimpleNamespace
+from ultralytics.utils import colorstr
+
+from sarfusion.data.wisard import WiSARDYOLODataset
+from sarfusion.experiment.yolo import WISARD_DEFAULT_CFG
+
 
 # ---------------------------------------------------------------------------
-# 0. Ricostruzione della config di un run dal formato "grid search"
+# 0. Reconstructing a run configuration from the grid-search format
 # ---------------------------------------------------------------------------
 
 def load_run_config(config_path, run_index=0):
     """
-    Riusa sarfusion.utils.grid.make_grid (la stessa funzione usata da
-    Experimenter.calculate_runs) per trasformare la sezione "parameters"
-    del yaml, dove ogni valore terminale e' wrappato in una lista (asse di
-    grid search), in una config piatta con valori scalari/dict/list "veri".
+    Reuses sarfusion.utils.grid.make_grid (the same function used by
+    Experimenter.calculate_runs) to turn the YAML "parameters" section,
+    where every terminal value is wrapped in a list as a grid-search axis,
+    into a flat configuration with actual scalar/dict/list values.
+
+    HF format: "parameters" is nested under {model, dataset, dataloader, ...}.
     """
     raw = load_yaml(config_path)
-    parameters = raw.get("parameters", raw)  # fallback se e' gia' in formato flat
+    parameters = raw.get("parameters", raw)  # fallback when the file is already flat
     grid = make_grid(parameters)
     if run_index >= len(grid):
         raise ValueError(
-            f"Il config produce {len(grid)} combinazioni di grid search, "
-            f"run_index={run_index} non e' valido."
+            f"The config produces {len(grid)} grid-search combinations; "
+            f"run_index={run_index} is invalid."
         )
     if len(grid) > 1:
         print(
-            f"ATTENZIONE: il config produce {len(grid)} run diversi (vero grid "
-            f"search). Sto usando la combinazione run_index={run_index}. "
-            "Usa --run-index per selezionarne un'altra."
+            f"WARNING: the config produces {len(grid)} distinct runs (a real grid "
+            f"search). Using combination run_index={run_index}. "
+            "Use --run-index to select another one."
+        )
+    return grid[run_index]
+
+
+def load_yolo_run_config(config_path, run_index=0):
+    """
+    Like load_run_config(), but for files such as 30.yolov10-fam.yaml, where
+    "parameters" is already flat (task, model, data, epochs, batch, ...) rather
+    than nested under {model, dataset, dataloader}. make_grid is reused unchanged:
+    it is the same function used by Experimenter for YOLO grids.
+    """
+    raw = load_yaml(config_path)
+    parameters = raw.get("parameters", raw)
+    grid = make_grid(parameters)
+    if run_index >= len(grid):
+        raise ValueError(
+            f"The config produces {len(grid)} grid-search combinations; "
+            f"run_index={run_index} is invalid."
+        )
+    if len(grid) > 1:
+        print(
+            f"WARNING: the config produces {len(grid)} distinct runs (a real grid "
+            f"search). Using combination run_index={run_index}. "
+            "Use --run-index to select another one."
         )
     return grid[run_index]
 
 
 # ---------------------------------------------------------------------------
-# 1. Caricamento modello + checkpoint
+# 1. Model and checkpoint loading
 # ---------------------------------------------------------------------------
 
 def load_fusion_model(model_params, checkpoint_path, device):
+    """Load HF fusion models (RT-DETR / Deformable DETR / DINO) from
+    .safetensors, recovering shared aliases (class_embed/bbox_embed are
+    aliased both at top level and inside model.decoder)."""
     model = build_model(model_params)
     model.eval().to(device)
 
     with safe_open(checkpoint_path, framework="pt") as f:
         raw_weights = {k: f.get_tensor(k) for k in f.keys()}
 
-    # I checkpoint sono salvati a partire da un WrapperModule (run.py),
-    # le cui chiavi sono prefissate con "model." rispetto al modello nudo
-    # che costruiamo qui con build_model(). Rimuoviamo il prefisso.
+    # Checkpoints are saved from a WrapperModule (run.py), whose keys carry a
+    # "model." prefix relative to the bare model built here with build_model().
+    # Remove that prefix.
     weights = {
         (k[len("model."):] if k.startswith("model.") else k): v
         for k, v in raw_weights.items()
@@ -106,17 +156,14 @@ def load_fusion_model(model_params, checkpoint_path, device):
 
     missing, unexpected = model.load_state_dict(weights, strict=False)
 
-    # RTDetrFusionForObjectDetection tiene class_embed/bbox_embed sia come
-    # attributi top-level (usati dal forward() di HF) sia aliasati dentro
-    # model.decoder (letteralmente lo stesso oggetto Python, vedi
-    # rtdetr_fusion.py: saved_class_embed = self.class_embed; poi
-    # self.model.decoder.class_embed = saved_class_embed). safetensors non
-    # puo' salvare due chiavi che condividono la stessa memoria, quindi nel
-    # checkpoint sopravvive un solo path e l'altro risulta "missing" qui pur
-    # essendo esattamente lo stesso peso allenato. Fallback: per ogni
-    # parametro "missing", troviamo (per identita' di oggetto, non per nome
-    # indovinato) tutti gli alias nel nostro modello, e vediamo se il
-    # checkpoint ha il valore sotto uno di quei nomi alternativi.
+    # RTDetrFusionForObjectDetection keeps class_embed/bbox_embed both as
+    # top-level attributes (used by the HF forward()) and aliases inside
+    # model.decoder (the exact same Python object; see rtdetr_fusion.py).
+    # safetensors cannot save two keys sharing the same memory. Consequently,
+    # only one path is retained in a checkpoint and the other may appear as
+    # missing even though it refers to the trained tensor. For every missing
+    # parameter, find all aliases by object identity, then restore it if the
+    # checkpoint contains one of the alternative names.
     if missing:
         all_named_params = list(model.named_parameters(remove_duplicate=False))
         id_to_names = {}
@@ -136,33 +183,50 @@ def load_fusion_model(model_params, checkpoint_path, device):
                     recovered.append(key)
                     break
         if recovered:
-            print(f"  Recuperati {len(recovered)}/{len(missing)} pesi 'missing' da alias condivisi (stesso tensore, path diverso nell'albero dei moduli)")
+            print(f"  Recovered {len(recovered)}/{len(missing)} missing weights from shared aliases (same tensor, different module-tree path)")
             missing = [k for k in missing if k not in recovered]
     print(f"[load_state_dict] missing={len(missing)} unexpected={len(unexpected)}")
     if missing:
-        print("  missing (prime 10):", list(missing)[:10])
+        print("  missing (first 10):", list(missing)[:10])
     if unexpected:
-        print("  unexpected (prime 10):", list(unexpected)[:10])
+        print("  unexpected (first 10):", list(unexpected)[:10])
     if missing or unexpected:
         print(
-            "  ATTENZIONE: lo state_dict non combacia perfettamente. "
-            "Verifica il prefisso delle chiavi o l'architettura costruita "
-            "da build_model() rispetto a quella salvata nel checkpoint."
+            "  WARNING: the state_dict does not match exactly. "
+            "Check the key prefix and whether the architecture built by "
+            "build_model() matches the one saved in the checkpoint."
         )
     else:
-        print("  OK: tutte le chiavi combaciano.")
+        print("  OK: all keys match.")
 
     return model
 
 
+def load_yolo_model(checkpoint_path, device):
+    """
+    Load a YOLOv10FusionFAM model from an Ultralytics .pt checkpoint.
+    Unlike HF models (safetensors + state_dict), an Ultralytics checkpoint
+    contains the complete pickled model instance under the "model" key (see
+    BaseTrainer.save_model). Therefore build_model() + load_state_dict() is
+    not needed: FAM modules and the rest of the architecture already contain
+    their trained weights.
+    """
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    model = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    model = model.float().eval().to(device)
+    print(f"[load_yolo_model] model type: {type(model).__name__}, use_fam={getattr(model, 'use_fam', 'N/A')}")
+    return model
+
+
 # ---------------------------------------------------------------------------
-# 2. Hook su ogni istanza di FeatureAlignmentModule
+# 2. Hooks on every FeatureAlignmentModule instance
 # ---------------------------------------------------------------------------
 
 class FAMCapture:
-    """Cattura input (rgb_feat, ir_feat) e output (ir_aligned) di ogni
-    FeatureAlignmentModule incontrato nel modello, individuato per nome
-    di classe (indipendente dal path esatto nell'architettura)."""
+    """Capture inputs (rgb_feat, ir_feat) and output (ir_aligned) of every
+    FeatureAlignmentModule in the model. Modules are identified by class name,
+    making this independent of their architecture path and applicable to
+    RT-DETR, Deformable DETR/DINO, and YOLOv10FusionFAM."""
 
     def __init__(self, model):
         self.records = {}  # level_idx -> dict
@@ -187,18 +251,18 @@ class FAMCapture:
                 level += 1
         if level == 0:
             raise RuntimeError(
-                "Nessun FeatureAlignmentModule trovato nel modello. Controlla "
-                "che use_fam=True nel config e che la classe si chiami "
-                "esattamente 'FeatureAlignmentModule'."
+                "No FeatureAlignmentModule found in the model. Check that "
+                "use_fam=True in the config and that the class is named "
+                "exactly 'FeatureAlignmentModule'."
             )
-        print(f"Registrati hook su {level} istanze di FeatureAlignmentModule (es. '{last_name}')")
+        print(f"Registered hooks on {level} FeatureAlignmentModule instances (e.g. '{last_name}')")
 
     def _make_fam_hook(self, level_idx, module_name):
         def hook(module, inputs, output):
             if len(inputs) < 2:
                 raise RuntimeError(
-                    f"FeatureAlignmentModule '{module_name}' chiamato con "
-                    f"{len(inputs)} argomenti posizionali, ne servono 2 "
+                    f"FeatureAlignmentModule '{module_name}' was called with "
+                    f"{len(inputs)} positional arguments; 2 are required "
                     "(rgb_feat, ir_feat)."
                 )
             rgb_feat, ir_feat = inputs[0], inputs[1]
@@ -223,24 +287,22 @@ class FAMCapture:
 
 
 # ---------------------------------------------------------------------------
-# 3. PCA -> RGB (stile DINOv2/DINOv3)
+# 3. PCA -> RGB (DINOv2/DINOv3 style)
 # ---------------------------------------------------------------------------
 
 def fit_pca_projector(feats, isolate_foreground=True, fg_percentile=50):
     """
-    feats: lista di tensor (C, H, W) che condividono lo stesso C (es. rgb,
-    ir, ir_aligned dello stesso livello). Fitta UNA base PCA condivisa
-    (foreground-split + proiezione a 3 componenti) sui pixel messi in comune
-    di tutte le feature map, cosi' i colori risultanti sono direttamente
-    confrontabili tra i pannelli.
+    feats: list of (C, H, W) tensors with the same C (e.g. rgb, ir, and
+    ir_aligned at one level). Fit ONE shared PCA basis (foreground split +
+    three-component projection) on the pooled pixels of all feature maps so
+    that colors are directly comparable across panels.
 
-    IMPORTANTE: se si fitta una PCA indipendente per ogni feature map, le
-    basi risultanti sono arbitrarie nel segno/rotazione delle componenti:
-    "blu" in una mappa e "blu" in un'altra non corrispondono necessariamente
-    alla stessa struttura. Con una base condivisa, lo stesso colore in due
-    pannelli indica davvero la stessa direzione nello spazio delle feature.
+    IMPORTANT: independently fitting PCA for each feature map gives bases
+    with arbitrary component sign and rotation. Therefore, "blue" in one map
+    need not represent the same structure as "blue" in another. With a shared
+    basis, the same color in two panels denotes the same feature-space direction.
 
-    Ritorna una funzione project(feat) -> uint8 (H, W, 3).
+    Returns a project(feat) -> uint8 (H, W, 3) function.
     """
     flats = [f.permute(1, 2, 0).reshape(-1, f.shape[0]).numpy().astype(np.float64) for f in feats]
     pooled = np.concatenate(flats, axis=0)
@@ -290,11 +352,11 @@ def fit_pca_projector(feats, isolate_foreground=True, fg_percentile=50):
 
 def standardize(feat):
     """
-    Z-score globale (una sola media/std per l'intera feature map), per
-    rimuovere differenze di scala pure tra RGB/IR/FAM(IR) prima del fit PCA
-    condiviso (deform_conv non ha una BatchNorm/GroupNorm a valle, quindi il
-    suo output puo' avere una scala di attivazione diversa da rgb_feat/
-    ir_feat), mantenendo pero' le proporzioni relative tra i canali.
+    Global z-score (one mean/std for the entire feature map) removes pure
+    scale differences between RGB/IR/FAM(IR) before fitting shared PCA.
+    deform_conv has no downstream BatchNorm/GroupNorm, so its output may use
+    a different activation scale from rgb_feat/ir_feat. This normalization
+    preserves relative channel proportions within each feature map.
     """
     mean = feat.mean()
     std = feat.std().clamp_min(1e-6)
@@ -302,20 +364,20 @@ def standardize(feat):
 
 
 def overlay(img_a, img_b, alpha=0.5):
-    """Blend alpha per confrontare direttamente due PCA-map spazialmente."""
+    """Alpha-blend two PCA maps for a direct spatial comparison."""
     return (alpha * img_a.astype(np.float32) + (1 - alpha) * img_b.astype(np.float32)).astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
-# 4. Campo di offset del FAM (bonus diagnostico)
+# 4. FAM offset field (additional diagnostic)
 # ---------------------------------------------------------------------------
 
 def plot_offset_field(ax, offset, mask, stride=4):
     """
-    offset: (18, H, W) - 9 punti kernel x (dx, dy); mask: (9, H, W).
-    Visualizza lo spostamento medio (pesato dalla mask di modulazione) sui
-    9 punti campionati per cella: da un'idea dello spostamento "netto"
-    imparato dal FAM in quella posizione.
+    offset: (18, H, W) - 9 kernel points x (dx, dy); mask: (9, H, W).
+    Visualizes the mask-weighted mean displacement across the nine sampling
+    points per cell, providing an intuitive view of the net shift learned by
+    the FAM at each position.
     """
     _, H, W = offset.shape
     off = offset.reshape(9, 2, H, W)
@@ -333,14 +395,41 @@ def plot_offset_field(ax, offset, mask, stride=4):
     )
     ax.set_xlim(0, W)
     ax.set_ylim(H, 0)
-    ax.set_title("Campo di offset FAM\n(media pesata sui 9 punti)", fontsize=9)
+    ax.set_title("FAM offset field\n(mask-weighted mean over 9 points)", fontsize=9)
+
+
+def offset_spatial_uniformity(offset):
+    """
+    offset: (18, H, W) - 9 kernel points x (dx, dy), in feature-map pixels.
+
+    Measures whether the predicted offset is nearly CONSTANT over all output
+    cells (a uniform shift/bias rather than a content-adaptive correction), or
+    genuinely varies with position.
+
+    It computes the SPATIAL standard deviation of the offset itself (how much
+    it changes among output cells), normalized by its mean magnitude. A ratio
+    near 0 indicates a nearly constant offset (the same vector everywhere, a
+    global shift); a ratio near 1 indicates variation comparable to the mean
+    offset magnitude and hence a genuinely position-dependent correction.
+    """
+    off = offset.reshape(9, 2, -1)  # (9, 2, H*W)
+    spatial_std = off.std(dim=2).mean().item()   # variation across output cells
+    magnitude = off.abs().mean().item()          # mean offset magnitude
+    uniformity_ratio = spatial_std / max(magnitude, 1e-8)
+    return {
+        "offset_spatial_std": spatial_std,
+        "offset_magnitude": magnitude,
+        "uniformity_ratio": uniformity_ratio,  # ~0 = uniform shift, ~1 = varies as much as its magnitude
+    }
 
 
 # ---------------------------------------------------------------------------
-# 5. Campione RGB-IR sincronizzato (stessa pipeline di training/eval)
+# 5. Synchronized RGB-IR sample (same training/evaluation pipeline)
 # ---------------------------------------------------------------------------
 
 def load_sample(dataset_params, dataloader_params, sample_idx, split, device):
+    """Load an HF-model sample (RT-DETR/DefDETR/DINO) through get_dataloaders
+    (WiSARDDataset + HF AutoProcessor pipeline)."""
     (_train_l, _val_l, _test_l), (train_set, val_set, test_set), _collate, denormalize = get_dataloaders(
         dict(dataset_params), dict(dataloader_params), return_datasets=True
     )
@@ -350,59 +439,118 @@ def load_sample(dataset_params, dataloader_params, sample_idx, split, device):
     return pixel_values, denormalize
 
 
+def load_yolo_sample(data_yaml, run_config, sample_idx, split, device):
+    """
+    Load a YOLOv10FusionFAM sample through WiSARDYOLODataset, using the same
+    construction procedure as production (build_yolo_dataset in
+    sarfusion/experiment/yolo.py) to avoid preprocessing discrepancies from
+    actual training/evaluation.
+    """
+    data_dict = check_det_dataset(data_yaml)
+    img_path = data_dict[split]
+
+    cfg_dict = cfg2dict(WISARD_DEFAULT_CFG)
+    for k in ["imgsz", "rect", "cache", "single_cls", "task", "classes", "fraction"]:
+        if k in run_config:
+            cfg_dict[k] = run_config[k]
+    cfg = IterableSimpleNamespace(**cfg_dict)
+
+    dataset = WiSARDYOLODataset(
+        img_path=img_path,
+        imgsz=cfg.imgsz,
+        batch_size=1,
+        augment=False,
+        hyp=cfg,
+        rect=False,
+        cache=cfg.cache or None,
+        single_cls=cfg.single_cls or False,
+        stride=32,
+        pad=0.5,
+        prefix=colorstr(f"{split}: "),
+        task=cfg.task,
+        classes=cfg.classes,
+        data=data_dict,
+        fraction=1.0,
+        augment_vis_ir=False,  # always use a complete, deterministic RGB+IR pair
+    )
+
+    sample = dataset[sample_idx]
+    img = sample["img"]  # CHW float32, already normalized to [0, 1] by BaseDataset.__getitem__
+    if img.dtype == torch.uint8:
+        # Defensive check: if Ultralytics changes this behavior in the future,
+        # do not silently continue with incorrectly scaled values.
+        img = img.float() / 255.0
+    pixel_values = img.unsqueeze(0).to(device)  # (1, 4, H, W)
+    return pixel_values, None
+
+
 # ---------------------------------------------------------------------------
 # 6. Main
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True, help="yaml del run da ispezionare (es. fusion_rtdetr.yaml)")
-    parser.add_argument("--run-index", type=int, default=0, help="indice della combinazione da usare se il config produce piu' di un run (grid search vera)")
-    parser.add_argument("--checkpoint", required=True, help="path a best/model.safetensors")
-    parser.add_argument("--dataset-root", default=None, help="override del path assoluto al dataset WiSARD (il campo 'root' nel yaml e' relativo)")
-    parser.add_argument("--sample-idx", type=int, nargs="+", default=[0], help="uno o piu' indici di campione; se piu' di uno, oltre alle figure per-campione stampa un riepilogo aggregato degli offset (in pixel immagine) su tutti i campioni")
-    parser.add_argument("--split", choices=["train", "val", "test"], default="val")
-    parser.add_argument("--levels", type=int, nargs="+", default=None, help="livelli piramide da visualizzare (default: tutti)")
+    parser.add_argument("--model-type", choices=["hf", "yolo"], default="hf",
+                         help="hf: RT-DETR/DefDETR/DINO (.safetensors); yolo: YOLOv10FusionFAM (Ultralytics .pt)")
+    parser.add_argument("--config", required=True, help="run YAML configuration to inspect")
+    parser.add_argument("--run-index", type=int, default=0, help="combination index when the config produces multiple grid-search runs")
+    parser.add_argument("--checkpoint", required=True, help="[hf] path to best/model.safetensors | [yolo] path to weights/best.pt")
+    parser.add_argument("--dataset-root", default=None, help="[hf only] absolute WiSARD dataset-root override (the YAML root field is relative)")
+    parser.add_argument("--data-yaml", default=None, help="[yolo only] path to the dataset YAML (e.g. wisards_vis_ir.yaml)")
+    parser.add_argument("--sample-idx", type=int, nargs="+", default=[0], help="one or more sample indices; with multiple samples, prints pooled offset statistics in image pixels in addition to per-sample figures")
+    parser.add_argument("--split", choices=["train", "val", "test"], default="val", help="dataset split to inspect")
+    parser.add_argument("--levels", type=int, nargs="+", default=None, help="feature-pyramid levels to visualize (default: all)")
     parser.add_argument("--out-dir", default="./fam_alignment_vis")
-    parser.add_argument("--no-fg-isolation", action="store_true", help="disattiva l'isolamento del foreground nella PCA")
+    parser.add_argument("--no-fg-isolation", action="store_true", help="disable foreground isolation in PCA")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     os.makedirs(args.out_dir, exist_ok=True)
 
-    run_config = load_run_config(args.config, run_index=args.run_index)
-    model_params = run_config["model"]
-    dataset_params = run_config["dataset"]
-    dataloader_params = run_config["dataloader"]
+    if args.model_type == "yolo":
+        if not args.data_yaml:
+            raise ValueError("--data-yaml is required with --model-type yolo")
+        run_config = load_yolo_run_config(args.config, run_index=args.run_index)
+        print(f"YOLO model | model params: {run_config.get('model')}")
+        model = load_yolo_model(args.checkpoint, device)
+    else:
+        run_config = load_run_config(args.config, run_index=args.run_index)
+        model_params = run_config["model"]
+        dataset_params = run_config["dataset"]
+        dataloader_params = run_config["dataloader"]
+        if args.dataset_root:
+            dataset_params["root"] = args.dataset_root
+        print(f"Model: {model_params['name']} | params: {model_params['params']}")
+        print(f"Dataset root: {dataset_params['root']} | folders: {dataset_params['folders']}")
+        model = load_fusion_model(model_params, args.checkpoint, device)
 
-    if args.dataset_root:
-        dataset_params["root"] = args.dataset_root
-
-    print(f"Modello: {model_params['name']} | params: {model_params['params']}")
-    print(f"Dataset root: {dataset_params['root']} | folders: {dataset_params['folders']}")
-
-    model = load_fusion_model(model_params, args.checkpoint, device)
     capture = FAMCapture(model)
 
     isolate_fg = not args.no_fg_isolation
-    offset_px_by_level = {}  # level -> lista di np.array piatti, uno per campione, in pixel immagine
+    offset_px_by_level = {}  # level -> flat np.array list, one per sample, in image pixels
 
     for sample_idx in args.sample_idx:
         capture.records.clear()
 
-        pixel_values, _ = load_sample(dataset_params, dataloader_params, sample_idx, args.split, device)
+        if args.model_type == "yolo":
+            pixel_values, _ = load_yolo_sample(args.data_yaml, run_config, sample_idx, args.split, device)
+        else:
+            pixel_values, _ = load_sample(dataset_params, dataloader_params, sample_idx, args.split, device)
 
         with torch.no_grad():
-            model(pixel_values=pixel_values)
+            if args.model_type == "yolo":
+                model(pixel_values)
+            else:
+                model(pixel_values=pixel_values)
 
-        print(f"--- Campione {sample_idx} | shape input: {tuple(pixel_values.shape)} ---")
+        print(f"--- Sample {sample_idx} | input shape: {tuple(pixel_values.shape)} ---")
 
         levels = args.levels or sorted(capture.records.keys())
 
         for level in levels:
             rec = capture.records.get(level)
             if rec is None or "rgb" not in rec:
-                print(f"Livello {level}: nessun dato catturato, salto.")
+                print(f"Level {level}: no data captured; skipping.")
                 continue
 
             rgb_feat = rec["rgb"][0]
@@ -410,7 +558,9 @@ def main():
             ir_aligned_feat = rec["ir_aligned"][0]
 
             def _stats(name, t):
-                print(f"  [stats campione {sample_idx} livello {level}] {name:8s}: mean={t.mean():+.4f} std={t.std():.4f} min={t.min():+.4f} max={t.max():+.4f}")
+                global_std = t.std()
+                spatial_std = t.std(dim=(1, 2)).mean()  # std across channels, then mean over channels
+                print(f"  [sample {sample_idx}, level {level} stats] {name:8s}: mean={t.mean():+.4f} global_std={global_std:.4f} spatial_std={spatial_std:.4f} min={t.min():+.4f} max={t.max():+.4f}")
 
             _stats("rgb", rgb_feat)
             _stats("ir", ir_feat)
@@ -421,8 +571,16 @@ def main():
                 off_px = off.abs().numpy() * stride
                 offset_px_by_level.setdefault(level, []).append(off_px.reshape(-1))
                 print(
-                    f"  [stats campione {sample_idx} livello {level}] offset  : mean_abs={off.abs().mean():.4f} max_abs={off.abs().max():.4f} "
-                    f"(feature-px) | stride~{stride:.0f} -> mean~{off_px.mean():.2f}px max~{off_px.max():.2f}px (pixel immagine originale)"
+                    f"  [sample {sample_idx}, level {level} stats] offset  : mean_abs={off.abs().mean():.4f} max_abs={off.abs().max():.4f} "
+                    f"(feature-map px) | stride~{stride:.0f} -> mean~{off_px.mean():.2f}px max~{off_px.max():.2f}px (original-image pixels)"
+                )
+                pos_var = offset_spatial_uniformity(off)
+                print(
+                    f"  [sample {sample_idx}, level {level} stats] uniformity: "
+                    f"offset_spatial_std={pos_var['offset_spatial_std']:.4f} "
+                    f"offset_magnitude={pos_var['offset_magnitude']:.4f} "
+                    f"uniformity_ratio={pos_var['uniformity_ratio']:.3f} "
+                    "[ratio~0 = nearly constant uniform shift, ratio~1 = genuinely varies with position]"
                 )
 
             rgb_n = standardize(rgb_feat)
@@ -445,10 +603,10 @@ def main():
 
             panels = [
                 (pca_rgb, "PCA(RGB)"),
-                (pca_ir, "PCA(IR) - pre FAM"),
-                (pca_ir_aligned, "PCA(FAM(IR)) - post FAM"),
-                (overlay_pre, "Overlay RGB+IR (pre)"),
-                (overlay_post, "Overlay RGB+FAM(IR)\n(= input decoder, post)"),
+                (pca_ir, "PCA(IR) - pre-FAM"),
+                (pca_ir_aligned, "PCA(FAM(IR)) - post-FAM"),
+                (overlay_pre, "RGB+IR overlay (pre-FAM)"),
+                (overlay_post, "RGB+FAM(IR) overlay\n(= decoder/neck input, post-FAM)"),
             ]
             for ax, (img, title) in zip(axes, panels):
                 ax.imshow(img)
@@ -458,17 +616,17 @@ def main():
             if has_offset:
                 plot_offset_field(axes[-1], rec["offset"][0], rec["mask"][0])
 
-            fig.suptitle(f"FAM alignment check - campione {sample_idx} - livello {level} - {rec.get('module_name', '')}")
+            fig.suptitle(f"FAM alignment check [{args.model_type}] - sample {sample_idx} - level {level} - {rec.get('module_name', '')}")
             fig.tight_layout()
             out_path = Path(args.out_dir) / f"fam_sample{sample_idx}_level_{level}.png"
             fig.savefig(out_path, dpi=150)
             plt.close(fig)
-            print(f"Salvato: {out_path}")
+            print(f"Saved: {out_path}")
 
     capture.remove()
 
     if len(args.sample_idx) > 1 and offset_px_by_level:
-        print("\n=== Riepilogo offset aggregato su tutti i campioni (pixel immagine originale) ===")
+        print("\n=== Offset summary pooled across all samples (original-image pixels) ===")
         for level in sorted(offset_px_by_level.keys()):
             pooled = np.concatenate(offset_px_by_level[level])
             mean_v = pooled.mean()
@@ -476,9 +634,9 @@ def main():
             p90_v = np.percentile(pooled, 90)
             max_v = pooled.max()
             print(
-                f"  livello {level}: mean={mean_v:.2f}px median={median_v:.2f}px "
-                f"p90={p90_v:.2f}px max={max_v:.2f}px (n_campioni={len(args.sample_idx)}, "
-                f"n_offset_totali={pooled.size})"
+                f"  level {level}: mean={mean_v:.2f}px median={median_v:.2f}px "
+                f"p90={p90_v:.2f}px max={max_v:.2f}px (n_samples={len(args.sample_idx)}, "
+                f"n_total_offsets={pooled.size})"
             )
 
 

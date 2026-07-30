@@ -1,0 +1,117 @@
+# YOLOv10 + FAM — Modal Dropout Grid Search Experiment
+# Repeats parameters/YOLO/30.yolov10-fam.yaml with the same
+# IR/RGB/fusion sampling protocol used by the DETR-family experiments.
+# Four informative runs: FAM with SSJ 0.0/0.5/1.0, plus one no-FAM
+# baseline at SSJ 0.0 (SSJ is inactive when FAM is disabled).
+#
+# Feature-gated modal-dropout probability order:
+# [IR-only, RGB-only, RGB-IR fusion]. The dataset supplies an explicit
+# availability mask; missing samples are excluded from their backbone and FAM.
+experiment:
+  continue_with_errors: False
+
+parameters:
+  task: [detect]
+  mode: [train]
+
+  # Model settings
+  model:
+    name: [yolov10_fusion_fam]
+    params:
+      cfg: [cfg/yolov10-fusion-fam-s.yaml]
+      use_fam: [True]
+      spatial_jitter_std: [0.0, 0.5, 1.0]
+      ir_dropout_rate: [0.0]
+      freeze_fam: [False]
+      pretrained: [True]  # Internal COCO initialization from jameslahm/yolov10s
+
+  data: [wisards_vis_ir.yaml]
+  epochs: [200]
+  patience: [30]
+  batch: [16]
+  imgsz: [640]
+  save: [True]
+  save_period: [10]
+  val_period: [1]
+  cache: [False]
+  workers: [4]
+  project: [SarYOLOSingleClassModalDropout]
+  name: [YOLOv10-sc-FAM-MD-Grid]
+  exist_ok: [False]
+  pretrained: [False]  # Ultralytics trainer flag; custom-model pretraining is controlled above
+  optimizer: [AdamW]
+  verbose: [True]
+  seed: [42]
+  deterministic: [True]
+
+  # Missing-modality training: 20% IR-only, 20% RGB-only, 60% fusion.
+  # augment_vis_ir is the legacy variable-channel implementation and must
+  # remain disabled for the 4-channel YOLO-FAM architecture.
+  augment_vis_ir: [False]
+  modal_dropout: [True]
+  # feature: skip unavailable backbones and bypass FAM for IR-only.
+  # input: legacy behavior used in the first YOLO and RT-DETR experiments;
+  #        only zero image channels, while both backbones/FAM remain active.
+  modal_dropout_strategy: [feature]
+  modal_dropout_probs: [[0.2, 0.2, 0.6]]
+
+  single_cls: [True]
+  rect: [False]
+  cos_lr: [False]
+  close_mosaic: [10]
+  resume: [False]
+  amp: [True]
+  fraction: [1.0]
+  profile: [False]
+  freeze: [None]
+  multi_scale: [False]
+
+  # Val/Test — modal dropout is disabled by the YOLO dataset builder here.
+  val: [True]
+  split: [val]
+  save_json: [False]
+  save_hybrid: [False]
+  iou: [0.7]
+  max_det: [300]
+  half: [False]
+  dnn: [False]
+  plots: [True]
+
+  # Hyperparameters (kept identical to experiment 30).
+  lr0: [0.0001]
+  lrf: [0.00001]
+  momentum: [0.937]
+  weight_decay: [0.0005]
+  warmup_epochs: [3.0]
+  warmup_momentum: [0.8]
+  warmup_bias_lr: [0.1]
+  box: [7.5]
+  cls: [0.5]
+  dfl: [1.5]
+  label_smoothing: [0.0]
+  nbs: [64]
+  hsv_h: [0.0]
+  hsv_s: [0.0]
+  hsv_v: [0.0]
+  degrees: [0.0]
+  translate: [0.1]
+  scale: [0.5]
+  shear: [0.0]
+  perspective: [0.0]
+  flipud: [0.0]
+  fliplr: [0.5]
+  bgr: [0.0]
+  mosaic: [0.0]
+  mixup: [0.0]
+  copy_paste: [0.0]
+  auto_augment: [randaugment]
+  erasing: [0.4]
+  crop_fraction: [1.0]
+
+other_grids:
+  # A single no-FAM baseline is sufficient because spatial_jitter_std is
+  # never read when the FAM modules are disabled.
+  - model:
+      params:
+        use_fam: [False]
+        spatial_jitter_std: [0.0]

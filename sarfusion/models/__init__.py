@@ -245,6 +245,28 @@ def build_fusion_dino_defdetr(
     )
 
 
+def build_yolo_fusion_fam(
+    cfg="cfg/yolov10-fusion-fam-s.yaml",
+    nc=1,
+    use_fam=True,
+    freeze_fam=False,
+    ir_dropout_rate=0.0,
+    spatial_jitter_std=0.0,
+    pretrained=True,
+):
+    from sarfusion.models.yolo_fusion_fam import YOLOv10FusionFAM
+
+    return YOLOv10FusionFAM(
+        cfg_path=cfg,
+        nc=nc,
+        use_fam=use_fam,
+        freeze_fam=freeze_fam,
+        ir_dropout_rate=ir_dropout_rate,
+        spatial_jitter_std=spatial_jitter_std,
+        pretrained=pretrained,
+    )
+
+
 MODEL_REGISTRY = {
     "vit_classifier": build_vit_classifier,
     "yolov9": build_yolo_v9,
@@ -259,4 +281,5 @@ MODEL_REGISTRY = {
     "fusion_rtdetr_cmx_hybrid": build_fusion_rt_detr_cmx_hybrid,
     "fusion_defdetr": build_fusion_deformable_detr,
     "fusion_dino_defdetr": build_fusion_dino_defdetr,
+    "yolov10_fusion_fam": build_yolo_fusion_fam,
 }

@@ -784,9 +784,111 @@ def verify_image_label(args):
 
 
 class WiSARDYOLODataset(YOLODataset):
+    MODAL_DROPOUT_STRATEGIES = {"input", "feature"}
+    MODALITY_MASKS = {
+        "ir": (0.0, 1.0),
+        "rgb": (1.0, 0.0),
+        "fusion": (1.0, 1.0),
+    }
+
     def __init__(self, *args, **kwargs):
         self.augment_vis_ir = kwargs.pop("augment_vis_ir", False)
+        self.modal_dropout = kwargs.pop("modal_dropout", False)
+        self.modal_dropout_probs = kwargs.pop(
+            "modal_dropout_probs", [0.2, 0.2, 0.6]
+        )
+        self.modal_dropout_strategy = kwargs.pop(
+            "modal_dropout_strategy", "feature"
+        )
+        self._validate_modal_dropout_config()
         super().__init__(*args, **kwargs)
+
+    def _validate_modal_dropout_config(self):
+        """Validate the YOLO modal-dropout configuration.
+
+        Probability order matches ``WiSARDDataset``: IR-only, RGB-only,
+        RGB-IR fusion. ``input`` masks image channels but keeps both model
+        branches active; ``feature`` also gates the unavailable branch.
+        """
+        if self.augment_vis_ir and self.modal_dropout:
+            raise ValueError(
+                "augment_vis_ir and modal_dropout are mutually exclusive. "
+                "Use modal_dropout for YOLO-FAM 4-channel training."
+            )
+
+        probs = self.modal_dropout_probs
+        if not isinstance(probs, (list, tuple)) or len(probs) != 3:
+            raise ValueError(
+                "modal_dropout_probs must contain exactly three values in "
+                "[IR-only, RGB-only, fusion] order."
+            )
+
+        self.modal_dropout_probs = [float(prob) for prob in probs]
+        if any(prob < 0.0 for prob in self.modal_dropout_probs):
+            raise ValueError("modal_dropout_probs values must be non-negative.")
+        if not np.isclose(sum(self.modal_dropout_probs), 1.0):
+            raise ValueError("modal_dropout_probs must sum to 1.0.")
+
+        if not isinstance(self.modal_dropout_strategy, str):
+            raise ValueError("modal_dropout_strategy must be 'input' or 'feature'.")
+        self.modal_dropout_strategy = self.modal_dropout_strategy.lower()
+        if self.modal_dropout_strategy not in self.MODAL_DROPOUT_STRATEGIES:
+            raise ValueError(
+                "modal_dropout_strategy must be 'input' or 'feature', "
+                f"got {self.modal_dropout_strategy!r}."
+            )
+
+    def _sample_modal_dropout_mode(self):
+        """Sample IR-only, RGB-only, or fusion using configured weights."""
+        return random.choices(
+            ("ir", "rgb", "fusion"),
+            weights=self.modal_dropout_probs,
+            k=1,
+        )[0]
+
+    @staticmethod
+    def _apply_modal_dropout(img, mode):
+        """Mask one input modality while preserving the 4-channel contract."""
+        if not isinstance(img, torch.Tensor) or img.ndim != 3 or img.shape[0] != 4:
+            shape = getattr(img, "shape", None)
+            raise ValueError(
+                "YOLO modal dropout requires a transformed 4-channel tensor "
+                f"[RGB, IR], got shape {shape}."
+            )
+
+        if mode == "fusion":
+            return img
+
+        img = img.clone()
+        if mode == "ir":
+            img[:3].zero_()
+        elif mode == "rgb":
+            img[3:4].zero_()
+        else:
+            raise ValueError(f"Unsupported modal-dropout mode: {mode}")
+        return img
+
+    def __getitem__(self, index):
+        """Apply modal dropout and return the strategy-specific branch mask."""
+        sample = super().__getitem__(index)
+        is_multimodal = isinstance(self.im_files[index], (tuple, list))
+        mode = (
+            self._sample_modal_dropout_mode()
+            if self.modal_dropout and is_multimodal
+            else "fusion"
+        )
+        if self.modal_dropout and is_multimodal:
+            sample["img"] = self._apply_modal_dropout(sample["img"], mode)
+        mask_mode = (
+            mode
+            if self.modal_dropout_strategy == "feature"
+            else "fusion"
+        )
+        sample["modality_mask"] = torch.tensor(
+            self.MODALITY_MASKS[mask_mode],
+            dtype=torch.float32,
+        )
+        return sample
 
     def get_labels(self):
         """Returns dictionary of labels for YOLO training."""
@@ -1012,7 +1114,9 @@ class WiSARDYOLODataset(YOLODataset):
                 else:
                     im_vis = torch.tensor(cv2.imread(f[0])).permute(2, 0, 1)  # BGR
                     im_ir = torch.tensor(cv2.imread(f[1])).permute(2, 0, 1)  # IR
-                    im = adapt_ir2rgb(im_vis, im_ir).permute(1, 2, 0).numpy()
+                    im_vis, im_ir = adapt_ir2rgb(im_vis, im_ir)
+                    im_ir = im_ir[:1] if im_ir.dim() == 3 else im_ir
+                    im = torch.cat([im_vis, im_ir], dim=0).permute(1, 2, 0).numpy()
             if im is None:
                 raise FileNotFoundError(f"Image Not Found {f}")
 
@@ -1058,6 +1162,8 @@ class WiSARDYOLODataset(YOLODataset):
             value = values[i]
             if k == "img":
                 value = collate_images(value)
+            if k == "modality_mask":
+                value = torch.stack(value, 0)
             if k in ["masks", "keypoints", "bboxes", "cls", "segments", "obb"]:
                 value = torch.cat(value, 0)
             new_batch[k] = value

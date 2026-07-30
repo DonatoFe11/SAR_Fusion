@@ -38,6 +38,11 @@ def build_yolo_dataset(cfg, img_path, batch, data, mode="train", rect=False, str
         data=data,
         fraction=cfg.fraction if mode == "train" else 1.0,
         augment_vis_ir=cfg.augment_vis_ir,
+        modal_dropout=cfg.modal_dropout if mode == "train" else False,
+        modal_dropout_probs=cfg.modal_dropout_probs,
+        modal_dropout_strategy=getattr(
+            cfg, "modal_dropout_strategy", "feature"
+        ),
     )
 
 
@@ -45,6 +50,9 @@ WISARD_DEFAULT_CFG = IterableSimpleNamespace(
     **{
         **cfg2dict(DEFAULT_CFG),
         "augment_vis_ir": False,
+        "modal_dropout": False,
+        "modal_dropout_probs": [0.2, 0.2, 0.6],
+        "modal_dropout_strategy": "feature",
     }
 )
 
@@ -114,6 +122,8 @@ class WisardValidator(YOLOv10DetectionValidator):
         )
         bar = TQDM(self.dataloader, desc=self.get_desc(), total=len(self.dataloader))
         self.init_metrics(de_parallel(model))
+        if self.args.single_cls:
+            self.nc = 1
         self.jdict = []  # empty before each val
         for batch_i, batch in enumerate(bar):
             self.run_callbacks("on_val_batch_start")
@@ -185,6 +195,18 @@ class WisardValidator(YOLOv10DetectionValidator):
             on_plot=self.on_plot,
         )
 
+    def plot_predictions(self, batch, preds, ni):
+        """Plots predicted bounding boxes using the 4-channel-aware plotter."""
+        from sarfusion.utils.plots import output_to_target
+        plot_images(
+            batch["img"],
+            *output_to_target(preds, max_det=self.args.max_det),
+            paths=batch["im_file"],
+            fname=self.save_dir / f"val_batch{ni}_pred.jpg",
+            names=self.names,
+            on_plot=self.on_plot,
+        )
+
 class WisardTrainer(YOLOv10DetectionTrainer):
     def __init__(self, cfg=WISARD_DEFAULT_CFG, overrides=None, _callbacks=None):
         super().__init__(cfg, overrides, _callbacks)
@@ -229,6 +251,9 @@ class WisardTrainer(YOLOv10DetectionTrainer):
         self.loss_names = "box_om", "cls_om", "dfl_om", "box_oo", "cls_oo", "dfl_oo",
         args = cfg2dict(copy(self.args))
         args.pop("augment_vis_ir")
+        args.pop("modal_dropout")
+        args.pop("modal_dropout_probs")
+        args.pop("modal_dropout_strategy", None)
         args = IterableSimpleNamespace(**args)
         return WisardValidator(
             self.test_loader, save_dir=self.save_dir, args=args, _callbacks=self.callbacks
