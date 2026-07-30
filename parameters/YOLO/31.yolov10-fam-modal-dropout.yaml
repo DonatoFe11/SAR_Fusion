@@ -49,6 +49,10 @@ parameters:
   # remain disabled for the 4-channel YOLO-FAM architecture.
   augment_vis_ir: [False]
   modal_dropout: [True]
+  # feature: skip unavailable backbones and bypass FAM for IR-only.
+  # input: legacy behavior used in the first YOLO and RT-DETR experiments;
+  #        only zero image channels, while both backbones/FAM remain active.
+  modal_dropout_strategy: [feature]
   modal_dropout_probs: [[0.2, 0.2, 0.6]]
 
   single_cls: [True]

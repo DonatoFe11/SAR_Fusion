@@ -40,6 +40,9 @@ def build_yolo_dataset(cfg, img_path, batch, data, mode="train", rect=False, str
         augment_vis_ir=cfg.augment_vis_ir,
         modal_dropout=cfg.modal_dropout if mode == "train" else False,
         modal_dropout_probs=cfg.modal_dropout_probs,
+        modal_dropout_strategy=getattr(
+            cfg, "modal_dropout_strategy", "feature"
+        ),
     )
 
 
@@ -49,6 +52,7 @@ WISARD_DEFAULT_CFG = IterableSimpleNamespace(
         "augment_vis_ir": False,
         "modal_dropout": False,
         "modal_dropout_probs": [0.2, 0.2, 0.6],
+        "modal_dropout_strategy": "feature",
     }
 )
 
@@ -249,6 +253,7 @@ class WisardTrainer(YOLOv10DetectionTrainer):
         args.pop("augment_vis_ir")
         args.pop("modal_dropout")
         args.pop("modal_dropout_probs")
+        args.pop("modal_dropout_strategy", None)
         args = IterableSimpleNamespace(**args)
         return WisardValidator(
             self.test_loader, save_dir=self.save_dir, args=args, _callbacks=self.callbacks

@@ -784,6 +784,7 @@ def verify_image_label(args):
 
 
 class WiSARDYOLODataset(YOLODataset):
+    MODAL_DROPOUT_STRATEGIES = {"input", "feature"}
     MODALITY_MASKS = {
         "ir": (0.0, 1.0),
         "rgb": (1.0, 0.0),
@@ -796,6 +797,9 @@ class WiSARDYOLODataset(YOLODataset):
         self.modal_dropout_probs = kwargs.pop(
             "modal_dropout_probs", [0.2, 0.2, 0.6]
         )
+        self.modal_dropout_strategy = kwargs.pop(
+            "modal_dropout_strategy", "feature"
+        )
         self._validate_modal_dropout_config()
         super().__init__(*args, **kwargs)
 
@@ -803,7 +807,8 @@ class WiSARDYOLODataset(YOLODataset):
         """Validate the YOLO modal-dropout configuration.
 
         Probability order matches ``WiSARDDataset``: IR-only, RGB-only,
-        RGB-IR fusion.
+        RGB-IR fusion. ``input`` masks image channels but keeps both model
+        branches active; ``feature`` also gates the unavailable branch.
         """
         if self.augment_vis_ir and self.modal_dropout:
             raise ValueError(
@@ -823,6 +828,15 @@ class WiSARDYOLODataset(YOLODataset):
             raise ValueError("modal_dropout_probs values must be non-negative.")
         if not np.isclose(sum(self.modal_dropout_probs), 1.0):
             raise ValueError("modal_dropout_probs must sum to 1.0.")
+
+        if not isinstance(self.modal_dropout_strategy, str):
+            raise ValueError("modal_dropout_strategy must be 'input' or 'feature'.")
+        self.modal_dropout_strategy = self.modal_dropout_strategy.lower()
+        if self.modal_dropout_strategy not in self.MODAL_DROPOUT_STRATEGIES:
+            raise ValueError(
+                "modal_dropout_strategy must be 'input' or 'feature', "
+                f"got {self.modal_dropout_strategy!r}."
+            )
 
     def _sample_modal_dropout_mode(self):
         """Sample IR-only, RGB-only, or fusion using configured weights."""
@@ -855,7 +869,7 @@ class WiSARDYOLODataset(YOLODataset):
         return img
 
     def __getitem__(self, index):
-        """Return one sample with an explicit [RGB, IR] availability mask."""
+        """Apply modal dropout and return the strategy-specific branch mask."""
         sample = super().__getitem__(index)
         is_multimodal = isinstance(self.im_files[index], (tuple, list))
         mode = (
@@ -865,8 +879,13 @@ class WiSARDYOLODataset(YOLODataset):
         )
         if self.modal_dropout and is_multimodal:
             sample["img"] = self._apply_modal_dropout(sample["img"], mode)
+        mask_mode = (
+            mode
+            if self.modal_dropout_strategy == "feature"
+            else "fusion"
+        )
         sample["modality_mask"] = torch.tensor(
-            self.MODALITY_MASKS[mode],
+            self.MODALITY_MASKS[mask_mode],
             dtype=torch.float32,
         )
         return sample

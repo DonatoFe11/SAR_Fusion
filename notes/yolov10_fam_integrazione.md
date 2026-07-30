@@ -74,7 +74,8 @@ Classe `YOLOv10FusionFAM(nn.Module)`:
 - **Costruttore**: carica cfg YAML (`yaml_model_load`), crea RGB backbone (ch=3) e IR backbone (ch=1, primo conv adattato via media canali), scopre i canali delle feature map ai livelli P3/P4/P5, costruisce 3 moduli FAM con supporto per freeze/SSJ/dropout, calcola lo stride della testa di detection
 - **Forward**:
   - `forward(x)`: dispatcher — se `x` è dict chiama `loss()`, se è tensor chiama `predict()`
-  - `predict(x)`: divide input 4ch in RGB + IR, esegue backbone duali, applica FAM e additive fusion a P3/P4/P5, forward del neck FPN+PAN + v10Detect head
+  - `predict(x, modality_mask)`: divide input 4ch in RGB + IR e usa una maschera esplicita `[RGB, IR]`. In full-fusion applica FAM e somma additiva a P3/P4/P5; in RGB-only usa soltanto le feature RGB; in IR-only usa soltanto le feature IR e bypassa FAM
+  - i campioni privi di una modalità vengono esclusi dal relativo backbone, evitando che input azzerati aggiornino le statistiche BatchNorm
   - `loss(batch)`: calcola loss via `v10DetectLoss` compatibile con trainer ultralytics
 - **Compatibilità**: si comporta come `BaseModel` ultralytics — `model.args` come `IterableSimpleNamespace`, `model.stride`, `model.names`, `model.task`, `model.loss()`
 
@@ -136,7 +137,7 @@ p = paths[i][0] if isinstance(paths[i], (list, tuple)) else paths[i]
 
 `final_eval()` in `yolo.py` carica il modello via `AutoBackend` che fa warmup con input 3ch `(1, 3, 640, 640)`. `predict()` si aspettava sempre 4ch e crashava su `x[:, 3:4]` (tensore con 0 canali → Conv IR falliva).
 
-**Fix**: `predict()` ora controlla `x.shape[1]`; se 3 canali, reindirizza a `_forward_single()` che esegue forward standard single-modality. Training e inferenza 4ch non sono toccati.
+**Fix**: `predict()` controlla `x.shape[1]`; se 3 canali, reindirizza a `_forward_single()` che esegue forward standard single-modality. Gli input a 4 canali seguono invece il percorso dual-backbone, eventualmente controllato dalla maschera esplicita delle modalità.
 
 ## Risultati grid — Single Class (SarYOLOSingleClass)
 
@@ -193,9 +194,23 @@ python main.py experiment --parameters parameters/YOLO/30.yolov10-fam.yaml --yol
 # Solo creazione file di configurazione (senza esecuzione)
 python main.py experiment --parameters parameters/YOLO/30.yolov10-fam.yaml --yolo --only-create
 
-# Ripetizione della stessa grid con modal dropout 20% IR / 20% RGB / 60% fusion
+# Feature-level modal gating: 20% IR-only / 20% RGB-only / 60% fusion
 python main.py experiment --parameters parameters/YOLO/31.yolov10-fam-modal-dropout.yaml --yolo
 ```
+
+La strategia è selezionabile nel file dei parametri:
+
+```yaml
+modal_dropout: true
+modal_dropout_strategy: feature  # feature | input
+modal_dropout_probs: [0.2, 0.2, 0.6]
+```
+
+Con `feature`, la maschera campionata esclude la backbone non disponibile e
+bypassa FAM in IR-only. Con `input`, i canali della modalità assente vengono
+azzerati ma la maschera passata al modello resta `[1, 1]`: entrambe le backbone
+e l'eventuale FAM rimangono quindi attivi, riproducendo il comportamento
+input-level storico.
 
 ## Verifica diagnostica del FAM (fam_alignment_check.py) sui checkpoint single-class
 
@@ -260,9 +275,100 @@ Eseguito con `eval_yolo_modalities.py` sui 4 checkpoint indipendenti (Grid, Grid
 
 3. **IR-only resta sostanzialmente inutilizzabile per tutti e 4 i checkpoint** (0.0 per Grid/Grid2, dell'ordine di 10⁻⁶/10⁻⁸ per Grid3/Grid4, trascurabile in tutti i casi), confermando quanto già osservato sui checkpoint multi-classe: l'assenza di modal dropout nel regime di training YOLO produce zero robustezza appresa alla mancanza del canale RGB, indipendentemente da FAM o SSJ.
 
+## Modal dropout input-level 60/20/20 — esperimento completato
+
+Questa sezione documenta la **prima implementazione** del modal dropout YOLO, precedente al feature-level gating. Durante il training, per ogni coppia RGB-IR veniva campionata una delle tre condizioni:
+
+- 20% IR-only: canali RGB azzerati;
+- 20% RGB-only: canale IR azzerato;
+- 60% full-fusion: entrambe le modalità inalterate.
+
+La modalità assente veniva azzerata soltanto nell'immagine di input. Entrambe le backbone continuavano quindi a essere eseguite e le loro feature venivano comunque combinate. I valori riportati sotto descrivono specificamente questo regime **input-level** e non il feature-gating implementato successivamente.
+
+### Confronto con il training senza modal dropout
+
+Valori mAP50 sul test set:
+
+| Variante | Fusion senza → con dropout | RGB-only senza → con dropout | IR-only senza → con dropout |
+|---|---:|---:|---:|
+| FAM, SSJ=0.0 | 0.407 → 0.329 | 0.171 → 0.158 | 0.000 → 0.054 |
+| FAM, SSJ=0.5 | 0.298 → 0.379 | 0.196 → 0.179 | 0.000 → 0.018 |
+| FAM, SSJ=1.0 | 0.333 → 0.334 | 0.154 → 0.166 | ~0.000 → 0.013 |
+| No FAM | 0.378 → 0.334 | 0.078 → 0.131 | ~0.000 → 0.023 |
+
+### Interpretazione
+
+Il modal dropout input-level non ha prodotto una robustezza mono-modale sufficiente a compensare il costo sulla modalità completa:
+
+1. **IR-only migliora tecnicamente rispetto allo zero**, ma rimane nell'intervallo 0.013–0.054 mAP50, troppo basso per rappresentare una capacità operativa utile.
+2. **RGB-only non mostra un vantaggio convincente** nelle varianti FAM: SSJ=0.0 e 0.5 peggiorano leggermente, mentre SSJ=1.0 migliora solo marginalmente. Il miglioramento No FAM da 0.078 a 0.131 non colma il divario rispetto alle configurazioni FAM senza dropout.
+3. **La prestazione fusion diminuisce** per FAM SSJ=0.0 e No FAM. SSJ=1.0 resta sostanzialmente invariato. Il guadagno di SSJ=0.5, da 0.298 a 0.379, parte invece da una baseline senza dropout particolarmente debole e non costituisce da solo evidenza di un beneficio generale.
+
+La spiegazione più plausibile è che azzerare una modalità in input non equivalga a rimuoverne il ramo. Convoluzioni, bias e BatchNorm possono generare feature non nulle anche da un tensore azzerato. In IR-only, inoltre, il FAM riceve come riferimento feature RGB prive di informazione reale e tenta comunque di allineare l'IR rispetto a esse. Il neck viene quindi addestrato su fusioni contenenti contributi artificiali dei sensori formalmente assenti.
+
+La conclusione sperimentale è pertanto:
+
+> Il modal dropout input-level 60/20/20 non trasferisce automaticamente a YOLO i benefici di robustezza osservati con RT-DETR.
+
+### Follow-up: feature-level gating
+
+Il nuovo esperimento mantiene le stesse probabilità 20/20/60 ma applica una maschera esplicita alle feature:
+
+| Condizione | Percorso verso il neck |
+|---|---|
+| RGB-only | sole feature RGB; backbone IR esclusa |
+| IR-only | sole feature IR; backbone RGB esclusa e FAM bypassato |
+| Full-fusion | `RGB + FAM(IR, RGB)`, invariato rispetto alla fusione originale |
+
+Il training delle quattro configurazioni è stato completato. Le nuove run sono `Grid5`–`Grid8`, perché `Grid`–`Grid4` nella stessa directory appartengono all'esperimento input-level precedente.
+
+#### Risultati completi
+
+Le valutazioni standalone sono state eseguite sullo stesso test set in full-fusion, RGB-only e IR-only. Gli output completi sono salvati in `modal_eval_feature_gating/`.
+
+| Run | Variante | Fusion | RGB-only | IR-only |
+|---|---|---:|---:|---:|
+| `Grid5` | FAM, SSJ=0.0 | 0.2965 | 0.0750 | 0.0356 |
+| `Grid6` | FAM, SSJ=0.5 | 0.3335 | 0.1454 | 0.0308 |
+| `Grid7` | FAM, SSJ=1.0 | 0.2358 | 0.0638 | 0.0295 |
+| `Grid8` | No FAM | **0.3469** | **0.1756** | **0.0616** |
+
+`Grid8` domina tutte le altre configurazioni feature-gated in ognuna delle tre modalità. Nel regime con gating corretto, nessuna variante FAM fornisce quindi un vantaggio misurabile; SSJ=1.0 è la configurazione più penalizzata.
+
+#### Confronto tra i tre regimi
+
+Ogni cella riporta `senza dropout / input-level / feature-gating`:
+
+| Variante | Fusion | RGB-only | IR-only |
+|---|---:|---:|---:|
+| FAM, SSJ=0.0 | **0.407** / 0.329 / 0.297 | **0.171** / 0.158 / 0.075 | ~0.000 / **0.054** / 0.036 |
+| FAM, SSJ=0.5 | 0.298 / **0.379** / 0.334 | **0.196** / 0.179 / 0.145 | ~0.000 / 0.018 / **0.031** |
+| FAM, SSJ=1.0 | 0.333 / **0.334** / 0.236 | 0.154 / **0.166** / 0.064 | ~0.000 / 0.013 / **0.029** |
+| No FAM | **0.378** / 0.334 / 0.347 | 0.078 / 0.131 / **0.176** | ~0.000 / 0.023 / **0.062** |
+
+Il risultato più informativo è il confronto No FAM:
+
+- rispetto al dropout input-level, il feature-gating migliora fusion di 0.013, RGB-only di 0.045 e IR-only di 0.039;
+- rispetto al training senza dropout, sacrifica 0.031 in fusion ma guadagna 0.098 in RGB-only e 0.062 in IR-only.
+
+Questo conferma che eliminare realmente il ramo assente è tecnicamente preferibile al semplice azzeramento dell'immagine, almeno nella variante senza FAM. Il miglioramento non è però sufficiente a raggiungere una robustezza IR utile: il massimo YOLO è 0.0616 mAP50, ancora molto distante dai valori IR-only circa 0.18–0.26 documentati per le varianti RT-DETR con FAM correttamente ottimizzato.
+
+La conclusione finale è quindi duplice:
+
+1. **La modifica strutturale era corretta**: nel caso No FAM migliora contemporaneamente tutte le modalità rispetto al dropout input-level.
+2. **Il limite sostanziale di YOLO rimane**: la capacità IR-only resta troppo bassa e il guadagno non compensa pienamente la perdita rispetto al miglior modello fusion senza dropout.
+
+Se la priorità è la massima accuratezza fusion, resta preferibile FAM SSJ=0.0 senza dropout (0.407). Se serve il miglior compromesso ottenuto con feature-gating, la scelta è `Grid8` No FAM (0.347 / 0.176 / 0.062), ma non va presentata come soluzione realmente robusta al guasto del sensore.
+
+Come per la grid precedente, ogni configurazione è rappresentata da una sola run con seed 42. Le differenze più ampie e il dominio di `Grid8` sulle tre modalità sono evidenze interne a questa ablation, non una stima della variabilità tra seed.
+
+> **Nota di riproducibilità.** La modalità predefinita `--modality auto` dell'attuale `eval_yolo_modalities.py` usa i nuovi percorsi feature-gated. Per riprodurre sui checkpoint storici il comportamento mono-modale input-level della tabella precedente occorre forzare `--modality fusion` sul dataset RGB-only o IR-only, così che entrambi i rami vengano eseguiti nonostante il padding a zero.
+
 ## Prossimi passi
 
-1. **Diagnosticare il bug della val mAP** (`WisardTrainer`/`WisardValidator`, discrepanza nota tra val e test sullo stesso checkpoint) — resta aperto e non affrontato, rilevante per la fiducia nella selezione del checkpoint "best" usato in tutte le analisi sopra.
+1. **Non estendere la grid YOLO attuale**: i risultati sono sufficienti a mostrare che né input-level dropout né feature-gating raggiungono la robustezza IR di RT-DETR.
+2. Se la robustezza YOLO resta un requisito, il passo successivo deve cambiare il training, per esempio con loss ausiliarie mono-modali o normalizzazione/head specifici per modalità, non limitarsi ad altre combinazioni di FAM e SSJ.
+3. **Diagnosticare il bug della val mAP** (`WisardTrainer`/`WisardValidator`, discrepanza nota tra val e test sullo stesso checkpoint) — resta aperto e non affrontato, rilevante per la fiducia nella selezione del checkpoint "best" usato in tutte le analisi sopra.
 
 ## Note tecniche
 
