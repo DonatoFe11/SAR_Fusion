@@ -1,5 +1,5 @@
 experiment:
-  name: DINO_DefDETR_FAM_Test1
+  name: DINO_Complete_Base_Final_Evaluation
   group: DINO_Investigation
   continue_with_errors: False
   search: grid
@@ -19,9 +19,21 @@ parameters:
       id2label:
         0: [person]
       threshold: [0.01, 0.1]
-      pretrained_path: ["checkpoints/dino_defdetr_fam1.safetensors"]
+      pretrained_path:
+        - "checkpoints/dino_defdetr1.safetensors"
+        - "checkpoints/dino_defdetr2.safetensors"
+        - "checkpoints/dino_defdetr3.safetensors"
+        - "checkpoints/dino_defdetr4.safetensors"
+        - "checkpoints/dino_defdetr5.safetensors"
       num_feature_levels: [4]
-      use_fam: [true]
+      use_fam: [false]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      num_dn_groups: [5]
+      label_noise_prob: [0.5]
+      box_noise_scale: [1.0]
+      cdn_loss_coef: [1.0]
   
   dataset:
     name: [wisard]
