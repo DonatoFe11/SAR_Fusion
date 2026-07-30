@@ -330,12 +330,14 @@ def main():
         print(f"  map_per_class: {results['map_per_class']}")
 
     if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         serializable = {
             k: (v.tolist() if torch.is_tensor(v) else v) for k, v in results.items()
         }
-        with open(args.out, "w") as f:
+        with out_path.open("w") as f:
             json.dump(serializable, f, indent=2)
-        print(f"\nSalvato: {args.out}")
+        print(f"\nSalvato: {out_path}")
 
 
 if __name__ == "__main__":

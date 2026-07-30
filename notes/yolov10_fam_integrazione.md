@@ -364,11 +364,52 @@ Come per la grid precedente, ogni configurazione è rappresentata da una sola ru
 
 > **Nota di riproducibilità.** La modalità predefinita `--modality auto` dell'attuale `eval_yolo_modalities.py` usa i nuovi percorsi feature-gated. Per riprodurre sui checkpoint storici il comportamento mono-modale input-level della tabella precedente occorre forzare `--modality fusion` sul dataset RGB-only o IR-only, così che entrambi i rami vengano eseguiti nonostante il padding a zero.
 
+## Validazione e selezione del checkpoint
+
+La verifica standalone di `Grid8` sullo split `val` ha prodotto `mAP50-95=0.00353`
+e `mAP50=0.01563`, valori coerenti con quelli registrati durante il training. La
+bassa mAP di validazione non è quindi dovuta a un errore del validator YOLO.
+
+L'origine principale della discrepanza tra validation e test è il contenuto dello
+split. In `wisard.py`, `VAL_VIS_IR` parte dagli indici `[4, 5, 6, 8]`, ma le
+sequenze 4, 5 e 6 vengono eliminate dal filtro `NO_LABELS`. Rimane soltanto la
+sessione FHL all'indice 8: **273 immagini, 184 background e 148 bounding box**.
+Il test set usa invece tre sequenze MtErie. La validation è dunque piccola,
+sbilanciata verso i background, limitata a una singola sessione e appartenente a
+un dominio diverso dal test. I conteggi riportati nei commenti dei file YAML non
+descrivono più il contenuto effettivo dopo il filtraggio.
+
+Questa criticità **non è specifica di YOLO**. Anche RT-DETR e Deformable DETR
+hanno mostrato metriche basse sul medesimo validation set; ciò indica un limite
+del protocollo condiviso, non una sensibilità dimostrata esclusivamente per
+YOLO. Il confronto tra architetture rimane internamente coerente perché usa gli
+stessi split, ma la selezione dell'epoca migliore può essere rumorosa e poco
+rappresentativa per tutti i modelli.
+
+Esiste comunque una differenza nel criterio di selezione:
+
+- YOLO salva `best.pt` ed esegue l'early stopping sulla fitness
+  `0.1 * mAP50 + 0.9 * mAP50-95`, calcolata soltanto in modalità full-fusion;
+- RT-DETR e Deformable DETR monitorano `map`, cioè la mAP50-95.
+
+Per le run feature-gated YOLO, RGB-only e IR-only non partecipano quindi alla
+scelta del checkpoint. Per `Grid8` il miglior fitness è stato raggiunto intorno
+all'epoca 16 e il training è terminato all'epoca 46 con patience 30; anche le
+altre run mostrano arresti coerenti con lo stesso criterio.
+
+Non conviene sostituire retroattivamente lo split soltanto per YOLO: si perderebbe
+la piena comparabilità metodologica con gli esperimenti precedenti. I risultati
+sul test comune restano utilizzabili, purché la validation ridotta sia dichiarata
+come limitazione. Un eventuale protocollo con validation multi-sessione e più
+positivi dovrebbe essere presentato come esperimento revisionato e applicato
+coerentemente almeno ai modelli principali, senza usare il test per scegliere
+checkpoint o iperparametri.
+
 ## Prossimi passi
 
 1. **Non estendere la grid YOLO attuale**: i risultati sono sufficienti a mostrare che né input-level dropout né feature-gating raggiungono la robustezza IR di RT-DETR.
 2. Se la robustezza YOLO resta un requisito, il passo successivo deve cambiare il training, per esempio con loss ausiliarie mono-modali o normalizzazione/head specifici per modalità, non limitarsi ad altre combinazioni di FAM e SSJ.
-3. **Diagnosticare il bug della val mAP** (`WisardTrainer`/`WisardValidator`, discrepanza nota tra val e test sullo stesso checkpoint) — resta aperto e non affrontato, rilevante per la fiducia nella selezione del checkpoint "best" usato in tutte le analisi sopra.
+3. Se si vuole migliorare il protocollo di model selection, definire una validation multi-sessione separata dal test e ripetere la selezione in modo coerente sui modelli principali; non modificare lo split soltanto per YOLO.
 
 ## Note tecniche
 
