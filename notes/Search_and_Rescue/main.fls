@@ -1,8 +1,8 @@
-PWD /Users/donato/Desktop/SAR/Search_and_Rescue
+PWD /Users/donato/Desktop/SAR/notes/Search_and_Rescue
 INPUT /usr/local/texlive/2026/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-dist/web2c/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-var/web2c/xetex/xelatex.fmt
-INPUT main.tex
+INPUT /Users/donato/Desktop/SAR/notes/Search_and_Rescue/main.tex
 OUTPUT main.log
 INPUT /usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls
 INPUT /usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls

@@ -105,11 +105,36 @@ python main.py experiment \
   --parameters parameters/RTDETR/fam_ablation_eval.yaml
 ```
 
-Il confronto finale da completare è:
+## Risultati
 
 | Variante RT-DETR | Fusion | IR-only | VIS-only |
 |---|---:|---:|---:|
 | Additive Fusion senza FAM | 0.357 | 0.252 | 0.246 |
 | FAM DCNv2 corrente, Modello B | 0.396 | 0.263 | 0.262 |
-| FAM DCNv2 identity | da misurare | da misurare | da misurare |
-| Warp diretto `grid_sample` | da misurare | da misurare | da misurare |
+| FAM DCNv2 identity | 0.3775 | 0.2778 | 0.2495 |
+| Warp diretto `grid_sample` | 0.3918 | 0.3473 | 0.2554 |
+
+Rispetto all'Additive Fusion, la DCNv2 identity guadagna `+0.0205` in
+Fusion, `+0.0258` in IR-only e `+0.0035` in VIS-only. Il warp diretto
+guadagna rispettivamente `+0.0348`, `+0.0953` e `+0.0094`.
+
+Il confronto più informativo è tra le tre varianti FAM:
+
+- `grid_sample` supera la DCNv2 identity di `+0.0143` in Fusion, `+0.0695`
+  in IR-only e `+0.0059` in VIS-only;
+- rispetto alla DCNv2 corrente, `grid_sample` è inferiore di appena `0.0042`
+  in Fusion e di `0.0066` in VIS-only, ma superiore di `0.0843` in IR-only;
+- la DCNv2 identity è inferiore alla DCNv2 corrente di `0.0185` in Fusion e
+  `0.0125` in VIS-only, pur migliorando IR-only di `0.0148`.
+
+Il warp privo di filtraggio convoluzionale recupera quindi quasi interamente
+la prestazione Fusion della DCNv2 corrente e produce la migliore robustezza
+IR-only. Questo risultato è coerente con l'ipotesi che una parte sostanziale
+del beneficio del FAM provenga dall'allineamento geometrico, senza richiedere
+la trasformazione convoluzionale aggiuntiva. La differenza residua di `0.0042`
+in Fusion è troppo piccola, su una singola run, per attribuire con sicurezza
+un vantaggio alla DCNv2 corrente. Analogamente, la prestazione più bassa della
+DCNv2 identity mostra che l'inizializzazione modifica la dinamica di
+ottimizzazione, ma non dimostra da sola che il filtraggio convoluzionale sia
+la causa del vantaggio. Servirebbero seed multipli per conclusioni
+statisticamente robuste.

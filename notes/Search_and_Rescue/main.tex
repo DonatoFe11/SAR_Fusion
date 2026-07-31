@@ -383,6 +383,54 @@ Una run addestrata sempre in fusione, senza modal dropout, raggiunge 0.3890 in f
 \end{adjustbox}
 \end{table}
 
+\subsection{Ablation sull'identità iniziale e sul warp diretto}
+
+Per separare l'effetto dell'allineamento geometrico da quello della
+trasformazione convoluzionale aggiuntiva, sono state addestrate due varianti
+ulteriori con lo stesso protocollo del Modello B: seed 42, 10 epoche, modal
+dropout 20/20/60, nessuno Spatial Dropout e nessuno SSJ. Nella prima variante,
+la DCNv2 è inizializzata come identità matematica: offset nulli, pesi nulli
+fuori dal centro, matrice identità tra canali al centro moltiplicata per 2 per
+compensare la mask iniziale pari a 0.5 e bias nullo. La seconda variante
+predice un solo spostamento bidimensionale per posizione e applica direttamente
+\texttt{grid\_sample}, senza una convoluzione che filtri le feature IR.
+Test numerici su dimensioni pari e dispari hanno verificato, prima del primo
+aggiornamento, shape invariata, assenza di valori non finiti, errore assoluto
+massimo e relativo L2 inferiori a $10^{-5}$, gradienti finiti e possibilità
+di abbandonare l'identità dopo il primo passo dell'optimizer.
+
+\begin{table}[H]
+\centering
+\caption{Ablation del FAM sull'identità iniziale e sul warp diretto (mAP@50, threshold 0.01).}
+\label{tab:rtdetr_fam_identity_ablation}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Variante RT-DETR} & \textbf{RGB--IR} & \textbf{IR-only} & \textbf{VIS-only} \\
+\midrule
+Additive Fusion senza FAM & 0.3570 & 0.2520 & 0.2460 \\
+FAM DCNv2 corrente, Modello B & \textbf{0.3960} & 0.2630 & \textbf{0.2620} \\
+FAM DCNv2 identity & 0.3775 & 0.2778 & 0.2495 \\
+Warp diretto con \texttt{grid\_sample} & 0.3918 & \textbf{0.3473} & 0.2554 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Il warp diretto supera l'Additive Fusion di 0.0348 in RGB--IR, 0.0953 in
+IR-only e 0.0094 in VIS-only. Rispetto alla DCNv2 corrente perde soltanto
+0.0042 in RGB--IR e 0.0066 in VIS-only, ma guadagna 0.0843 in IR-only.
+Inoltre supera la DCNv2 identity in tutte le modalità: $+0.0143$ in RGB--IR,
+$+0.0695$ in IR-only e $+0.0059$ in VIS-only.
+
+Il fatto che un warp privo di filtraggio convoluzionale recuperi quasi tutta
+la prestazione multimodale della DCNv2 corrente è coerente con l'ipotesi che
+una parte sostanziale del beneficio del FAM provenga dall'allineamento
+geometrico. La differenza residua di 0.0042, osservata su una singola run, non
+è sufficiente per attribuire con sicurezza un vantaggio alla trasformazione
+convoluzionale. La prestazione inferiore della DCNv2 identity indica inoltre
+che l'inizializzazione modifica la dinamica di ottimizzazione, ma non dimostra
+da sola che il filtraggio iniziale sia la causa del divario. Per conclusioni
+statisticamente robuste sarebbero necessari seed multipli.
+
 \subsection{Verifica diretta dell'allineamento appreso}
 
 La mAP costituisce un'evidenza indiretta dell'utilità del FAM, ma non dimostra da sola che il modulo apprenda una trasformazione geometrica. È stato quindi sviluppato uno script di diagnostica che registra mediante \textit{forward hook} le feature RGB, IR e FAM(IR), oltre agli offset e alle mask interne. Le feature vengono visualizzate tramite una PCA condivisa a tre componenti, mentre gli offset sono aggregati separatamente per i livelli P3, P4 e P5.
