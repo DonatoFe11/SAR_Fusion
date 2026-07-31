@@ -1,0 +1,53 @@
+experiment:
+  name: RTDETR_FAM_Ablation_Baselines_Evaluation
+  group: RTDETR_Investigation
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+
+parameters:
+  seed: [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[FAM_Ablation, Baseline_Rerun]]
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [false]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      pretrained_path: ["checkpoints/rtdetr_additive_rerun.safetensors"]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir, ir, vis]
+    single_class: [true]
+    modal_dropout: [false]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids:
+  - model:
+      params:
+        use_fam: [true]
+        fam_variant: [current_dcnv2]
+        pretrained_path: ["checkpoints/rtdetr_current_dcnv2_rerun.safetensors"]
