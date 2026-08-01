@@ -1,6 +1,6 @@
 experiment:
-  name: Thesis_RTDETR_Ablation_FAM_Frozen
-  group: Thesis_RTDETR_Ablation
+  name: RTDETR_Smoke
+  group: RTDETR_training
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -8,20 +8,22 @@ experiment:
   isolate_runs: true
 
 parameters:
-  seed: [40, 41, 42, 43, 44]
+  seed: [40, 41]
   task: [detection]
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[Thesis, RTDETR, Ablation, FAM_Frozen]]
+    tags: [[RTDETR, Smoke]]
 
   train:
-    max_epochs: [10]
+    max_epochs: [1]
     compile: [False]
     initial_lr: [0.00002]
     optimizer: [AdamW]
     watch_metric: [map]
+    time_probe_interval: [100]
+    time_probe_sync: [true]
 
   loss:
 
@@ -33,7 +35,7 @@ parameters:
       threshold: [0.01]
       use_fam: [true]
       fam_variant: [current_dcnv2]
-      freeze_fam: [true]
+      freeze_fam: [false]
       ir_dropout_rate: [0.0]
       spatial_jitter_std: [0.0]
 

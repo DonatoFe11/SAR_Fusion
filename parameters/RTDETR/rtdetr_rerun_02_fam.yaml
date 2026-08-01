@@ -1,6 +1,6 @@
 experiment:
-  name: Thesis_RTDETR_Ablation_FAM
-  group: Thesis_RTDETR_Ablation
+  name: RTDETR_FAM_vis_ir
+  group: RTDETR_training
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -14,7 +14,7 @@ parameters:
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[Thesis, RTDETR, Ablation, FAM]]
+    tags: [[RTDETR, FAM, Rerun]]
 
   train:
     max_epochs: [10]
