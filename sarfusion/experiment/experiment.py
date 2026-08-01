@@ -3,6 +3,10 @@ from __future__ import annotations
 import copy
 import gc
 import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import uuid
 import pandas as pd
 from typing import Mapping
@@ -12,7 +16,13 @@ from sarfusion.experiment.run import YoloRun
 from sarfusion.utils.logger import get_logger
 from sarfusion.experiment.run import Run
 from sarfusion.experiment.parallel import ParallelRun
-from sarfusion.utils.utils import get_timestamp, load_yaml, nested_dict_update, update_collection
+from sarfusion.utils.utils import (
+    get_timestamp,
+    load_yaml,
+    nested_dict_update,
+    update_collection,
+    write_yaml,
+)
 from sarfusion.utils.grid import linearize, linearized_to_string, make_grid
 from sarfusion.utils.optuna import Optunizer
 
@@ -58,6 +68,7 @@ class ExpSettings(EasyDict):
         self.direction = None
         self.n_trials = None
         self.max_parallel_runs = 1
+        self.isolate_runs = False
         self.uuid = None
         self.timestamp = get_timestamp()
         super().__init__(*args, **kwargs)
@@ -81,6 +92,7 @@ class ExpSettings(EasyDict):
         self.direction = e.direction or self.direction
         self.n_trials = e.n_trials or self.n_trials
         self.max_parallel_runs = e.max_parallel_runs or self.max_parallel_runs
+        self.isolate_runs = e.isolate_runs or self.isolate_runs
         self.uuid = e.uuid or self.uuid
 
 
@@ -193,23 +205,56 @@ class Experimenter:
                 starting_run = 0
             for j in range(starting_run, len(grid)):
                 params = grid[j]
+                run = None
                 try:
                     logger.info(f"Running grid {i} out of {len(self.grids) - 1}")
                     logger.info(
                         f"Running run {j} out of {len(grid) - 1} ({sum(len(self.grids[k]) for k in range(i)) + j} / {self.gs.total_runs - 1})"
                     )
-                    run = self.run_class()
-                    run.init({"experiment": {**self.exp_settings}, **params})
-                    metric = run.launch()
+                    run_params = {"experiment": {**self.exp_settings}, **params}
+                    if self.exp_settings.isolate_runs:
+                        metric = self._execute_isolated_run(run_params)
+                    else:
+                        run = self.run_class()
+                        run.init(run_params)
+                        metric = run.launch()
                     print(self.EXP_FINISH_SEP)
                     if self.exp_settings.search == "optim":
                         self.grids[i].report_result(metric)
-                    gc.collect()
                 except Exception as ex:
                     logger.error(f"Experiment {i} failed with error {ex}")
                     print(self.EXP_CRASHED_SEP)
                     if not self.exp_settings.continue_with_errors:
                         raise ex
+                finally:
+                    if run is not None:
+                        run.end()
+                        del run
+                    gc.collect()
+
+    @staticmethod
+    def _execute_isolated_run(params):
+        """Execute one expanded grid item in a fresh Python process.
+
+        A process boundary is stronger than releasing CUDA tensors in-process:
+        it also resets CUDA/PyTorch global state that can otherwise degrade the
+        throughput of later grid items.
+        """
+        main_path = Path(__file__).resolve().parents[2] / "main.py"
+        with tempfile.TemporaryDirectory(prefix="sarfusion-grid-") as tmp_dir:
+            param_path = Path(tmp_dir) / "parameters.yaml"
+            write_yaml(params, str(param_path))
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(main_path),
+                    "run",
+                    "--parameters",
+                    str(param_path),
+                ],
+                check=True,
+            )
+        return completed.returncode
 
     def update_settings(self, d):
         self.exp_settings = update_collection(self.exp_settings, d)

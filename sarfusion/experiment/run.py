@@ -58,6 +58,7 @@ class Run:
         self.dataset_params = None
         self.train_params = None
         self.model = None
+        self.optimizer = None
         self.scheduler = None
         self.criterion = None
         self.best_metric = None
@@ -70,6 +71,8 @@ class Run:
         self.global_train_step = 0
         self.global_val_step = 0
         self.validation_json = None
+        self.accelerator = None
+        self._ended = False
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -851,8 +854,50 @@ class Run:
             self.evaluate(self.test_loader, phase="test")
 
     def end(self):
+        if self._ended:
+            return
+        self._ended = True
         logger.info("Ending run")
-        self.tracker.end()
+
+        try:
+            if self.tracker is not None:
+                self.tracker.end()
+        finally:
+            # Break the self-referencing lambda before collecting the run.
+            self.compute_val_metrics = None
+
+            if self.accelerator is not None:
+                (
+                    self.model,
+                    self.optimizer,
+                    self.scheduler,
+                    self.train_loader,
+                    self.val_loader,
+                    self.test_loader,
+                ) = self.accelerator.free_memory(
+                    self.model,
+                    self.optimizer,
+                    self.scheduler,
+                    self.train_loader,
+                    self.val_loader,
+                    self.test_loader,
+                )
+            else:
+                self.model = None
+                self.optimizer = None
+                self.scheduler = None
+                self.train_loader = None
+                self.val_loader = None
+                self.test_loader = None
+
+            self.criterion = None
+            self.train_evaluator = None
+            self.val_evaluator = None
+            self.denormalize = None
+            self.validation_json = None
+            self.tracker = None
+            self.accelerator = None
+
         logger.info("Run ended")
 
 

@@ -1,19 +1,31 @@
 experiment:
-  name: RTDETR_FAM_Identity_Ablation_Evaluation
-  group: RTDETR_Investigation
+  name: Thesis_RTDETR_Ablation_Smoke
+  group: Thesis_RTDETR_Ablation
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
   search: grid
+  isolate_runs: true
 
 parameters:
-  seed: [42]
+  seed: [40, 41]
   task: [detection]
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[FAM_Ablation]]
+    tags: [[Thesis, RTDETR, Ablation, Smoke]]
+
+  train:
+    max_epochs: [1]
+    compile: [False]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map]
+    time_probe_interval: [100]
+    time_probe_sync: [true]
+
+  loss:
 
   model:
     name: [fusion_rtdetr]
@@ -22,31 +34,27 @@ parameters:
         0: [person]
       threshold: [0.01]
       use_fam: [true]
-      fam_variant: [identity_dcnv2]
+      fam_variant: [current_dcnv2]
       freeze_fam: [false]
       ir_dropout_rate: [0.0]
       spatial_jitter_std: [0.0]
-      pretrained_path: ["checkpoints/rtdetr_fam_identity_dcnv2.safetensors"]
 
   dataset:
     name: [wisard]
     root: [dataset/WiSARD]
     preprocessor:
       path: ["PekingU/rtdetr_r50vd"]
-    folders: [vis_ir, ir, vis]
+    folders: [vis_ir]
     single_class: [true]
-    modal_dropout: [false]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
     use_tiling: [false]
 
   dataloader:
     num_workers: [8]
-    batch_size: [12]
+    batch_size: [4]
 
   val_evaluation:
     metrics:
 
-other_grids:
-  - model:
-      params:
-        fam_variant: [grid_sample]
-        pretrained_path: ["checkpoints/rtdetr_fam_grid_sample.safetensors"]
+other_grids: []

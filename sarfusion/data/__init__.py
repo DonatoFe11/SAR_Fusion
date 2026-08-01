@@ -62,10 +62,19 @@ def get_train_val_test_params(name, dataset_params):
             **dataset_params,
             "folders": train_folders,
         }
-        val_dataset_params = {**dataset_params, "folders": val_folders}
+        # Modal dropout is a training augmentation. Validation and test must
+        # always evaluate the complete modality input selected by their
+        # folders, otherwise checkpoint selection and final metrics depend on
+        # randomly masked samples.
+        val_dataset_params = {
+            **dataset_params,
+            "folders": val_folders,
+            "modal_dropout": False,
+        }
         test_dataset_params = {
-            **dataset_params, 
+            **dataset_params,
             "folders": test_folders,
+            "modal_dropout": False,
             "test_all_tiles": True if dataset_params.get("use_tiling", False) else False,
         }
     else:

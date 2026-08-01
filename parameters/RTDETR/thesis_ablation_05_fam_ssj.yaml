@@ -1,19 +1,20 @@
 experiment:
-  name: RTDETR_FAM_Ablation_Additive_Rerun
-  group: RTDETR_Investigation
+  name: Thesis_RTDETR_Ablation_FAM_SSJ
+  group: Thesis_RTDETR_Ablation
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
   search: grid
+  isolate_runs: true
 
 parameters:
-  seed: [42]
+  seed: [40, 41, 42, 43, 44]
   task: [detection]
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[FAM_Ablation, Baseline_Rerun]]
+    tags: [[Thesis, RTDETR, Ablation, FAM_SSJ]]
 
   train:
     max_epochs: [10]
@@ -30,11 +31,11 @@ parameters:
       id2label:
         0: [person]
       threshold: [0.01]
-      use_fam: [false]
+      use_fam: [true]
       fam_variant: [current_dcnv2]
       freeze_fam: [false]
       ir_dropout_rate: [0.0]
-      spatial_jitter_std: [0.0]
+      spatial_jitter_std: [0.5]
 
   dataset:
     name: [wisard]
