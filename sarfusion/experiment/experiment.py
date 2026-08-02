@@ -244,6 +244,11 @@ class Experimenter:
         with tempfile.TemporaryDirectory(prefix="sarfusion-grid-") as tmp_dir:
             param_path = Path(tmp_dir) / "parameters.yaml"
             write_yaml(params, str(param_path))
+            child_env = os.environ.copy()
+            child_env["PYTHONHASHSEED"] = str(params["seed"])
+            reproducibility = params.get("reproducibility", {})
+            if reproducibility.get("deterministic", False):
+                child_env.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -253,6 +258,7 @@ class Experimenter:
                     str(param_path),
                 ],
                 check=True,
+                env=child_env,
             )
         return completed.returncode
 

@@ -226,6 +226,58 @@ FAM_VARIANTS = {
 }
 
 
+def copy_matching_pretrained_label_heads(target, source, target_id2label):
+    """Reuse checkpoint class rows whose semantic labels match the target.
+
+    Hugging Face otherwise randomly reinitializes every class-related RT-DETR
+    tensor when changing from COCO's 80 classes to a one-class detector.
+    """
+    target_ids = sorted(int(index) for index in target_id2label)
+    if target_ids != list(range(len(target_ids))):
+        raise ValueError("Target label IDs must be contiguous and start at zero")
+
+    source_label_to_id = {
+        str(label).casefold(): int(index)
+        for index, label in source.config.id2label.items()
+    }
+    source_indices = []
+    for target_id in target_ids:
+        label = str(target_id2label[target_id])
+        try:
+            source_indices.append(source_label_to_id[label.casefold()])
+        except KeyError as exc:
+            raise ValueError(
+                f"Target label {label!r} is not present in the pretrained labels"
+            ) from exc
+
+    with torch.no_grad():
+        for target_layer, source_layer in zip(
+            target.class_embed, source.class_embed
+        ):
+            for target_id, source_id in enumerate(source_indices):
+                target_layer.weight[target_id].copy_(source_layer.weight[source_id])
+                target_layer.bias[target_id].copy_(source_layer.bias[source_id])
+
+        for target_id, source_id in enumerate(source_indices):
+            target.model.enc_score_head.weight[target_id].copy_(
+                source.model.enc_score_head.weight[source_id]
+            )
+            target.model.enc_score_head.bias[target_id].copy_(
+                source.model.enc_score_head.bias[source_id]
+            )
+            target.model.denoising_class_embed.weight[target_id].copy_(
+                source.model.denoising_class_embed.weight[source_id]
+            )
+
+        target_padding = target.model.denoising_class_embed.padding_idx
+        source_padding = source.model.denoising_class_embed.padding_idx
+        target.model.denoising_class_embed.weight[target_padding].copy_(
+            source.model.denoising_class_embed.weight[source_padding]
+        )
+
+    return source_indices
+
+
 def build_feature_alignment_module(
     variant,
     in_channels,
@@ -434,24 +486,44 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         ir_dropout_rate=0.0,
         spatial_jitter_std=0.0,
         fam_variant="current_dcnv2",
+        reuse_pretrained_class_head=False,
     ):
-        # Standard RT-DETR model
-        base = RTDetrForObjectDetection.from_pretrained(
-            pretrained_model_name,
-            id2label=id2label,
-            label2id=label2id,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
-        )
+        if reuse_pretrained_class_head:
+            # Load the original label space so matching semantic rows (notably
+            # COCO "person") remain available for transfer.
+            base = RTDetrForObjectDetection.from_pretrained(
+                pretrained_model_name,
+            )
+        else:
+            base = RTDetrForObjectDetection.from_pretrained(
+                pretrained_model_name,
+                id2label=id2label,
+                label2id=label2id,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+            )
 
-        config = base.config
+        config = copy.deepcopy(base.config)
+        config.id2label = {int(index): label for index, label in id2label.items()}
+        config.label2id = {label: int(index) for index, label in config.id2label.items()}
         config.num_channels = 4
         instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
 
         # Load everything (decoder, encoder, etc.)
-        instance.load_state_dict(base.state_dict())
+        base_state = base.state_dict()
+        if reuse_pretrained_class_head:
+            instance_state = instance.state_dict()
+            compatible_state = {
+                key: value
+                for key, value in base_state.items()
+                if key in instance_state and value.shape == instance_state[key].shape
+            }
+            instance.load_state_dict(compatible_state)
+            copy_matching_pretrained_label_heads(instance, base, config.id2label)
+        else:
+            instance.load_state_dict(base_state)
 
         # ---- RGB backbone ----
-        sd = base.state_dict()
+        sd = base_state
         rgb_w = {
             k.replace("model.backbone.", ""): v
             for k, v in sd.items()

@@ -488,6 +488,7 @@ class WiSARDDataset(Dataset):
             original_idx = idx
 
         if item_type == RGB_ITEM:
+            mode = "rgb"
             img_path, annotation_path = item
             img_pil = self._load_rgb(img_path)
             
@@ -515,6 +516,7 @@ class WiSARDDataset(Dataset):
             img_path_vis = img_path
 
         elif item_type == IR_ITEM:
+            mode = "ir"
             img_path, annotation_path = item
             img_pil = self._load_ir(img_path)
             
@@ -598,7 +600,13 @@ class WiSARDDataset(Dataset):
                 img = torch.cat([zeros_rgb, img_ir_tensor], dim=0)  # [4, H, W]
                 targets = inputs_ir['labels'][0]
 
-        data_dict = DataDict(pixel_values=img, labels=dict(targets), dims=targets["orig_size"])
+        data_dict = DataDict(
+            pixel_values=img,
+            labels=dict(targets),
+            dims=targets["orig_size"],
+            sample_idx=idx,
+            modality_mode=mode,
+        )
         
         if self.return_path:
             data_dict.path = img_path_vis
@@ -634,6 +642,10 @@ class WiSARDDataset(Dataset):
         result["pixel_mask"] = encoding["pixel_mask"]
         result["labels"] = labels
         result["dims"] = dims
+        result["sample_idx"] = torch.tensor(
+            [item["sample_idx"] for item in batch], dtype=torch.int64
+        )
+        result["modality_mode"] = [item["modality_mode"] for item in batch]
         
         # Aggiungi metadati per tiling se presenti
         if "original_idx" in batch[0]:
