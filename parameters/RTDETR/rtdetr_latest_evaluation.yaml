@@ -1,0 +1,109 @@
+experiment:
+  name: RTDETR_Latest_Checkpoint_Evaluation
+  group: RTDETR_evaluation
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: True
+
+# Each grid contains exactly one seed/checkpoint pair. Keeping the paths under
+# wandb avoids duplicating the accelerator checkpoints in checkpoints/.
+parameters:
+  seed: [42]
+  task: [detection]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, Latest, Evaluation, Additive]]
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [false]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      pretrained_path: [wandb/run-20260801_150645-j48apqk6/files/latest/model.safetensors]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [false]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids:
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, Additive]]
+    model:
+      params:
+        pretrained_path: [wandb/run-20260801_172209-cw3n7iyu/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, Additive]]
+    model:
+      params:
+        pretrained_path: [wandb/run-20260801_195536-6sw6ymwy/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, Additive]]
+    model:
+      params:
+        pretrained_path: [wandb/run-20260801_222911-rlt2xchp/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, Additive]]
+    model:
+      params:
+        pretrained_path: [wandb/run-20260802_004415-9nzdvpdh/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, FAM]]
+    model:
+      params:
+        use_fam: [true]
+        pretrained_path: [wandb/run-20260802_031523-k946p3ad/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, FAM]]
+    model:
+      params:
+        use_fam: [true]
+        pretrained_path: [wandb/run-20260802_071324-7aqh9fwj/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, FAM]]
+    model:
+      params:
+        use_fam: [true]
+        pretrained_path: [wandb/run-20260802_094752-c9p3icpq/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, FAM]]
+    model:
+      params:
+        use_fam: [true]
+        pretrained_path: [wandb/run-20260802_123927-oxd0l06e/files/latest/model.safetensors]
+
+  - tracker:
+      tags: [[RTDETR, Latest, Evaluation, FAM]]
+    model:
+      params:
+        use_fam: [true]
+        pretrained_path: [wandb/run-20260802_153111-xte97tkd/files/latest/model.safetensors]
