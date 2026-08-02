@@ -107,8 +107,23 @@ Il confronto architetturale finale dovrebbe usare seed appaiati, checkpoint
 confidenza. La validation attuale può restare una diagnostica out-of-domain, ma
 non un selettore del checkpoint.
 
-La configurazione `rtdetr_base_stability_validation.yaml` è il passo di
-validazione completo: tre ripetizioni del seed 42, dieci epoche, CUDA nativa,
-testa `person` pretrained, nessuna selezione su validation e valutazione del
-solo checkpoint finale `latest`. Il checkpoint viene salvato una sola volta a
-fine training per evitare I/O inutile.
+Le prime due run complete CUDA native con testa pretrained hanno confermato
+che la mitigazione non basta per rendere stabile il risultato finale:
+
+| Run | mAP@50 test | Loss media finale |
+|---|---:|---:|
+| `lecqa23d` | 0.4171 | 6.3060 |
+| `tkmixj3u` | 0.2934 | 7.2605 |
+
+La differenza di 0.1236 mAP@50 rende inutile una terza replica come tentativo
+di validazione della stabilità. I trace hanno stessa loss iniziale
+(`19.8649006`) e stessa testa dopo il primo aggiornamento, ma l'hash globale
+dei pesi diverge già al primo `optimizer_step`, coerentemente con il backward
+CUDA non deterministico dell'attenzione deformabile.
+
+Il passo successivo è `rtdetr_base_deterministic_full.yaml`: una sola run di
+dieci epoche con interpolazione deterministica, testa `person` pretrained,
+validation a ogni epoca usata soltanto come diagnostica e valutazione del
+checkpoint finale `latest`. La validation non seleziona il checkpoint: il
+checkpoint viene salvato una sola volta a fine training. La run va ripetuta
+identica solo se la sua accuratezza finale è accettabile.
