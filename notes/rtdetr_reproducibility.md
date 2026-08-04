@@ -127,3 +127,103 @@ validation a ogni epoca usata soltanto come diagnostica e valutazione del
 checkpoint finale `latest`. La validation non seleziona il checkpoint: il
 checkpoint viene salvato una sola volta a fine training. La run va ripetuta
 identica solo se la sua accuratezza finale è accettabile.
+
+### Prima run deterministica completa
+
+La run `d19h9d3h` ha completato dieci epoche in circa 13 ore e 21 minuti:
+
+| Metrica | Valore |
+|---|---:|
+| test mAP@50 | 0.3844 |
+| test mAP@50:75 | 0.1312 |
+| loss media train, epoca 10 | 6.4535 |
+| validation mAP@50, epoca 10 | 0.000038 |
+
+Il risultato test è compreso tra quelli delle due run CUDA native complete
+(`0.2934–0.4171`), quindi il percorso deterministico non mostra una perdita
+anomala di accuratezza. La validation quasi nulla conferma invece che lo split
+attuale può essere registrato come diagnostica, ma non usato per scegliere il
+checkpoint. Il controllo conclusivo consiste nel rilanciare la stessa
+configurazione e confrontare trace, metriche finali e hash del checkpoint.
+
+La replica `pso8m75j` ha poi confermato la riproducibilità completa: tutti i
+402 eventi dei trace coincidono, tutte le metriche train/validation/test sono
+identiche e i due checkpoint finali hanno lo stesso SHA-256
+`d05d553c555674bc7a045c83b8fe40ec856382e606d54e4bc30c10475252dfa0`.
+
+## Limite deterministico del FAM DCNv2
+
+Il probe strict FAM `amw689bj` si arresta al primo backward con l'errore
+`compute_grad_input does not have a deterministic implementation`.
+L'operatore incompatibile è `torchvision.ops.DeformConv2d`, usato dalla
+variante `current_dcnv2`. Un equivalente PyTorch basato su sampling bilineare
+ha confermato l'equivalenza numerica su CPU, ma sui livelli da 512, 1024 e 2048
+canali richiede più di due minuti per il primo batch ed è quindi inadatto a un
+training completo. Il fallback sperimentale non è stato mantenuto.
+
+Tre probe FAM CUDA native same-seed (`vaiwp67x`, `5nbzxxma`, `axvu0yll`)
+mostrano che DCNv2 amplifica ulteriormente il non determinismo:
+
+| Probe | Range medio loss, 20 step | Range massimo |
+|---|---:|---:|
+| base nativo, testa pretrained | 0.4393 | 1.6424 |
+| FAM DCNv2 nativo, testa pretrained | 1.9942 | 5.8039 |
+
+Anche nel FAM input, inizializzazione e prima loss coincidono, ma gli hash dei
+pesi divergono al primo optimizer step. Un singolo full training FAM nativo
+non può quindi sostenere un confronto architetturale affidabile. Le alternative
+sono un kernel DCNv2 CUDA deterministico efficiente, una diversa architettura
+di allineamento oppure un protocollo statistico con repliche native esplicite.
+
+La variante `identity_dcnv2` è stata verificata separatamente con i probe
+`35v9lmpk`, `78wb16t0` e `q8yd4qa6`. Mantiene DCNv2, ma inizializza la sua
+mappatura esattamente come identità. La loss iniziale torna da `34.9876` a
+`19.8649`, uguale al base, e il range medio sui primi 20 step scende da
+`1.9942` a `0.8248`. Resta comunque non deterministica e presenta un range
+massimo di `6.4395`; va quindi considerata una variante architetturale distinta
+e non una soluzione deterministica per `current_dcnv2`.
+
+## Protocollo finale della tesi
+
+La campagna confermativa è separata in sei esperimenti autonomi. Tutti usano
+CUDA nativa, cinque seed appaiati (`40–44`), un nuovo processo per ogni seed,
+testa COCO `person`, Modal Dropout soltanto sul training, dieci epoche fisse e
+test del solo checkpoint finale `latest`. La validation corrente non viene
+eseguita durante il training e non seleziona checkpoint.
+
+| N. | File | Configurazione | Run |
+|---:|---|---|---:|
+| 1 | `rtdetr_additive.yaml` | Base/Additive | 5 |
+| 2 | `rtdetr_fam.yaml` | FAM `current_dcnv2` | 5 |
+| 3 | `rtdetr_fam_ir_dropout.yaml` | FAM + IR Dropout 0.4 | 5 |
+| 4 | `rtdetr_fam_ssj.yaml` | FAM + SSJ 0.5 | 5 |
+| 5 | `rtdetr_ablation_identity_dcnv2.yaml` | ablation `identity_dcnv2` | 5 |
+| 6 | `rtdetr_ablation_grid_sample.yaml` | ablation `grid_sample` | 5 |
+
+Ogni file espande quindi esattamente cinque run sequenziali. I seed occupano
+le posizioni `start_from_run` da `0` a `4`; `start_from_grid` resta `0` perché
+ogni file contiene una sola configurazione. Prima di una ripresa vanno
+controllate le run effettivamente concluse su W&B per evitare duplicati.
+
+Il controllo Frozen Random non fa parte del protocollo: congelerebbe una
+trasformazione DCNv2 inizializzata casualmente e non un modulo FAM pretrained,
+quindi non risponderebbe in modo pulito alla domanda sperimentale della tesi.
+I precedenti YAML `rerun`, i vecchi YAML `ablation`, il protocollo combinato e
+i file temporanei di probe/smoke sono stati rimossi perché sostituiti da questi
+sei file. Sono stati invece conservati i YAML diagnostici del modello base,
+che documentano le verifiche di riproducibilità.
+
+Prima della separazione, uno smoke test del protocollo ha completato due batch
+per ognuna delle sei configurazioni il 4 agosto 2026. I singoli esperimenti si
+avviano con:
+
+```bash
+python main.py experiment --parameters parameters/RTDETR/rtdetr_additive.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_fam.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ir_dropout.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ssj.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_identity_dcnv2.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_grid_sample.yaml
+```
+
+Su una singola GPU gli esperimenti vanno eseguiti uno alla volta.

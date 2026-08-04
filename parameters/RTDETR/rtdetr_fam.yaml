@@ -1,7 +1,7 @@
 experiment:
-  name: RTDETR_FAM_Frozen_vis_ir
-  group: RTDETR_training
-  continue_with_errors: False
+  name: RTDETR_Protocol
+  group: RTDETR_main
+  continue_with_errors: true
   start_from_grid: 0
   start_from_run: 0
   search: grid
@@ -9,16 +9,30 @@ experiment:
 
 parameters:
   seed: [40, 41, 42, 43, 44]
+  repetition: [0]
   task: [detection]
+  run_test: [true]
+  test_checkpoint: [latest]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[RTDETR, FAM_Frozen, Rerun]]
+    tags: [[RTDETR, Protocol, FAM, Current-DCNv2]]
 
   train:
     max_epochs: [10]
-    compile: [False]
+    run_validation: [false]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    compile: [false]
     initial_lr: [0.00002]
     optimizer: [AdamW]
     watch_metric: [map]
@@ -33,9 +47,10 @@ parameters:
       threshold: [0.01]
       use_fam: [true]
       fam_variant: [current_dcnv2]
-      freeze_fam: [true]
+      freeze_fam: [false]
       ir_dropout_rate: [0.0]
       spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
 
   dataset:
     name: [wisard]
