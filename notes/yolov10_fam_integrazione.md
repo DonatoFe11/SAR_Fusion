@@ -443,10 +443,17 @@ Entrambe devono usare:
 - tabella dei valori per seed, media, mediana, deviazione standard, min–max, IC
   95% e differenze appaiate.
 
-Il codice attuale non soddisfa ancora questo protocollo: `WisardTrainer.final_eval()`
-valida soltanto `best.pt` e gli YAML `30`/`31` usano seed 42, validation attiva
-e patience 30. Prima del training vanno creati file finali separati e aggiunto
-un selettore esplicito del checkpoint di test, con test automatici.
+Il protocollo è ora implementato in due configurazioni separate:
+
+- `parameters/YOLO/yolov10_additive_protocol.yaml`;
+- `parameters/YOLO/yolov10_fam_protocol.yaml`.
+
+Entrambe espandono i seed `40–44` in processi isolati, disabilitano early
+stopping con `patience: 0`, mantengono 200 epoche fisse e impostano
+`test_checkpoint: last`. `WisardTrainer.final_eval()` accetta esplicitamente
+`best` o `last` e valuta sul test split soltanto la scelta dichiarata. Un test
+automatico verifica sia il selettore sia l'equivalenza del protocollo fra i
+due YAML, salvo l'attivazione del FAM.
 
 ### SSJ e vecchie grid
 

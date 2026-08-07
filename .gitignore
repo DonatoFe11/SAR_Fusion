@@ -152,6 +152,8 @@ runs
 SarYOLO
 SarYOLOSingleClass
 SarYOLOSingleClassModalDropout
+SarYOLOAdditiveProtocol
+SarYOLOFAMProtocol
 
 output
 test

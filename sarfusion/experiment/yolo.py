@@ -53,6 +53,7 @@ WISARD_DEFAULT_CFG = IterableSimpleNamespace(
         "modal_dropout": False,
         "modal_dropout_probs": [0.2, 0.2, 0.6],
         "modal_dropout_strategy": "feature",
+        "test_checkpoint": "best",
     }
 )
 
@@ -260,17 +261,33 @@ class WisardTrainer(YOLOv10DetectionTrainer):
         )
         
     def final_eval(self):
-        """Performs final evaluation and validation for object detection YOLO model."""
+        """Evaluate the predeclared final checkpoint on the WiSARD test split."""
+        checkpoint_name = getattr(self.args, "test_checkpoint", "best")
+        if checkpoint_name not in {"best", "last"}:
+            raise ValueError(
+                "test_checkpoint must be 'best' or 'last', got "
+                f"{checkpoint_name!r}"
+            )
+
         batch_size = self.batch_size if self.args.task == "obb" else self.batch_size * 2
         test_loader = self.get_dataloader(self.data['test'], batch_size=batch_size, mode="val", rank=-1)
         for f in self.last, self.best:
             if f.exists():
                 strip_optimizer(f)  # strip optimizers
-                if f is self.best:
-                    LOGGER.info(f"\nValidating {f}...")
-                    self.validator.args.plots = self.args.plots
-                    self.validator.dataloader = test_loader
-                    self.metrics = self.validator(model=f, mode="test")
-                    self.metrics.pop("fitness", None)
-                    self.metrics = {k.replace("metrics/", "test/"): v for k,v in self.metrics.items()}
-                    self.run_callbacks("on_fit_epoch_end")
+
+        checkpoint = self.last if checkpoint_name == "last" else self.best
+        if not checkpoint.exists():
+            raise FileNotFoundError(
+                f"Requested final YOLO checkpoint does not exist: {checkpoint}"
+            )
+
+        LOGGER.info(f"\nValidating predeclared {checkpoint_name}.pt: {checkpoint}...")
+        self.validator.args.plots = self.args.plots
+        self.validator.dataloader = test_loader
+        self.metrics = self.validator(model=checkpoint, mode="test")
+        self.metrics.pop("fitness", None)
+        self.metrics = {
+            key.replace("metrics/", "test/"): value
+            for key, value in self.metrics.items()
+        }
+        self.run_callbacks("on_fit_epoch_end")

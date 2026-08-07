@@ -297,7 +297,8 @@ esplorativi.
 3. Eseguire la diagnostica sui 15 checkpoint RT-DETR già disponibili con
    `python scripts/run_rtdetr_fam_diagnostics.py`.
 4. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
-5. Preparare e verificare con smoke test i due YAML YOLO finali.
+5. Preparare e verificare con smoke test i due YAML YOLO finali. **YAML e
+   selezione di `last.pt` implementati; resta il breve smoke test su GPU.**
 6. Eseguire le 10 run YOLO e le 30 valutazioni di modalità.
 7. Se si decide di includere lo stress test opzionale, preparare lo split
    Carnation e valutare i 10 checkpoint RT-DETR Additive/FAM una sola volta.

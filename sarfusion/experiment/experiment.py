@@ -104,6 +104,7 @@ class Experimenter:
         self.gs = None
         self.exp_settings = ExpSettings()
         self.grids = None
+        self.yolo = yolo
         self.run_class = YoloRun if yolo else Run
 
     def calculate_runs(self, settings):
@@ -213,7 +214,10 @@ class Experimenter:
                     )
                     run_params = {"experiment": {**self.exp_settings}, **params}
                     if self.exp_settings.isolate_runs:
-                        metric = self._execute_isolated_run(run_params)
+                        metric = self._execute_isolated_run(
+                            run_params,
+                            yolo=self.yolo,
+                        )
                     else:
                         run = self.run_class()
                         run.init(run_params)
@@ -233,7 +237,7 @@ class Experimenter:
                     gc.collect()
 
     @staticmethod
-    def _execute_isolated_run(params):
+    def _execute_isolated_run(params, yolo=False):
         """Execute one expanded grid item in a fresh Python process.
 
         A process boundary is stronger than releasing CUDA tensors in-process:
@@ -247,13 +251,16 @@ class Experimenter:
             child_env = os.environ.copy()
             child_env["PYTHONHASHSEED"] = str(params["seed"])
             reproducibility = params.get("reproducibility", {})
-            if reproducibility.get("deterministic", False):
+            deterministic = reproducibility.get(
+                "deterministic", False
+            ) or params.get("deterministic", False)
+            if deterministic:
                 child_env.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
             completed = subprocess.run(
                 [
                     sys.executable,
                     str(main_path),
-                    "run",
+                    "yolo" if yolo else "run",
                     "--parameters",
                     str(param_path),
                 ],
@@ -277,8 +284,7 @@ class ParallelExperimenter(Experimenter):
     EXP_CRASHED_SEP = "|\\" * 50 + "CRASHED" + "|\\" * 50 + "\n"
 
     def __init__(self, yolo=False):
-        super().__init__()
-        self.yolo = yolo
+        super().__init__(yolo=yolo)
 
     def execute_runs(self, only_create=False):
         starting_run = self.exp_settings.start_from_run
