@@ -704,6 +704,36 @@ def main():
                          help="hf: RT-DETR/DefDETR/DINO (.safetensors); yolo: YOLOv10FusionFAM (Ultralytics .pt)")
     parser.add_argument("--config", required=True, help="run YAML configuration to inspect")
     parser.add_argument("--run-index", type=int, default=0, help="combination index when the config produces multiple grid-search runs")
+    parser.add_argument(
+        "--use-fam",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="[hf only] override model.params.use_fam from the YAML",
+    )
+    parser.add_argument(
+        "--freeze-fam",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="[hf only] override model.params.freeze_fam from the YAML",
+    )
+    parser.add_argument(
+        "--fam-variant",
+        choices=["current_dcnv2", "identity_dcnv2", "grid_sample"],
+        default=None,
+        help="[hf only] override model.params.fam_variant from the YAML",
+    )
+    parser.add_argument(
+        "--ir-dropout-rate",
+        type=float,
+        default=None,
+        help="[hf only] override model.params.ir_dropout_rate from the YAML",
+    )
+    parser.add_argument(
+        "--spatial-jitter-std",
+        type=float,
+        default=None,
+        help="[hf only] override model.params.spatial_jitter_std from the YAML",
+    )
     parser.add_argument("--checkpoint", required=True, help="[hf] path to best/model.safetensors | [yolo] path to weights/best.pt")
     parser.add_argument("--dataset-root", default=None, help="[hf only] absolute WiSARD dataset-root override (the YAML root field is relative)")
     parser.add_argument("--data-yaml", default=None, help="[yolo only] path to the dataset YAML (e.g. wisards_vis_ir.yaml)")
@@ -738,6 +768,16 @@ def main():
     else:
         run_config = load_run_config(args.config, run_index=args.run_index)
         model_params = run_config["model"]
+        model_overrides = {
+            "use_fam": args.use_fam,
+            "freeze_fam": args.freeze_fam,
+            "fam_variant": args.fam_variant,
+            "ir_dropout_rate": args.ir_dropout_rate,
+            "spatial_jitter_std": args.spatial_jitter_std,
+        }
+        for key, value in model_overrides.items():
+            if value is not None:
+                model_params["params"][key] = value
         dataset_params = run_config["dataset"]
         dataloader_params = run_config["dataloader"]
         if args.dataset_root:

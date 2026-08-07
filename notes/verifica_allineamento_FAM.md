@@ -221,7 +221,10 @@ L'estensione implementata:
   Grid Sample.
 
 Il runner `scripts/run_rtdetr_fam_diagnostics.py` risolve i checkpoint locali
-per coppia progetto/seed, esegue i trenta campioni fissati e produce:
+per coppia progetto/seed. Ricostruisce esplicitamente ciascuna architettura a
+partire dal template comune `parameters/RTDETR/rtdetr_protocol.yaml`, quindi
+non dipende dai vecchi YAML separati delle campagne. Esegue i trenta campioni
+fissati e produce:
 
 - JSON grezzi riavviabili in `out/rtdetr_fam_diagnostics/raw/`;
 - un JSON combinato con aggregati per checkpoint e poi tra seed;

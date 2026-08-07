@@ -26,17 +26,32 @@ from sarfusion.models.checkpoints import resolve_local_wandb_checkpoint  # noqa:
 CONFIGURATIONS = {
     "fam": {
         "project": "RTDETR_FAM_Protocol",
-        "config": "parameters/RTDETR/rtdetr_fam.yaml",
+        "config": "parameters/RTDETR/rtdetr_protocol.yaml",
+        "model_overrides": {
+            "fam_variant": "current_dcnv2",
+            "ir_dropout_rate": 0.0,
+            "spatial_jitter_std": 0.0,
+        },
         "figures": True,
     },
     "ssj": {
         "project": "RTDETR_FAM_SSJ_Protocol",
-        "config": "parameters/RTDETR/rtdetr_fam_ssj.yaml",
+        "config": "parameters/RTDETR/rtdetr_protocol.yaml",
+        "model_overrides": {
+            "fam_variant": "current_dcnv2",
+            "ir_dropout_rate": 0.0,
+            "spatial_jitter_std": 0.5,
+        },
         "figures": True,
     },
     "grid_sample": {
         "project": "RTDETR_FAM_Grid_Sample_Ablation",
-        "config": "parameters/RTDETR/rtdetr_ablation_grid_sample.yaml",
+        "config": "parameters/RTDETR/rtdetr_protocol.yaml",
+        "model_overrides": {
+            "fam_variant": "grid_sample",
+            "ir_dropout_rate": 0.0,
+            "spatial_jitter_std": 0.0,
+        },
         "figures": False,
     },
 }
@@ -97,6 +112,11 @@ def run_one_job(
         "--model-type", "hf",
         "--config", str(REPO_ROOT / configuration["config"]),
         "--run-index", str(seed - 40),
+        "--use-fam",
+        "--no-freeze-fam",
+        "--fam-variant", configuration["model_overrides"]["fam_variant"],
+        "--ir-dropout-rate", str(configuration["model_overrides"]["ir_dropout_rate"]),
+        "--spatial-jitter-std", str(configuration["model_overrides"]["spatial_jitter_std"]),
         "--checkpoint", checkpoint,
         "--sample-idx", *[str(index) for index in sample_set["indices"]],
         "--split", sample_set["split"],

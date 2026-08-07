@@ -28,14 +28,10 @@ di denoising. Con questa opzione l'intero hash iniziale è identico usando seed
 
 ## Probe same-seed
 
-Il file `parameters/RTDETR/rtdetr_base_reproducibility_probe.yaml` esegue tre
-processi indipendenti con seed 42. Ogni processo allena solo 20 batch e non
-esegue validation, test o salvataggio dei checkpoint.
-
-```bash
-conda run -n sarfusion python main.py experiment \
-  --parameters parameters/RTDETR/rtdetr_base_reproducibility_probe.yaml
-```
+Il probe ha eseguito tre processi indipendenti con seed 42. Ogni processo ha
+allenato solo 20 batch, senza validation, test o salvataggio dei checkpoint.
+La configurazione YAML temporanea è stata rimossa dopo il completamento
+dell'indagine; parametri, run W&B e risultati restano documentati qui.
 
 Ogni run produce `reproducibility_trace.jsonl` nella propria cartella W&B. Il
 trace contiene:
@@ -121,12 +117,11 @@ di validazione della stabilità. I trace hanno stessa loss iniziale
 dei pesi diverge già al primo `optimizer_step`, coerentemente con il backward
 CUDA non deterministico dell'attenzione deformabile.
 
-Il passo successivo è `rtdetr_base_deterministic_full.yaml`: una sola run di
-dieci epoche con interpolazione deterministica, testa `person` pretrained,
-validation a ogni epoca usata soltanto come diagnostica e valutazione del
-checkpoint finale `latest`. La validation non seleziona il checkpoint: il
-checkpoint viene salvato una sola volta a fine training. La run va ripetuta
-identica solo se la sua accuratezza finale è accettabile.
+Il passo successivo è stato una sola run di dieci epoche con interpolazione
+deterministica, testa `person` pretrained, validation a ogni epoca usata
+soltanto come diagnostica e valutazione del checkpoint finale `latest`. La
+validation non selezionava il checkpoint, salvato una sola volta a fine
+training.
 
 ### Prima run deterministica completa
 
@@ -191,39 +186,34 @@ testa COCO `person`, Modal Dropout soltanto sul training, dieci epoche fisse e
 test del solo checkpoint finale `latest`. La validation corrente non viene
 eseguita durante il training e non seleziona checkpoint.
 
-| N. | File | Configurazione | Progetto W&B | Run |
-|---:|---|---|---|---:|
-| 1 | `rtdetr_additive.yaml` | Base/Additive | `RTDETR_Protocol` | 5 |
-| 2 | `rtdetr_fam.yaml` | FAM `current_dcnv2` | `RTDETR_FAM_Protocol` | 5 |
-| 3 | `rtdetr_fam_ir_dropout.yaml` | FAM + IR Dropout 0.4 | `RTDETR_FAM_IR_Dropout_Protocol` | 5 |
-| 4 | `rtdetr_fam_ssj.yaml` | FAM + SSJ 0.5 | `RTDETR_FAM_SSJ_Protocol` | 5 |
-| 5 | `rtdetr_ablation_identity_dcnv2.yaml` | ablation `identity_dcnv2` | `RTDETR_FAM_Identity_DCNv2_Ablation` | 5 |
-| 6 | `rtdetr_ablation_grid_sample.yaml` | ablation `grid_sample` | `RTDETR_FAM_Grid_Sample_Ablation` | 5 |
+| N. | Configurazione | Progetto W&B | Run |
+|---:|---|---|---:|
+| 1 | Base/Additive | `RTDETR_Protocol` | 5 |
+| 2 | FAM `current_dcnv2` | `RTDETR_FAM_Protocol` | 5 |
+| 3 | FAM + IR Dropout 0.4 | `RTDETR_FAM_IR_Dropout_Protocol` | 5 |
+| 4 | FAM + SSJ 0.5 | `RTDETR_FAM_SSJ_Protocol` | 5 |
+| 5 | ablation `identity_dcnv2` | `RTDETR_FAM_Identity_DCNv2_Ablation` | 5 |
+| 6 | ablation `grid_sample` | `RTDETR_FAM_Grid_Sample_Ablation` | 5 |
 
-Ogni file espande quindi esattamente cinque run sequenziali. I seed occupano
-le posizioni `start_from_run` da `0` a `4`; `start_from_grid` resta `0` perché
-ogni file contiene una sola configurazione. Prima di una ripresa vanno
-controllate le run effettivamente concluse su W&B per evitare duplicati.
+Ciascuna campagna ha eseguito esattamente cinque run sequenziali. I seed
+occupavano le posizioni `start_from_run` da `0` a `4`; `start_from_grid`
+restava `0` perché ogni lancio conteneva una sola configurazione.
 
 Il controllo Frozen Random non fa parte del protocollo: congelerebbe una
 trasformazione DCNv2 inizializzata casualmente e non un modulo FAM pretrained,
 quindi non risponderebbe in modo pulito alla domanda sperimentale della tesi.
-I precedenti YAML `rerun`, i vecchi YAML `ablation`, il protocollo combinato e
-i file temporanei di probe/smoke sono stati rimossi perché sostituiti da questi
-sei file. Sono stati invece conservati i YAML diagnostici del modello base,
-che documentano le verifiche di riproducibilità.
+I file separati usati per training, probe, smoke e valutazioni sono stati
+rimossi dopo il completamento. Il repository conserva un solo template
+generale, `parameters/RTDETR/rtdetr_protocol.yaml`, con il protocollo comune e
+la tabella dei parametri da impostare per ricostruire ognuna delle sei
+configurazioni. I risultati restano legati ai progetti e alle run W&B elencati.
 
 Prima della separazione, uno smoke test del protocollo ha completato due batch
-per ognuna delle sei configurazioni il 4 agosto 2026. I singoli esperimenti si
-avviano con:
+per ognuna delle sei configurazioni il 4 agosto 2026. Per un eventuale nuovo
+esperimento si modifica il template per una sola configurazione e si avvia:
 
 ```bash
-python main.py experiment --parameters parameters/RTDETR/rtdetr_additive.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_fam.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ir_dropout.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ssj.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_identity_dcnv2.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_grid_sample.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_protocol.yaml
 ```
 
 Su una singola GPU gli esperimenti vanno eseguiti uno alla volta.
@@ -238,14 +228,14 @@ fine del training, viene ripetuto qui con lo stesso protocollo, batch size e
 organizzazione W&B delle modalità singole. La campagna contiene 30 test per
 modalità, per un totale di 90 valutazioni.
 
-| Configurazione | File | Progetto W&B | Test |
-|---|---|---|---:|
-| Base/Additive | `rtdetr_additive_modality_evaluation.yaml` | `RTDETR_Additive_Modality_Evaluation` | 15 |
-| FAM `current_dcnv2` | `rtdetr_fam_modality_evaluation.yaml` | `RTDETR_FAM_Modality_Evaluation` | 15 |
-| FAM + IR Dropout | `rtdetr_fam_ir_dropout_modality_evaluation.yaml` | `RTDETR_FAM_IR_Dropout_Modality_Evaluation` | 15 |
-| FAM + SSJ | `rtdetr_fam_ssj_modality_evaluation.yaml` | `RTDETR_FAM_SSJ_Modality_Evaluation` | 15 |
-| ablation `identity_dcnv2` | `rtdetr_ablation_identity_dcnv2_modality_evaluation.yaml` | `RTDETR_FAM_Identity_DCNv2_Modality_Evaluation` | 15 |
-| ablation `grid_sample` | `rtdetr_ablation_grid_sample_modality_evaluation.yaml` | `RTDETR_FAM_Grid_Sample_Modality_Evaluation` | 15 |
+| Configurazione | Progetto W&B | Test |
+|---|---|---:|
+| Base/Additive | `RTDETR_Additive_Modality_Evaluation` | 15 |
+| FAM `current_dcnv2` | `RTDETR_FAM_Modality_Evaluation` | 15 |
+| FAM + IR Dropout | `RTDETR_FAM_IR_Dropout_Modality_Evaluation` | 15 |
+| FAM + SSJ | `RTDETR_FAM_SSJ_Modality_Evaluation` | 15 |
+| ablation `identity_dcnv2` | `RTDETR_FAM_Identity_DCNv2_Modality_Evaluation` | 15 |
+| ablation `grid_sample` | `RTDETR_FAM_Grid_Sample_Modality_Evaluation` | 15 |
 
 Ogni file crea cinque riferimenti ai checkpoint e, per ciascuno, una run VIS,
 una IR e una VIS+IR. I checkpoint sono individuati localmente tramite progetto
@@ -255,17 +245,9 @@ corrispondere al 100% delle chiavi del modello. I test usano
 `test_checkpoint: current` perché il checkpoint sorgente viene caricato
 durante la costruzione del modello.
 
-I file possono essere avviati soltanto dopo che tutti e cinque i training
-della configurazione corrispondente sono terminati:
-
-```bash
-python main.py experiment --parameters parameters/RTDETR/rtdetr_additive_modality_evaluation.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_modality_evaluation.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ir_dropout_modality_evaluation.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ssj_modality_evaluation.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_identity_dcnv2_modality_evaluation.yaml
-python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_grid_sample_modality_evaluation.yaml
-```
+Le configurazioni di sola valutazione sono state rimosse una volta completate
+e verificate tutte le 90 combinazioni; i risultati aggregati e l'identità dei
+progetti W&B sono conservati nelle sezioni successive.
 
 ## Risultati finali del protocollo
 

@@ -82,8 +82,8 @@ Nell'ambiente `sarfusion`:
 python -m unittest discover -s tests -p 'test_rtdetr_fam_identity.py'
 ```
 
-I training finali sono già completati; i comandi e i file correnti sono
-riportati nella sezione seguente.
+I training finali sono già completati; il protocollo è riportato nella sezione
+seguente.
 
 ## Protocollo finale
 
@@ -101,14 +101,10 @@ usato per Additive e FAM standard:
 - test del checkpoint finale `latest`;
 - valutazioni successive VIS, IR e VIS+IR con Modal Dropout disattivato.
 
-I file attuali sono:
-
-```text
-parameters/RTDETR/rtdetr_ablation_identity_dcnv2.yaml
-parameters/RTDETR/rtdetr_ablation_grid_sample.yaml
-parameters/RTDETR/rtdetr_ablation_identity_dcnv2_modality_evaluation.yaml
-parameters/RTDETR/rtdetr_ablation_grid_sample_modality_evaluation.yaml
-```
+I YAML separati usati per queste campagne e per le valutazioni delle modalità
+sono stati rimossi dopo il completamento. Per un'eventuale replica si parte dal
+template comune `parameters/RTDETR/rtdetr_protocol.yaml` e si imposta una sola
+variante alla volta come indicato nei commenti del file.
 
 ## Risultati finali
 

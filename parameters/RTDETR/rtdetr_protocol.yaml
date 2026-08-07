@@ -1,17 +1,33 @@
+# Template for one RT-DETR final-protocol campaign at a time.
+# Before launching, set experiment.name/group/tags and the model parameters
+# according to exactly one of the six completed configurations:
+#
+# Additive:       use_fam=false, fam_variant=current_dcnv2, ir=0.0, ssj=0.0
+# FAM:            use_fam=true,  fam_variant=current_dcnv2, ir=0.0, ssj=0.0
+# FAM+IR dropout: use_fam=true,  fam_variant=current_dcnv2, ir=0.4, ssj=0.0
+# FAM+SSJ:        use_fam=true,  fam_variant=current_dcnv2, ir=0.0, ssj=0.5
+# Identity DCNv2: use_fam=true,  fam_variant=identity_dcnv2,  ir=0.0, ssj=0.0
+# Grid Sample:    use_fam=true,  fam_variant=grid_sample,     ir=0.0, ssj=0.0
+#
+# The checked-in defaults below reproduce the Additive baseline. Use a new
+# W&B project name for a new campaign unless mixing it with the completed runs
+# is deliberate.
+
 experiment:
-  name: RTDETR_Base_Pretrained_Person_Head_Probe
-  group: RTDETR_training_stability
-  continue_with_errors: false
+  name: RTDETR_Protocol_Rerun
+  group: RTDETR_main
+  continue_with_errors: true
   start_from_grid: 0
   start_from_run: 0
   search: grid
   isolate_runs: true
 
 parameters:
-  repetition: [0, 1, 2]
-  seed: [42]
+  seed: [40, 41, 42, 43, 44]
+  repetition: [0]
   task: [detection]
-  run_test: [false]
+  run_test: [true]
+  test_checkpoint: [latest]
 
   reproducibility:
     deterministic: [false]
@@ -24,13 +40,13 @@ parameters:
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[RTDETR, Base, Pretrained-Person-Head]]
+    tags: [[RTDETR, Protocol, Base, Additive, Rerun]]
 
   train:
-    max_epochs: [1]
-    max_steps_per_epoch: [20]
+    max_epochs: [10]
     run_validation: [false]
-    save_checkpoints: [false]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
     compile: [false]
     initial_lr: [0.00002]
     optimizer: [AdamW]
