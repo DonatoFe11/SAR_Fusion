@@ -4,7 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from sarfusion.experiment.yolo import WisardTrainer
+from ultralytics.cfg import IterableSimpleNamespace
+
+from sarfusion.experiment.yolo import WisardTrainer, build_wisard_validator_args
 from sarfusion.utils.grid import make_grid
 from sarfusion.utils.utils import load_yaml
 
@@ -75,6 +77,22 @@ class TestYOLOFinalProtocol(unittest.TestCase):
             self.assertEqual(trainer.validator.mode, "test")
             self.assertEqual(trainer.validator.dataloader, "test-loader")
             self.assertEqual(trainer.metrics, {"test/mAP50(B)": 0.5})
+
+    def test_trainer_only_checkpoint_selector_is_not_forwarded_to_validator(self):
+        trainer_args = IterableSimpleNamespace(
+            task="detect",
+            augment_vis_ir=False,
+            modal_dropout=True,
+            modal_dropout_probs=[0.2, 0.2, 0.6],
+            modal_dropout_strategy="feature",
+            test_checkpoint="last",
+        )
+
+        validator_args = build_wisard_validator_args(trainer_args)
+
+        self.assertEqual(validator_args.task, "detect")
+        self.assertFalse(hasattr(validator_args, "test_checkpoint"))
+        self.assertFalse(hasattr(validator_args, "modal_dropout"))
 
     def test_final_eval_rejects_unknown_checkpoint_selector(self):
         trainer = WisardTrainer.__new__(WisardTrainer)

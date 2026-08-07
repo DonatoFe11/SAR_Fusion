@@ -58,6 +58,20 @@ WISARD_DEFAULT_CFG = IterableSimpleNamespace(
 )
 
 
+def build_wisard_validator_args(trainer_args):
+    """Remove trainer-only WiSARD options before Ultralytics validation."""
+    args = cfg2dict(copy(trainer_args))
+    for key in (
+        "augment_vis_ir",
+        "modal_dropout",
+        "modal_dropout_probs",
+        "modal_dropout_strategy",
+        "test_checkpoint",
+    ):
+        args.pop(key, None)
+    return IterableSimpleNamespace(**args)
+
+
 class WisardValidator(YOLOv10DetectionValidator):
 
     @smart_inference_mode()
@@ -250,12 +264,7 @@ class WisardTrainer(YOLOv10DetectionTrainer):
     def get_validator(self):
         """Returns a DetectionValidator for YOLO model validation."""
         self.loss_names = "box_om", "cls_om", "dfl_om", "box_oo", "cls_oo", "dfl_oo",
-        args = cfg2dict(copy(self.args))
-        args.pop("augment_vis_ir")
-        args.pop("modal_dropout")
-        args.pop("modal_dropout_probs")
-        args.pop("modal_dropout_strategy", None)
-        args = IterableSimpleNamespace(**args)
+        args = build_wisard_validator_args(self.args)
         return WisardValidator(
             self.test_loader, save_dir=self.save_dir, args=args, _callbacks=self.callbacks
         )
