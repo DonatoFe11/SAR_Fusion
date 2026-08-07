@@ -10,6 +10,7 @@ from sarfusion.experiment.utils import WrapperModule
 from sarfusion.models.experimental import attempt_load
 from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
+from sarfusion.models.checkpoints import resolve_local_wandb_checkpoint
 from sarfusion.models.yolov10 import YOLOv10WiSARD
 from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDINODeformableDetr
 from sarfusion.utils.general import yaml_save
@@ -18,6 +19,8 @@ from sarfusion.utils.utils import load_yaml
 
 class AdditionalParams(StrEnum):
     PRETRAINED_PATH = "pretrained_path"
+    PRETRAINED_WANDB = "pretrained_wandb"
+    REQUIRE_FULL_PRETRAINED_MATCH = "require_full_pretrained_match"
 
 
 def build_model(params):
@@ -28,6 +31,8 @@ def build_model(params):
         params (dict or str): Dictionary or path to yaml file containing model parameters
         Additional parameters:
             pretrained_path: The path of the pretrained model
+            pretrained_wandb: A local W&B project/seed/checkpoint reference
+            require_full_pretrained_match: Fail unless every model key is loaded
 
     """
     if isinstance(params, str):
@@ -36,6 +41,19 @@ def build_model(params):
     name = params["name"]
     params = params["params"]
     pretrained_path = params.pop(AdditionalParams.PRETRAINED_PATH, None)
+    pretrained_wandb = params.pop(AdditionalParams.PRETRAINED_WANDB, None)
+    require_full_pretrained_match = params.pop(
+        AdditionalParams.REQUIRE_FULL_PRETRAINED_MATCH,
+        False,
+    )
+
+    if pretrained_path and pretrained_wandb:
+        raise ValueError(
+            "Use either pretrained_path or pretrained_wandb, not both"
+        )
+    if pretrained_wandb:
+        pretrained_path = resolve_local_wandb_checkpoint(**pretrained_wandb)
+        print(f"Resolved local W&B checkpoint: {pretrained_path}")
 
     if name in MODEL_REGISTRY:
         model = MODEL_REGISTRY[name](**params)
@@ -82,6 +100,12 @@ def build_model(params):
             # Carichiamo i pesi rimappati
             model.load_state_dict(new_weights, strict=False)
             print(f"✅ Smart Load Successful: {len(new_weights)}/{len(model_state)} layers matched.")
+
+            if require_full_pretrained_match and len(new_weights) != len(model_state):
+                raise RuntimeError(
+                    "Full pretrained match required, but only "
+                    f"{len(new_weights)}/{len(model_state)} model keys matched"
+                )
             
             # Se mancano molte chiavi, stampiamo un avviso
             if len(new_weights) < len(model_state) * 0.9:
@@ -94,6 +118,9 @@ def build_model(params):
                 
         except Exception as e:
             print(f"❌ Error during smart loading: {e}")
+            raise RuntimeError(
+                f"Could not load pretrained model from {pretrained_path}"
+            ) from e
     return model
 
 

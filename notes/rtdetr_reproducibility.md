@@ -191,14 +191,14 @@ testa COCO `person`, Modal Dropout soltanto sul training, dieci epoche fisse e
 test del solo checkpoint finale `latest`. La validation corrente non viene
 eseguita durante il training e non seleziona checkpoint.
 
-| N. | File | Configurazione | Run |
-|---:|---|---|---:|
-| 1 | `rtdetr_additive.yaml` | Base/Additive | 5 |
-| 2 | `rtdetr_fam.yaml` | FAM `current_dcnv2` | 5 |
-| 3 | `rtdetr_fam_ir_dropout.yaml` | FAM + IR Dropout 0.4 | 5 |
-| 4 | `rtdetr_fam_ssj.yaml` | FAM + SSJ 0.5 | 5 |
-| 5 | `rtdetr_ablation_identity_dcnv2.yaml` | ablation `identity_dcnv2` | 5 |
-| 6 | `rtdetr_ablation_grid_sample.yaml` | ablation `grid_sample` | 5 |
+| N. | File | Configurazione | Progetto W&B | Run |
+|---:|---|---|---|---:|
+| 1 | `rtdetr_additive.yaml` | Base/Additive | `RTDETR_Protocol` | 5 |
+| 2 | `rtdetr_fam.yaml` | FAM `current_dcnv2` | `RTDETR_FAM_Protocol` | 5 |
+| 3 | `rtdetr_fam_ir_dropout.yaml` | FAM + IR Dropout 0.4 | `RTDETR_FAM_IR_Dropout_Protocol` | 5 |
+| 4 | `rtdetr_fam_ssj.yaml` | FAM + SSJ 0.5 | `RTDETR_FAM_SSJ_Protocol` | 5 |
+| 5 | `rtdetr_ablation_identity_dcnv2.yaml` | ablation `identity_dcnv2` | `RTDETR_FAM_Identity_DCNv2_Ablation` | 5 |
+| 6 | `rtdetr_ablation_grid_sample.yaml` | ablation `grid_sample` | `RTDETR_FAM_Grid_Sample_Ablation` | 5 |
 
 Ogni file espande quindi esattamente cinque run sequenziali. I seed occupano
 le posizioni `start_from_run` da `0` a `4`; `start_from_grid` resta `0` perché
@@ -227,3 +227,42 @@ python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_grid_sa
 ```
 
 Su una singola GPU gli esperimenti vanno eseguiti uno alla volta.
+
+## Valutazione delle modalità
+
+Dopo i 30 training, ciascuno dei checkpoint finali viene rivalutato con seed
+di evaluation fisso `42` sui tre input `vis`, `ir` e `vis_ir`. Il seed di
+training `40–44` identifica soltanto il checkpoint sorgente e non viene
+riutilizzato come seed della valutazione. Sebbene `vis_ir` sia già testato alla
+fine del training, viene ripetuto qui con lo stesso protocollo, batch size e
+organizzazione W&B delle modalità singole. La campagna contiene 30 test per
+modalità, per un totale di 90 valutazioni.
+
+| Configurazione | File | Progetto W&B | Test |
+|---|---|---|---:|
+| Base/Additive | `rtdetr_additive_modality_evaluation.yaml` | `RTDETR_Additive_Modality_Evaluation` | 15 |
+| FAM `current_dcnv2` | `rtdetr_fam_modality_evaluation.yaml` | `RTDETR_FAM_Modality_Evaluation` | 15 |
+| FAM + IR Dropout | `rtdetr_fam_ir_dropout_modality_evaluation.yaml` | `RTDETR_FAM_IR_Dropout_Modality_Evaluation` | 15 |
+| FAM + SSJ | `rtdetr_fam_ssj_modality_evaluation.yaml` | `RTDETR_FAM_SSJ_Modality_Evaluation` | 15 |
+| ablation `identity_dcnv2` | `rtdetr_ablation_identity_dcnv2_modality_evaluation.yaml` | `RTDETR_FAM_Identity_DCNv2_Modality_Evaluation` | 15 |
+| ablation `grid_sample` | `rtdetr_ablation_grid_sample_modality_evaluation.yaml` | `RTDETR_FAM_Grid_Sample_Modality_Evaluation` | 15 |
+
+Ogni file crea cinque riferimenti ai checkpoint e, per ciascuno, una run VIS,
+una IR e una VIS+IR. I checkpoint sono individuati localmente tramite progetto
+W&B, seed di training e nome `latest`; la risoluzione fallisce se il checkpoint
+manca o se esistono più run complete compatibili. Il caricamento deve inoltre
+corrispondere al 100% delle chiavi del modello. I test usano
+`test_checkpoint: current` perché il checkpoint sorgente viene caricato
+durante la costruzione del modello.
+
+I file possono essere avviati soltanto dopo che tutti e cinque i training
+della configurazione corrispondente sono terminati:
+
+```bash
+python main.py experiment --parameters parameters/RTDETR/rtdetr_additive_modality_evaluation.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_modality_evaluation.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ir_dropout_modality_evaluation.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_fam_ssj_modality_evaluation.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_identity_dcnv2_modality_evaluation.yaml
+python main.py experiment --parameters parameters/RTDETR/rtdetr_ablation_grid_sample_modality_evaluation.yaml
+```

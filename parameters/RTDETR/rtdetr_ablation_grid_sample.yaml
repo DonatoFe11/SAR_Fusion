@@ -1,6 +1,6 @@
 experiment:
-  name: RTDETR_Protocol
-  group: RTDETR_main
+  name: RTDETR_FAM_Grid_Sample_Ablation
+  group: RTDETR_FAM_Grid_Sample
   continue_with_errors: true
   start_from_grid: 0
   start_from_run: 0
