@@ -1,5 +1,11 @@
 # Validazione del Feature Alignment Module (FAM)
 
+> **Stato.** La metodologia resta valida, ma i risultati numerici attuali
+> derivano da un solo checkpoint FAM e un solo checkpoint SSJ del protocollo
+> storico. Dopo la scoperta della variabilità run-to-run non possono essere
+> usati come stime finali del comportamento delle due configurazioni. In fondo
+> è definita la replica da eseguire sui checkpoint finali multi-seed.
+
 ## Obiettivo
 
 L'obiettivo della validazione era stabilire se il **Feature Alignment Module** (FAM) apprenda effettivamente una correzione geometrica tra le feature RGB e IR. I risultati in mAP, pur utili, costituiscono infatti un'evidenza solo indiretta: un miglioramento della metrica non dimostra da solo che il meccanismo responsabile sia l'allineamento spaziale.
@@ -66,7 +72,7 @@ uniformity_ratio = offset_spatial_std / offset_magnitude
 
 `offset_spatial_std` misura quanto ciascuno dei 18 campi di offset cambia passando da una cella della feature map a un'altra; `offset_magnitude` è la sua ampiezza media assoluta. Un rapporto vicino a zero indica un campo quasi costante tra celle, mentre un rapporto vicino a uno indica variazioni spaziali dell'ordine dell'ampiezza media. In una singola cella non esiste un solo offset: il kernel deformabile 3×3 usa nove vettori `(dx, dy)`. Il quiver plot ne mostra una sola freccia perché calcola una sintesi pesata dalle mask.
 
-## Protocollo sperimentale
+## Protocollo sperimentale storico
 
 Il confronto principale ha usato dieci campioni distribuiti lungo il test set MtErie e la configurazione comune `parameters/RTDETR/fusion_rtdetr.yaml`.
 
@@ -88,7 +94,7 @@ Questo controllo non misura la generalizzazione, poiché le due sessioni fanno p
 
 Passando, ad esempio, `--sample-idx 0 1 2`, lo script analizza individualmente i tre campioni e salva una figura per ogni combinazione campione/livello; con tre FAM vengono quindi prodotte nove figure. Al termine, non media le immagini né le feature map: raccoglie tutti i valori assoluti degli offset e ne calcola statistiche aggregate separate per livello.
 
-## Risultati quantitativi
+## Risultati quantitativi storici
 
 Offset del FAM in pixel dell'immagine originale, aggregati sui dieci campioni test.
 
@@ -136,11 +142,16 @@ La media dei `uniformity_ratio` dei dieci campioni per sessione è:
 
 Nei livelli 0 e 1 la SSJ porta a campi più uniformi nello spazio anche in entrambe le sessioni. Al livello 2, invece, il rapporto medio è pressoché uguale tra B ed E e varia sensibilmente da campione a campione.
 
-## Osservazioni e interpretazione
+## Osservazioni e interpretazione dei checkpoint storici
 
-### Il FAM apprende una correzione geometrica reale
+### Il FAM predice una trasformazione geometrica non nulla
 
-Il campo di offset non è nullo né casuale e la sua ampiezza è compatibile con un disallineamento RGB–IR dovuto alla geometria e alla calibrazione delle due camere. Questo fornisce un'evidenza diretta del funzionamento interno del modulo, complementare ai risultati di detection.
+Il campo di offset non è nullo e la sua ampiezza è compatibile con l'ordine di
+grandezza di un disallineamento RGB–IR. Questo fornisce evidenza diretta che il
+percorso geometrico del modulo è attivo, complementare ai risultati di
+detection. Senza ground truth di registrazione non si può però stabilire che
+gli offset coincidano con il vero spostamento fisico né escludere che svolgano
+anche una funzione di trasformazione utile al detector.
 
 ### Effetto dello Spatial Jitter
 
@@ -166,13 +177,89 @@ Le feature FAM(IR) appaiono generalmente più lisce e a minore frequenza rispett
 
 Le bande nere verticali osservabili nella PCA dell'IR al primo livello sono invece attribuibili al letterboxing di `adapt_ir2rgb`, usato per compensare il diverso aspect ratio tra IR e RGB; non sono un effetto del FAM.
 
-## Conclusione
+## Conclusione provvisoria
 
-La validazione supporta che il FAM sia operativo e che predice una correzione geometrica RGB-IR di entità plausibile. Gli offset sono molto stabili tra immagini della stessa sessione, ma variano moderatamente fra sessioni di acquisizione differenti. Il comportamento è compatibile con un allineamento condizionato dalla geometria della singola acquisizione.
+La validazione supporta che nei due checkpoint analizzati il FAM sia operativo
+e predica una trasformazione geometrica RGB-IR di entità plausibile. Gli offset
+sono molto stabili tra immagini della stessa sessione, ma variano moderatamente
+fra sessioni di acquisizione differenti. Il comportamento è compatibile con un
+allineamento condizionato dalla geometria della singola acquisizione, ma non
+dimostra ancora che lo stesso pattern sia stabile tra seed.
 
-Lo Spatial Jitter modifica in modo misurabile questo comportamento: aumenta l'ampiezza tipica degli offset e, nei livelli P3/P4, li rende più uniformi nello spazio. L'effetto di uniformità non è invece conclusivo nel livello P5.
+Nel singolo checkpoint SSJ, lo Spatial Jitter modifica in modo misurabile questo
+comportamento: aumenta l'ampiezza tipica degli offset e, nei livelli P3/P4, li
+rende più uniformi nello spazio. L'effetto di uniformità non è invece
+conclusivo nel livello P5 e deve essere verificato tra seed.
 
-## Limiti e attività residue
+## Replica sui checkpoint finali
+
+> **Stato operativo (7 agosto 2026).** Lo script è stato esteso e il runner
+> multi-seed è pronto; resta da eseguire il calcolo sulla GPU e riportarne qui
+> i risultati. Nessun nuovo training è richiesto.
+
+Non serve un nuovo training. La replica usa i checkpoint `latest` già prodotti
+dal protocollo finale:
+
+| Configurazione | Seed | Scopo |
+|---|---|---|
+| FAM `current_dcnv2` | 40–44 | stimare stabilità e variabilità degli offset standard |
+| FAM + SSJ 0.5 | 40–44 | verificare se l'effetto storico di SSJ si ripete tra seed |
+| Grid Sample | 40–44 | osservare direttamente il warp geometrico privo di filtraggio DCNv2 |
+
+Restano fissi i trenta campioni già documentati: dieci MtErie test, dieci FHL
+train e dieci Baker train. FHL e Baker sono controlli meccanistici
+cross-sessione e non misure di generalizzazione.
+
+L'estensione implementata:
+
+- accetta `IdentityInitializedFeatureAlignmentModule` e
+  `GridSampleFeatureAlignmentModule`, senza assumere sempre 18 offset e 9 mask;
+- esporta JSON con una riga per configurazione, seed, sessione, campione e
+  livello;
+- conserva statistiche per campione prima di aggregare;
+- separa le metriche DCNv2 a nove punti dal campo bidimensionale unico di
+  Grid Sample.
+
+Il runner `scripts/run_rtdetr_fam_diagnostics.py` risolve i checkpoint locali
+per coppia progetto/seed, esegue i trenta campioni fissati e produce:
+
+- JSON grezzi riavviabili in `out/rtdetr_fam_diagnostics/raw/`;
+- un JSON combinato con aggregati per checkpoint e poi tra seed;
+- un CSV degli aggregati tra i cinque seed;
+- figure PCA soltanto per FAM e SSJ seed 40, sui campioni dichiarati prima
+  dell'analisi: MtErie 35, FHL 90 e Baker 1948.
+
+Il comando congelato è:
+
+```bash
+python scripts/run_rtdetr_fam_diagnostics.py
+```
+
+In caso di interruzione lo stesso comando salta i JSON già completati. L'opzione
+`--force` va usata soltanto se si intende rigenerare deliberatamente tutto.
+
+Le similarità tra feature esportate nel JSON sono proxy descrittivi sulla
+stessa cella spaziale dopo standardizzazione globale. Non sono misure di ground
+truth della registrazione fisica. MAE o correlazioni tra interi campi saranno
+aggiunte solo se necessarie e soltanto fra campi con forma e semantica
+confrontabili; DCNv2 e Grid Sample non vanno confrontati cella per cella come
+se rappresentassero la stessa parametrizzazione.
+
+L'unità sperimentale per un confronto tra configurazioni è il checkpoint/seed.
+Le celle della feature map e i nove punti del kernel non sono repliche
+statistiche indipendenti; usarli come tali produrrebbe pseudo-replicazione e
+intervalli artificialmente stretti.
+
+Per le figure principali si usa il seed 40 sia per FAM sia per SSJ, scelta
+registrata prima della nuova analisi: il FAM seed 40 coincide con la mediana
+VIS+IR e lo SSJ seed 40 è vicino alla propria mediana. Le figure restano
+illustrative; le conclusioni quantitative usano tutti i cinque seed.
+
+## Limiti che restano anche dopo la replica
 
 - La verifica attuale riguarda feature e offset interni. Un confronto qualitativo sui bounding box predetti, sovrapposti alle immagini RGB e IR, è ora tecnicamente possibile ma non è ancora stato eseguito.
 - Le conclusioni sulla dipendenza dall'input si basano su statistiche aggregate. Un confronto diretto dei tensori di offset tra campioni (ad esempio MAE e correlazione per livello) renderebbe quantitativa la variazione del campo cella per cella.
+- Un offset appreso non è automaticamente una stima della trasformazione fisica
+  fra le camere: può anche ottimizzare una trasformazione utile al detector.
+  Senza ground truth geometrica, la formulazione corretta è "trasformazione
+  geometrica appresa" e non "registrazione vera misurata".

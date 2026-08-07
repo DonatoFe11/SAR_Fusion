@@ -1,5 +1,10 @@
 # Ablation FAM: DCNv2 identity e warp diretto
 
+> **Stato.** Le vecchie ablation a seed 42 sono state sostituite dalla campagna
+> finale a cinque seed e checkpoint finale. I risultati confermativi sono
+> riportati in questa nota; i dettagli completi sono in
+> [`rtdetr_reproducibility.md`](rtdetr_reproducibility.md).
+
 Questa nota descrive le due varianti aggiunte a RT-DETR per separare l'effetto
 dell'allineamento geometrico da quello della convoluzione aggiuntiva del FAM.
 Il comportamento storico resta disponibile come `fam_variant:
@@ -74,67 +79,85 @@ dimensioni pari e dispari analoghe ai livelli P3, P4 e P5:
 Nell'ambiente `sarfusion`:
 
 ```bash
-python -m unittest discover -s tests -p 'test_rtdetr_fam_identity.py' &&
-python main.py experiment \
-  --parameters parameters/RTDETR/fam_ablation_identity_grid.yaml
+python -m unittest discover -s tests -p 'test_rtdetr_fam_identity.py'
 ```
 
-L'operatore `&&` impedisce l'avvio del training se anche un solo controllo
-numerico fallisce.
+I training finali sono già completati; i comandi e i file correnti sono
+riportati nella sezione seguente.
 
-## Training
+## Protocollo finale
 
-La configurazione `parameters/RTDETR/fam_ablation_identity_grid.yaml` genera
-due run, una per variante, mantenendo:
+Le due varianti sono state addestrate separatamente con lo stesso protocollo
+usato per Additive e FAM standard:
 
-- seed 42;
-- 10 epoche;
+- seed appaiati `40–44`;
+- un nuovo processo per ogni seed;
+- 10 epoche fisse;
 - AdamW con learning rate `2e-5`;
-- pretrained `PekingU/rtdetr_r50vd`;
-- single class e split WiSARD già usati;
-- modal dropout IR/RGB/fusion pari a 20/20/60;
-- nessuno spatial dropout e nessuno SSJ;
-- selezione del checkpoint tramite mAP.
+- checkpoint COCO `PekingU/rtdetr_r50vd` e riuso della riga `person` nelle
+  teste single-class;
+- Modal Dropout IR/RGB/fusion 20/20/60 soltanto nel training;
+- nessuna validation usata per la selezione;
+- test del checkpoint finale `latest`;
+- valutazioni successive VIS, IR e VIS+IR con Modal Dropout disattivato.
 
-Dopo aver copiato i due checkpoint selezionati nei percorsi indicati in
-`parameters/RTDETR/fam_ablation_eval.yaml`, la valutazione genera le sei run
-correttamente accoppiate (tre modalità per ciascuna architettura):
+I file attuali sono:
 
-```bash
-python main.py experiment \
-  --parameters parameters/RTDETR/fam_ablation_eval.yaml
+```text
+parameters/RTDETR/rtdetr_ablation_identity_dcnv2.yaml
+parameters/RTDETR/rtdetr_ablation_grid_sample.yaml
+parameters/RTDETR/rtdetr_ablation_identity_dcnv2_modality_evaluation.yaml
+parameters/RTDETR/rtdetr_ablation_grid_sample_modality_evaluation.yaml
 ```
 
-## Risultati
+## Risultati finali
 
-| Variante RT-DETR | Fusion | IR-only | VIS-only |
+### VIS+IR per seed
+
+| Seed | FAM corrente | Identity DCNv2 | Grid Sample |
+|---:|---:|---:|---:|
+| 40 | 0.3783 | 0.4336 | 0.4050 |
+| 41 | 0.4335 | 0.2113 | 0.3483 |
+| 42 | 0.3129 | 0.2926 | 0.4083 |
+| 43 | 0.3964 | 0.2860 | 0.3326 |
+| 44 | 0.3690 | 0.4162 | 0.3564 |
+
+| Variante | Media | Mediana | Dev. std. | Min–max | IC 95% media |
+|---|---:|---:|---:|---:|---:|
+| FAM corrente | 0.3780 | 0.3783 | 0.0440 | 0.3129–0.4335 | 0.3234–0.4326 |
+| Identity DCNv2 | 0.3280 | 0.2926 | 0.0943 | 0.2113–0.4336 | 0.2109–0.4451 |
+| Grid Sample | 0.3701 | 0.3564 | 0.0345 | 0.3326–0.4083 | 0.3273–0.4129 |
+
+### Medie per modalità
+
+| Variante | VIS | IR | VIS+IR |
 |---|---:|---:|---:|
-| Additive Fusion senza FAM | 0.357 | 0.252 | 0.246 |
-| FAM DCNv2 corrente, Modello B | 0.396 | 0.263 | 0.262 |
-| FAM DCNv2 identity | 0.3775 | 0.2778 | 0.2495 |
-| Warp diretto `grid_sample` | 0.3918 | 0.3473 | 0.2554 |
+| FAM corrente | 0.2442 | 0.2028 | 0.3780 |
+| Identity DCNv2 | 0.2150 | 0.1768 | 0.3281 |
+| Grid Sample | **0.2614** | 0.1895 | 0.3701 |
 
-Rispetto all'Additive Fusion, la DCNv2 identity guadagna `+0.0205` in
-Fusion, `+0.0258` in IR-only e `+0.0035` in VIS-only. Il warp diretto
-guadagna rispettivamente `+0.0348`, `+0.0953` e `+0.0094`.
+Nel confronto appaiato per seed:
 
-Il confronto più informativo è tra le tre varianti FAM:
+- Identity DCNv2 − FAM ha un delta medio VIS+IR di `−0.0501`, vince in 2/5
+  seed e presenta la dispersione più alta;
+- Grid Sample − FAM ha un delta medio di `−0.0079`, vince in 2/5 seed e ha un
+  IC 95% della differenza pari a `[−0.0979, +0.0820]`;
+- Grid Sample supera FAM in media su VIS di `+0.0172`, ma non su IR
+  (`−0.0133`) né su VIS+IR (`−0.0079`).
 
-- `grid_sample` supera la DCNv2 identity di `+0.0143` in Fusion, `+0.0695`
-  in IR-only e `+0.0059` in VIS-only;
-- rispetto alla DCNv2 corrente, `grid_sample` è inferiore di appena `0.0042`
-  in Fusion e di `0.0066` in VIS-only, ma superiore di `0.0843` in IR-only;
-- la DCNv2 identity è inferiore alla DCNv2 corrente di `0.0185` in Fusion e
-  `0.0125` in VIS-only, pur migliorando IR-only di `0.0148`.
+L'inizializzazione identità non costituisce quindi una soluzione alla
+variabilità e non va promossa a variante principale. Il warp diretto, privo
+del filtraggio DCNv2, è prestazionalmente vicino al FAM corrente e supporta
+l'ipotesi che una componente geometrica sia utile; con cinque seed, però, non
+è possibile attribuire causalmente tutto il vantaggio del FAM
+all'allineamento né dichiarare equivalenti le due implementazioni.
 
-Il warp privo di filtraggio convoluzionale recupera quindi quasi interamente
-la prestazione Fusion della DCNv2 corrente e produce la migliore robustezza
-IR-only. Questo risultato è coerente con l'ipotesi che una parte sostanziale
-del beneficio del FAM provenga dall'allineamento geometrico, senza richiedere
-la trasformazione convoluzionale aggiuntiva. La differenza residua di `0.0042`
-in Fusion è troppo piccola, su una singola run, per attribuire con sicurezza
-un vantaggio alla DCNv2 corrente. Analogamente, la prestazione più bassa della
-DCNv2 identity mostra che l'inizializzazione modifica la dinamica di
-ottimizzazione, ma non dimostra da sola che il filtraggio convoluzionale sia
-la causa del vantaggio. Servirebbero seed multipli per conclusioni
-statisticamente robuste.
+## Risultato preliminare storico
+
+La precedente run a seed 42 aveva prodotto `0.3775` per Identity e `0.3918`
+per Grid Sample in VIS+IR, facendo apparire Grid Sample quasi identico al FAM
+storico (`0.3960`) e molto più forte in IR-only (`0.3473`). La campagna finale
+mostra perché quel confronto non era sufficiente: l'Identity varia da `0.2113`
+a `0.4336` e il vantaggio IR-only di Grid Sample non si ripete nella media dei
+cinque seed. I numeri storici possono essere citati soltanto come motivazione
+dell'ablation finale, non come risultato conclusivo.

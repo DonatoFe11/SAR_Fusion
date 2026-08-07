@@ -1,5 +1,11 @@
 # Strategia di Tiling (quadranti fissi 2×2)
 
+> **Stato storico/esplorativo.** I risultati di questa nota provengono da
+> singole run e valutano soltanto la specifica strategia a quadranti fissi
+> implementata nel progetto. Sono sufficienti per motivarne l'abbandono nello
+> sviluppo, ma non dimostrano che ogni metodo di tiling sia inferiore né vanno
+> confrontati come stime finali con la campagna RT-DETR multi-seed.
+
 Questo documento spiega l'approccio di tiling (o patch splitting) implementato nell'architettura. Questa strategia è divisa in livelli logici che coprono il ciclo di vita del dato, dalla lettura per il dataloader fino all'aggregazione finale.
 
 > L'implementazione non è una sliding window generica con stride e sovrapposizione: divide ogni immagine ridimensionata a $640\times640$ in quattro quadranti fissi e non sovrapposti da $320\times320$.

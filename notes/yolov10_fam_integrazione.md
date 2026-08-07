@@ -1,8 +1,18 @@
 # Integrazione YOLOv10 + FAM
 
+> **Stato.** Tutti i risultati YOLO attualmente riportati sono singole run del
+> protocollo storico, con `best.pt` scelto dalla validation ed early stopping a
+> epoche diverse. Restano validi come sviluppo esplorativo, ma non possono
+> stabilire se FAM migliori YOLO. Se YOLO rimane nelle conclusioni della tesi è
+> necessario il confronto finale a cinque seed definito in fondo a questa nota.
+
 ## Contesto
 
-Il progetto studia fusione RGB-IR per object detection in scenari SAR (Search And Rescue). I modelli migliori sono basati su RT-DETR con Feature Alignment Module (FAM), che ha raggiunto **0.438 mAP@50** sul dataset fusion e ha dimostrato di produrre offset di allineamento reali (2-5 px medi, verificati cross-sessione via PCA).
+Il progetto studia fusione RGB-IR per object detection in scenari SAR (Search
+And Rescue). La campagna finale RT-DETR a cinque seed ha mostrato che FAM
+standard migliora Additive di `+0.0700` mAP@50 medio, vincendo in tutti i seed.
+SSJ non ha invece migliorato la media di FAM. I precedenti valori RT-DETR
+`0.438` e `0.396` erano singole run e non sono più il riferimento finale.
 
 I precedenti tentativi YOLO (`FusionConv` in `cfg/yolofusion-s.yaml`, `FusionTransformer` in `cfg/yolotrans-s.yaml`) fondevano RGB e IR al primissimo layer dello stem, dentro un'unica backbone. Tutte le convoluzioni successive operavano su feature già miscelate ma spazialmente disallineate, amplificando l'errore di parallasse a ogni downsampling.
 
@@ -12,10 +22,10 @@ L'architettura proposta replica il pattern vincente di RT-DETR: **dual backbone 
 
 | Decisione | Scelta | Motivazione |
 |-----------|--------|-------------|
-| Versione YOLO | YOLOv10s | Già integrato (WisardTrainer, WisardValidator, YOLOv10WiSARD). Il contributo scientifico è FAM + dual backbone, non la versione YOLO. Upgrade a v11/v26 banale dopo validazione. |
+| Versione YOLO | YOLOv10s | Già integrato con trainer, validator e modello custom. Il contributo studiato è FAM + dual backbone, non un confronto fra versioni YOLO. |
 | Integrazione neck | Standalone forward | Ricostruito come forward separato per avere controllo sul routing delle feature fuse. Più pulito degli hook. |
-| Tipo fusione | Additive (`rgb + ir_aligned`) | Ha performato meglio su RT-DETR (0.438). Preserva i canali originali attesi dal neck YOLO. |
-| FAM source | `FeatureAlignmentModule` da `rtdetr_fusion.py` | Classe identica tra RT-DETR e Deformable DETR, senza dipendenze architettura-specifiche. |
+| Tipo fusione | Additive (`rgb + ir_aligned`) | È il percorso con cui FAM ha migliorato Additive in tutti i cinque seed RT-DETR. Preserva i canali originali attesi dal neck YOLO. |
+| FAM source | `FeatureAlignmentModule` da `rtdetr_fusion.py` | YOLO riusa direttamente la classe RT-DETR; Deformable DETR possiede un'implementazione separata con la stessa logica generale. |
 | Dataset | `wisards_vis_ir.yaml` | Stesso `vis_ir` di RT-DETR (solo coppie sincronizzate). I file YAML di dataset stanno in `parameters/YOLO_datasets/`; il trainer cerca dalla root, quindi servono copie/symlink. |
 | Classi | **1 classe (persona)** | `single_cls: True`, `nc=1`. Correzione rispetto al precedente setup multi-classe errato. |
 
@@ -358,7 +368,11 @@ La conclusione finale è quindi duplice:
 1. **La modifica strutturale era corretta**: nel caso No FAM migliora contemporaneamente tutte le modalità rispetto al dropout input-level.
 2. **Il limite sostanziale di YOLO rimane**: la capacità IR-only resta troppo bassa e il guadagno non compensa pienamente la perdita rispetto al miglior modello fusion senza dropout.
 
-Se la priorità è la massima accuratezza fusion, resta preferibile FAM SSJ=0.0 senza dropout (0.407). Se serve il miglior compromesso ottenuto con feature-gating, la scelta è `Grid8` No FAM (0.347 / 0.176 / 0.062), ma non va presentata come soluzione realmente robusta al guasto del sensore.
+Limitatamente alle singole run storiche, la massima accuratezza fusion è stata
+osservata con FAM senza dropout (`0.407`), mentre il miglior compromesso
+feature-gated è stato `Grid8` senza FAM (`0.347 / 0.176 / 0.062`). Questi valori
+non giustificano una scelta finale del modello: le due conclusioni provengono
+da protocolli diversi e non includono variabilità tra seed.
 
 Come per la grid precedente, ogni configurazione è rappresentata da una sola run con seed 42. Le differenze più ampie e il dominio di `Grid8` sulle tre modalità sono evidenze interne a questa ablation, non una stima della variabilità tra seed.
 
@@ -397,19 +411,60 @@ scelta del checkpoint. Per `Grid8` il miglior fitness è stato raggiunto intorno
 all'epoca 16 e il training è terminato all'epoca 46 con patience 30; anche le
 altre run mostrano arresti coerenti con lo stesso criterio.
 
-Non conviene sostituire retroattivamente lo split soltanto per YOLO: si perderebbe
-la piena comparabilità metodologica con gli esperimenti precedenti. I risultati
-sul test comune restano utilizzabili, purché la validation ridotta sia dichiarata
-come limitazione. Un eventuale protocollo con validation multi-sessione e più
-positivi dovrebbe essere presentato come esperimento revisionato e applicato
-coerentemente almeno ai modelli principali, senza usare il test per scegliere
-checkpoint o iperparametri.
+Non conviene sostituire retroattivamente lo split soltanto per YOLO. I risultati
+storici sul test comune restano documentabili come esplorativi, dichiarando la
+validation ridotta e il checkpoint `best`. Per il confronto finale non si
+costruisce una nuova validation ad hoc: si usa un orizzonte fissato a priori,
+senza early stopping, e si valuta `last.pt`, come nel protocollo RT-DETR.
 
-## Prossimi passi
+## Protocollo finale YOLO da eseguire
 
-1. **Non estendere la grid YOLO attuale**: i risultati sono sufficienti a mostrare che né input-level dropout né feature-gating raggiungono la robustezza IR di RT-DETR.
-2. Se la robustezza YOLO resta un requisito, il passo successivo deve cambiare il training, per esempio con loss ausiliarie mono-modali o normalizzazione/head specifici per modalità, non limitarsi ad altre combinazioni di FAM e SSJ.
-3. Se si vuole migliorare il protocollo di model selection, definire una validation multi-sessione separata dal test e ripetere la selezione in modo coerente sui modelli principali; non modificare lo split soltanto per YOLO.
+La domanda finale non è quale delle vecchie grid abbia prodotto il massimo
+numero, ma se il FAM standard migliori una baseline YOLO multimodale sotto lo
+stesso regime di robustezza alle modalità mancanti.
+
+### Confronto obbligatorio se YOLO resta nelle conclusioni
+
+| Configurazione | FAM | SSJ | Modal Dropout | Run |
+|---|---:|---:|---|---:|
+| YOLO dual-backbone Additive | no | 0 | feature gating 20/20/60 | 5 |
+| YOLO dual-backbone + FAM | sì | 0 | feature gating 20/20/60 | 5 |
+
+Entrambe devono usare:
+
+- seed appaiati `40–44`;
+- processi Python separati;
+- 200 epoche fisse, coerenti con l'orizzonte e la schedulazione degli YAML
+  originari;
+- validation non usata per early stopping o scelta del checkpoint;
+- `patience` disattivata;
+- test del solo `last.pt`;
+- valutazione dello stesso checkpoint in VIS, IR e VIS+IR;
+- tabella dei valori per seed, media, mediana, deviazione standard, min–max, IC
+  95% e differenze appaiate.
+
+Il codice attuale non soddisfa ancora questo protocollo: `WisardTrainer.final_eval()`
+valida soltanto `best.pt` e gli YAML `30`/`31` usano seed 42, validation attiva
+e patience 30. Prima del training vanno creati file finali separati e aggiunto
+un selettore esplicito del checkpoint di test, con test automatici.
+
+### SSJ e vecchie grid
+
+Non è necessario ripetere fusion-only, input-level dropout o SSJ 1.0. FAM +
+SSJ 0.5 diventa una terza configurazione a cinque seed soltanto se la tesi
+mantiene una domanda esplicita sulla trasferibilità di SSJ. La campagna finale
+RT-DETR non mostra un vantaggio medio di SSJ, quindi aggiungerlo automaticamente
+al protocollo YOLO non è giustificato.
+
+La diagnostica interna YOLO esistente usa inoltre tre soli campioni di
+validation. Va ripetuta sui cinque checkpoint FAM finali e sugli stessi trenta
+campioni/sessioni usati per RT-DETR soltanto dopo il training confermativo. Le
+statistiche devono essere aggregate per checkpoint, evitando di trattare celle
+spaziali come repliche indipendenti.
+
+Se il confronto finale confermerà una robustezza IR insufficiente, eventuali
+loss ausiliarie mono-modali o teste specifiche costituiscono un nuovo lavoro,
+non un'aggiustamento da scegliere guardando gli attuali risultati di test.
 
 ## Note tecniche
 
