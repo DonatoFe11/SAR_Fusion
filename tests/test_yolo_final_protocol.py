@@ -2,11 +2,18 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import numpy as np
 
 from ultralytics.cfg import IterableSimpleNamespace
 
-from sarfusion.experiment.yolo import WisardTrainer, build_wisard_validator_args
+from sarfusion.experiment.yolo import (
+    WisardTrainer,
+    _guard_wandb_plot_curve,
+    build_wisard_validator_args,
+    install_wandb_empty_curve_guard,
+)
 from sarfusion.utils.grid import make_grid
 from sarfusion.utils.utils import load_yaml
 
@@ -99,6 +106,43 @@ class TestYOLOFinalProtocol(unittest.TestCase):
         trainer.args = SimpleNamespace(test_checkpoint="latest")
         with self.assertRaisesRegex(ValueError, "best.*last"):
             trainer.final_eval()
+
+    def test_wandb_curve_guard_skips_empty_precision_recall_curve(self):
+        plot_curve = Mock(return_value="plotted")
+        guarded = _guard_wandb_plot_curve(plot_curve)
+
+        result = guarded(
+            np.linspace(0.0, 1.0, 1000),
+            np.array([]),
+            title="Precision-Recall(B)",
+        )
+
+        self.assertIsNone(result)
+        plot_curve.assert_not_called()
+
+    def test_wandb_curve_guard_preserves_valid_curves(self):
+        plot_curve = Mock(return_value="plotted")
+        guarded = _guard_wandb_plot_curve(plot_curve)
+        x = np.linspace(0.0, 1.0, 3)
+        y = np.array([[1.0, 0.5, 0.0]])
+
+        result = guarded(x, y, title="Precision-Recall(B)")
+
+        self.assertEqual(result, "plotted")
+        plot_curve.assert_called_once_with(x, y, title="Precision-Recall(B)")
+
+    def test_wandb_curve_guard_installation_is_idempotent(self):
+        plot_curve = Mock(return_value="plotted")
+
+        with patch("ultralytics.utils.callbacks.wb._plot_curve", plot_curve):
+            self.assertTrue(install_wandb_empty_curve_guard())
+            from ultralytics.utils.callbacks import wb as wb_callback
+
+            installed = wb_callback._plot_curve
+            self.assertFalse(install_wandb_empty_curve_guard())
+            self.assertTrue(
+                installed.__dict__.get("_sarfusion_empty_curve_guard", False)
+            )
 
 
 if __name__ == "__main__":

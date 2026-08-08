@@ -1,6 +1,6 @@
 # Audit sperimentale per la tesi
 
-Ultimo aggiornamento: 7 agosto 2026.
+Ultimo aggiornamento: 8 agosto 2026.
 
 ## Decisione generale
 
@@ -76,7 +76,7 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | RT-DETR finale: Additive, FAM, IR Dropout, SSJ, Identity, Grid Sample | 6 configurazioni x 5 seed, checkpoint finale, 90 valutazioni di modalità | evidenza quantitativa principale | completa |
 | Lazy FAM, Frozen FAM e Spatial Dropout | singole run; il Lazy contiene un bug | analisi storica che ha motivato i controlli successivi | non ripetere il bug né il Frozen Random |
 | Ablation Identity DCNv2 e Grid Sample | cinque seed ciascuna nel protocollo finale | ablation quantitativa valida sul benchmark interno | completa |
-| Diagnostica degli offset RT-DETR | un checkpoint FAM e uno SSJ del protocollo storico | solo risultato preliminare/meccanistico | ripetere sui checkpoint finali |
+| Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint | evidenza meccanicistica finale; include la degenerazione P5 del FAM seed 41 | completa; resta opzionale un'ablation di livello in inferenza |
 | Analisi qualitativa Lazy vs SSJ | due checkpoint storici scelti dopo il training | illustrazione storica, non evidenza finale | sostituire le figure principali con checkpoint finali |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
@@ -158,31 +158,36 @@ confutazione del confronto MtErie.
 
 ## Esperimenti da completare prima di nuove architetture
 
-### 1. Diagnostica FAM sui checkpoint finali
+### 1. Diagnostica FAM sui checkpoint finali — completata
 
-È necessaria perché le tabelle correnti sugli offset usano una sola run FAM e
-una sola run SSJ del vecchio protocollo. Non serve alcun nuovo training.
+La replica ha analizzato FAM, FAM + SSJ e Grid Sample sui seed `40–44`, usando
+gli stessi 10 campioni MtErie, 10 FHL e 10 Baker fissati prima dell'analisi.
+Sono disponibili 1.350 osservazioni campione/livello e l'aggregazione rispetta
+il checkpoint come unità sperimentale.
 
-Il protocollo da bloccare è:
+I risultati principali sono:
 
-- checkpoint finali FAM dei seed `40–44`;
-- checkpoint finali FAM + SSJ dei seed `40–44`;
-- checkpoint finali Grid Sample dei seed `40–44`, adattando la diagnostica ai
-  due canali di offset e all'assenza di mask;
-- gli stessi 10 campioni MtErie, 10 FHL e 10 Baker già documentati;
-- esportazione JSON per campione, livello, seed e configurazione;
-- aggregazione prima per checkpoint e poi tra i cinque seed: le migliaia di
-  celle spaziali non devono essere trattate come repliche statistiche
-  indipendenti;
-- figure qualitative prodotte con seed 40 per FAM e SSJ, scelto prima
-  dell'analisi perché il FAM seed 40 coincide con la mediana e lo SSJ seed 40 è
-  vicino alla propria mediana;
-- eventuali correlazioni tra offset e mAP descritte come esplorative, dato
-  `n=5`.
+- il percorso geometrico del FAM è attivo a P3/P4 in tutti i seed;
+- offset e attivazioni mostrano una variabilità sostanziale fra seed;
+- il FAM seed 41 presenta una degenerazione completa di P5, con offset medi
+  di circa 5.030 pixel e uscita costante nello spazio, nonostante ottenga la
+  mAP@50 FAM più alta (`0.4335`);
+- escludendo quel seed, FAM continua a superare Additive in 4/4 repliche con
+  delta medio `+0.0799`, quindi il confronto prestazionale principale non è
+  prodotto dall'anomalia;
+- SSJ aumenta in modo ripetibile offset e smoothing a P3, ma gli effetti a P4
+  sono variabili e il confronto P5 è contaminato dal collasso;
+- le proxy sulla stessa cella non aumentano per DCNv2, che effettua anche
+  filtraggio e mixing dei canali: l'evidenza supporta una trasformazione
+  geometrico-funzionale utile al task, non una registrazione fisica verificata;
+- Grid Sample è più stabile internamente e preserva maggiormente le feature,
+  ma non supera FAM in modo consistente nella detection.
 
-La diagnostica può stabilire che il modulo è attivo e caratterizzarne il campo;
-non può da sola dimostrare che ogni offset corrisponda al vero spostamento
-fisico fra sensori.
+La documentazione e le tabelle complete sono in
+[`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md). Un'ablation
+post-hoc che bypassi un livello FAM alla volta in inferenza sarebbe utile per
+capire la rilevanza di P5, ma va etichettata come esplorativa e non richiede
+nuovo training.
 
 ### 2. Error analysis e figure finali RT-DETR
 
@@ -294,12 +299,15 @@ esplorativi.
 2. Estendere `fam_alignment_check.py` per JSON, repliche e Grid Sample. **Fatto:**
    runner `scripts/run_rtdetr_fam_diagnostics.py`, test automatici e output
    aggregato per checkpoint/seed.
-3. Eseguire la diagnostica sui 15 checkpoint RT-DETR già disponibili con
-   `python scripts/run_rtdetr_fam_diagnostics.py`.
+3. Eseguire e documentare la diagnostica sui 15 checkpoint RT-DETR. **Fatto:**
+   30 JSON, 1.350 righe e aggregati multi-seed verificati.
 4. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
 5. Preparare e verificare con smoke test i due YAML YOLO finali. **YAML e
-   selezione di `last.pt` implementati; resta il breve smoke test su GPU.**
-6. Eseguire le 10 run YOLO e le 30 valutazioni di modalità.
+   selezione di `last.pt` implementati.**
+6. Eseguire le 10 run YOLO e le 30 valutazioni di modalità. **Completata la
+   run Additive seed 40; una failure post-training del callback W&B è stata
+   corretta senza invalidare checkpoint o test. La ripartenza salta il seed 40
+   già valido.**
 7. Se si decide di includere lo stress test opzionale, preparare lo split
    Carnation e valutare i 10 checkpoint RT-DETR Additive/FAM una sola volta.
 8. Consolidare risultati e figure nei Markdown.

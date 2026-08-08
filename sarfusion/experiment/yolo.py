@@ -1,4 +1,7 @@
 import json
+from functools import wraps
+
+import numpy as np
 import torch
 
 from copy import copy
@@ -56,6 +59,63 @@ WISARD_DEFAULT_CFG = IterableSimpleNamespace(
         "test_checkpoint": "best",
     }
 )
+
+
+def _guard_wandb_plot_curve(plot_curve):
+    """Skip malformed metric curves instead of failing a completed training.
+
+    Ultralytics 8.1.34 leaves the precision-recall values empty when plots are
+    disabled. Its W&B ``on_train_end`` callback nevertheless tries to
+    interpolate that curve, raising a ``ValueError`` after the final checkpoint
+    and test metrics have already been saved.
+    """
+    if getattr(plot_curve, "__dict__", {}).get(
+        "_sarfusion_empty_curve_guard", False
+    ):
+        return plot_curve
+
+    @wraps(plot_curve)
+    def guarded(x, y, *args, **kwargs):
+        x_array = np.asarray(x)
+        y_array = np.asarray(y)
+        valid = (
+            x_array.ndim == 1
+            and x_array.size >= 2
+            and y_array.ndim >= 2
+            and y_array.size > 0
+            and y_array.shape[-1] == x_array.size
+        )
+        if not valid:
+            curve_name = kwargs.get("title") or kwargs.get("id") or "unnamed"
+            LOGGER.warning(
+                "Skipping empty or malformed W&B metric curve '%s'; "
+                "training checkpoints and scalar metrics are unaffected.",
+                curve_name,
+            )
+            return None
+        return plot_curve(x, y, *args, **kwargs)
+
+    guarded._sarfusion_empty_curve_guard = True
+    return guarded
+
+
+def install_wandb_empty_curve_guard():
+    """Install the local compatibility guard in Ultralytics' W&B callback."""
+    try:
+        from ultralytics.utils.callbacks import wb as wb_callback
+    except ImportError:
+        return False
+
+    plot_curve = getattr(wb_callback, "_plot_curve", None)
+    if plot_curve is None:
+        return False
+    if getattr(plot_curve, "__dict__", {}).get(
+        "_sarfusion_empty_curve_guard", False
+    ):
+        return False
+
+    wb_callback._plot_curve = _guard_wandb_plot_curve(plot_curve)
+    return True
 
 
 def build_wisard_validator_args(trainer_args):

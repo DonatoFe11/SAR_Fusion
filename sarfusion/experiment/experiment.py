@@ -324,10 +324,16 @@ def experiment(
     only_create: bool = False,
     preview: bool = False,
     yolo: bool = False,
+    start_from_run: int | None = None,
 ):
     logger.info("Running experiment")
     settings = load_yaml(param_path)
     logger.info(f"Loaded parameters from {param_path}")
+
+    if start_from_run is not None:
+        settings = copy.deepcopy(settings)
+        settings.setdefault("experiment", {})["start_from_run"] = start_from_run
+        logger.info(f"Overriding start_from_run with {start_from_run}")
 
     experimenter = ParallelExperimenter(yolo=yolo) if parallel or only_create else Experimenter(yolo=yolo)
     experimenter.calculate_runs(settings)

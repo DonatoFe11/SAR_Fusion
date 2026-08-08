@@ -1,10 +1,10 @@
 # Validazione del Feature Alignment Module (FAM)
 
-> **Stato.** La metodologia resta valida, ma i risultati numerici attuali
-> derivano da un solo checkpoint FAM e un solo checkpoint SSJ del protocollo
-> storico. Dopo la scoperta della variabilità run-to-run non possono essere
-> usati come stime finali del comportamento delle due configurazioni. In fondo
-> è definita la replica da eseguire sui checkpoint finali multi-seed.
+> **Stato (8 agosto 2026).** La replica finale è completa: 15 checkpoint
+> (`latest`), tre configurazioni e cinque seed, valutati sugli stessi 30
+> campioni fissati prima dell'analisi. I risultati storici a singolo checkpoint
+> sono conservati sotto per ricostruire lo sviluppo, ma le conclusioni della
+> tesi devono usare la sezione multi-seed.
 
 ## Obiettivo
 
@@ -177,91 +177,222 @@ Le feature FAM(IR) appaiono generalmente più lisce e a minore frequenza rispett
 
 Le bande nere verticali osservabili nella PCA dell'IR al primo livello sono invece attribuibili al letterboxing di `adapt_ir2rgb`, usato per compensare il diverso aspect ratio tra IR e RGB; non sono un effetto del FAM.
 
-## Conclusione provvisoria
+## Replica finale multi-seed
 
-La validazione supporta che nei due checkpoint analizzati il FAM sia operativo
-e predica una trasformazione geometrica RGB-IR di entità plausibile. Gli offset
-sono molto stabili tra immagini della stessa sessione, ma variano moderatamente
-fra sessioni di acquisizione differenti. Il comportamento è compatibile con un
-allineamento condizionato dalla geometria della singola acquisizione, ma non
-dimostra ancora che lo stesso pattern sia stabile tra seed.
+### Completezza e unità statistica
 
-Nel singolo checkpoint SSJ, lo Spatial Jitter modifica in modo misurabile questo
-comportamento: aumenta l'ampiezza tipica degli offset e, nei livelli P3/P4, li
-rende più uniformi nello spazio. L'effetto di uniformità non è invece
-conclusivo nel livello P5 e deve essere verificato tra seed.
+La replica usa i checkpoint finali `latest` delle configurazioni FAM
+`current_dcnv2`, FAM + SSJ 0.5 e Grid Sample, per i seed 40--44. Sono stati
+prodotti 30 JSON grezzi: per ciascuno dei 15 checkpoint, un'analisi MtErie e
+una FHL/Baker. Il dataset combinato contiene esattamente 1.350 righe:
 
-## Replica sui checkpoint finali
+```text
+3 configurazioni x 5 seed x 30 campioni x 3 livelli = 1.350
+```
 
-> **Stato operativo (7 agosto 2026).** Lo script è stato esteso e il runner
-> multi-seed è pronto; resta da eseguire il calcolo sulla GPU e riportarne qui
-> i risultati. Nessun nuovo training è richiesto.
+L'aggregazione è stata effettuata prima sui campioni di ogni checkpoint e poi
+sui cinque checkpoint. L'unità sperimentale nei confronti fra configurazioni è
+quindi il seed/checkpoint (`n=5`), non la cella della feature map. I dieci
+campioni MtErie, dieci FHL e dieci Baker sono gli stessi fissati prima di
+osservare questi risultati.
 
-Non serve un nuovo training. La replica usa i checkpoint `latest` già prodotti
-dal protocollo finale:
+Gli artefatti completi sono:
 
-| Configurazione | Seed | Scopo |
-|---|---|---|
-| FAM `current_dcnv2` | 40–44 | stimare stabilità e variabilità degli offset standard |
-| FAM + SSJ 0.5 | 40–44 | verificare se l'effetto storico di SSJ si ripete tra seed |
-| Grid Sample | 40–44 | osservare direttamente il warp geometrico privo di filtraggio DCNv2 |
+- `out/rtdetr_fam_diagnostics/raw/`: 30 JSON riavviabili;
+- `out/rtdetr_fam_diagnostics/rtdetr_fam_diagnostics.json`: righe e aggregati;
+- `out/rtdetr_fam_diagnostics/rtdetr_fam_diagnostics_across_seeds.csv`:
+  aggregati tra seed;
+- `out/rtdetr_fam_diagnostics/figures/`: 18 figure illustrative predefinite.
 
-Restano fissi i trenta campioni già documentati: dieci MtErie test, dieci FHL
-train e dieci Baker train. FHL e Baker sono controlli meccanistici
-cross-sessione e non misure di generalizzazione.
+### Ampiezza degli offset fra seed
 
-L'estensione implementata:
+La tabella riporta la media delle componenti assolute degli offset, in pixel
+dell'immagine di input, dopo aver mediato i 30 campioni di ciascun checkpoint.
 
-- accetta `IdentityInitializedFeatureAlignmentModule` e
-  `GridSampleFeatureAlignmentModule`, senza assumere sempre 18 offset e 9 mask;
-- esporta JSON con una riga per configurazione, seed, sessione, campione e
-  livello;
-- conserva statistiche per campione prima di aggregare;
-- separa le metriche DCNv2 a nove punti dal campo bidimensionale unico di
-  Grid Sample.
+| Configurazione | Seed | P3 | P4 | P5 |
+|---|---:|---:|---:|---:|
+| FAM | 40 | 2.69 | 3.23 | 13.69 |
+| FAM | 41 | 3.34 | 7.47 | **5029.83** |
+| FAM | 42 | 3.48 | 6.32 | 34.20 |
+| FAM | 43 | 3.04 | 3.74 | 14.44 |
+| FAM | 44 | 5.99 | 4.80 | 26.63 |
+| FAM + SSJ | 40 | 4.42 | 9.11 | 34.45 |
+| FAM + SSJ | 41 | 3.45 | 10.71 | 23.42 |
+| FAM + SSJ | 42 | 5.41 | 4.73 | 20.95 |
+| FAM + SSJ | 43 | 5.23 | 6.84 | 18.02 |
+| FAM + SSJ | 44 | 6.17 | 4.18 | 36.85 |
+| Grid Sample | 40 | 1.65 | 2.60 | 25.25 |
+| Grid Sample | 41 | 1.70 | 3.59 | 7.66 |
+| Grid Sample | 42 | 2.08 | 2.89 | 11.65 |
+| Grid Sample | 43 | 2.29 | 4.60 | 15.86 |
+| Grid Sample | 44 | 2.41 | 2.49 | 10.17 |
+
+A P3 e P4 il FAM standard predice sempre offset non nulli. Le medie tra seed
+sono `3.71 ± 1.31` px a P3 e `5.11 ± 1.77` px a P4. SSJ produce
+`4.94 ± 1.04` e `7.11 ± 2.80` px; Grid Sample `2.02 ± 0.34` e
+`3.24 ± 0.88` px. Le deviazioni standard sono campionarie tra cinque
+checkpoint.
+
+Il confronto numerico fra DCNv2 e Grid Sample resta descrittivo: nel primo
+caso `mean_abs` aggrega le componenti dei nove punti del kernel e il modulo
+effettua anche filtraggio e mixing dei canali; nel secondo esiste un solo
+vettore di warp per cella. Le due parametrizzazioni non rappresentano la
+stessa quantità geometrica.
+
+### Degenerazione P5 del FAM al seed 41
+
+La media P5 del FAM non deve essere riassunta con `1023.76 ± 2239.48` px:
+quel numero è dominato da un singolo checkpoint patologico. Il seed 41 mostra
+una degenerazione ripetuta in tutti i 30 campioni e in tutte le sessioni:
+
+- offset medio P5 `5029.83` px, mediana `4068.70` px e p90
+  `11915.32` px;
+- spostamento vettoriale netto medio `3969.13` px;
+- mask media `0.657`, con valori saturi tra 0 e 1;
+- `FAM(IR)` costante nello spazio (`std_spaziale = 0`) e con
+  `std_globale = 0.004393` in ogni campione;
+- anche le feature P5 pre-FAM sono anomale: `std_globale` media pari a
+  `17.12` per RGB e `20.11` per IR, contro valori inferiori a `0.71` e
+  `0.11` negli altri quattro seed.
+
+Gli offset enormi portano verosimilmente il campionamento fuori dalla mappa e
+il ramo produce quasi soltanto un bias costante. Poiché le feature a monte sono
+già anomale, i dati non permettono di stabilire se gli offset siano la causa o
+una conseguenza della degenerazione; la formulazione corretta è **collasso del
+ramo P5**, non semplice errore del runner. La ripetizione su ogni campione e la
+coerenza fra MtErie, FHL e Baker escludono un outlier di immagine o un errore
+di aggregazione.
+
+Questo stesso checkpoint ottiene `0.4335` mAP@50, il valore FAM più alto dei
+cinque. L'accuratezza finale non garantisce quindi che tutti i livelli del FAM
+abbiano appreso una trasformazione geometricamente sensata: gli altri livelli
+o percorsi del detector possono compensare il collasso di P5. Al tempo stesso,
+il vantaggio del FAM su Additive non dipende da questo checkpoint: escludendo
+il seed 41, FAM vince ancora in 4/4 seed con un delta medio di `+0.0799`
+mAP@50. L'anomalia modifica l'interpretazione meccanicistica, ma non rovescia
+il confronto prestazionale principale.
+
+### Effetto di SSJ fra seed
+
+La differenza appaiata SSJ meno FAM, calcolata sui checkpoint dello stesso
+seed, è:
+
+| Metrica | Livello | Delta medio ± dev. std. | IC 95% | Seed nella direzione attesa |
+|---|---|---:|---:|---:|
+| offset assoluto | P3 | +1.230 ± 1.001 px | [−0.013, +2.473] | 5/5 più alto |
+| offset assoluto | P4 | +2.001 ± 3.061 px | [−1.800, +5.801] | 3/5 più alto |
+| uniformity ratio | P3 | −0.089 ± 0.088 | [−0.198, +0.020] | 4/5 più basso |
+| uniformity ratio | P4 | −0.198 ± 0.236 | [−0.491, +0.096] | 4/5 più basso |
+| rapporto smoothing | P3 | −0.141 ± 0.030 | [−0.178, −0.104] | 5/5 più basso |
+
+SSJ aumenta dunque l'ampiezza degli offset a P3 in tutti i seed e rende
+l'uscita P3 più liscia in modo consistente. La maggiore uniformità a P3/P4 è
+una tendenza in 4/5 seed, ma con `n=5` gli intervalli includono zero. A P4
+l'effetto sull'ampiezza cambia segno, mentre il confronto P5 è reso
+ininterpretabile dal collasso del FAM seed 41. La conclusione storica secondo
+cui SSJ renderebbe stabilmente più uniformi P3 e P4 va quindi attenuata.
+
+Questa evidenza meccanicistica è coerente con il risultato di detection: SSJ
+modifica il comportamento del modulo, ma non migliora FAM in media
+(`0.3749` contro `0.3780` mAP@50).
+
+### Similarità fra feature sulla stessa cella
+
+Per ogni checkpoint è stata calcolata la variazione dopo meno prima del FAM.
+Un aumento del coseno o una diminuzione della RMSE standardizzata indicherebbe
+maggiore somiglianza RGB--IR nella stessa cella.
+
+| Configurazione | P3: Δ cos / Δ RMSE | P4: Δ cos / Δ RMSE | P5: Δ cos / Δ RMSE |
+|---|---:|---:|---:|
+| FAM | −0.216 ± 0.040 / +0.143 ± 0.025 | −0.238 ± 0.093 / +0.175 ± 0.066 | −0.096 ± 0.044 / +0.041 ± 0.031 |
+| FAM + SSJ | −0.234 ± 0.030 / +0.154 ± 0.019 | −0.254 ± 0.035 / +0.186 ± 0.028 | −0.137 ± 0.108 / +0.061 ± 0.064 |
+| Grid Sample | +0.009 ± 0.004 / −0.008 ± 0.004 | +0.004 ± 0.002 / −0.006 ± 0.005 | −0.003 ± 0.002 / −0.002 ± 0.005 |
+
+Il warp puro di Grid Sample lascia le feature quasi invariate e produce un
+piccolo aumento della similarità a P3/P4. DCNv2, invece, riduce il coseno e
+aumenta la RMSE in tutti i livelli. Questo **non dimostra che DCNv2 peggiori
+l'allineamento fisico**: oltre a ricampionare, la convoluzione deformabile
+filtra e combina i canali, perciò la feature di uscita non è tenuta a essere
+numericamente simile a RGB. Dimostra però che `FAM(IR)` non può essere descritta
+come una semplice versione dell'IR resa uguale a RGB cella per cella. Il nome
+"alignment" va inteso come trasformazione geometrico-funzionale appresa per il
+task, non come misura verificata di registrazione fra camere.
+
+### Dipendenza dalla sessione e figure
+
+Le medie degli offset P3/P4, prima sui dieci campioni e poi sui cinque seed,
+sono:
+
+| Configurazione / sessione | P3 | P4 |
+|---|---:|---:|
+| FAM — MtErie | 4.53 | 5.53 |
+| FAM — FHL | 3.73 | 5.04 |
+| FAM — Baker | 2.87 | 4.77 |
+| FAM + SSJ — MtErie | 6.02 | 7.37 |
+| FAM + SSJ — FHL | 4.57 | 6.95 |
+| FAM + SSJ — Baker | 4.22 | 7.02 |
+| Grid Sample — MtErie | 2.69 | 3.76 |
+| Grid Sample — FHL | 1.95 | 3.09 |
+| Grid Sample — Baker | 1.44 | 2.87 |
+
+Le differenze sono più marcate a P3 e sono compatibili con una trasformazione
+dipendente dall'input/sessione. Restano descrittive: FHL e Baker appartengono
+al train split e le sessioni non sono repliche randomizzate, quindi questa
+tabella non misura generalizzazione né identifica una causa geometrica.
+
+Le 18 figure usano, come stabilito prima dell'analisi, il seed 40 e i campioni
+MtErie 35, FHL 90 e Baker 1948. Mostrano campi SSJ visibilmente più ampi e
+feature post-DCNv2 più lisce, in accordo con le statistiche. Sono soltanto
+illustrazioni: riguardano un seed, la PCA è una proiezione e non mostrano il
+collasso del seed 41.
+
+## Conclusione finale della diagnostica
+
+La replica conferma che il percorso geometrico del FAM è attivo a P3 e P4 in
+tutti i checkpoint e che il comportamento dipende sia dal seed sia dalla
+sessione. Non conferma però una trasformazione stabile a ogni livello: il FAM
+seed 41 presenta un collasso completo di P5, invisibile se si osserva soltanto
+la mAP. Inoltre le proxy sulla stessa cella non autorizzano a chiamare
+l'uscita DCNv2 una registrazione fisica RGB--IR verificata.
+
+SSJ altera il modulo in modo ripetibile soprattutto a P3, aumentando gli
+offset e lo smoothing, ma non produce un vantaggio di detection e non rende
+uniformi tutti i livelli in modo conclusivo. Grid Sample è internamente più
+stabile e preserva maggiormente le feature, ma usa una parametrizzazione
+diversa e non supera FAM in modo consistente sul benchmark.
+
+Per la tesi resta quindi giustificata la scelta di **FAM `current_dcnv2` senza
+SSJ** come modello RT-DETR principale, fondata sul confronto di detection
+multi-seed. La descrizione del meccanismo deve però includere la variabilità
+interna e l'anomalia P5: il risultato supporta una trasformazione appresa utile
+al detector, non dimostra che ogni livello corregga fedelmente il vero
+disallineamento dei sensori.
+
+## Riproduzione della diagnostica
 
 Il runner `scripts/run_rtdetr_fam_diagnostics.py` risolve i checkpoint locali
-per coppia progetto/seed. Ricostruisce esplicitamente ciascuna architettura a
-partire dal template comune `parameters/RTDETR/rtdetr_protocol.yaml`, quindi
-non dipende dai vecchi YAML separati delle campagne. Esegue i trenta campioni
-fissati e produce:
-
-- JSON grezzi riavviabili in `out/rtdetr_fam_diagnostics/raw/`;
-- un JSON combinato con aggregati per checkpoint e poi tra seed;
-- un CSV degli aggregati tra i cinque seed;
-- figure PCA soltanto per FAM e SSJ seed 40, sui campioni dichiarati prima
-  dell'analisi: MtErie 35, FHL 90 e Baker 1948.
-
-Il comando congelato è:
+per coppia progetto/seed, ricostruisce l'architettura dal template
+`parameters/RTDETR/rtdetr_protocol.yaml` e invoca `fam_alignment_check.py`.
+Il comando è:
 
 ```bash
 python scripts/run_rtdetr_fam_diagnostics.py
 ```
 
-In caso di interruzione lo stesso comando salta i JSON già completati. L'opzione
-`--force` va usata soltanto se si intende rigenerare deliberatamente tutto.
-
-Le similarità tra feature esportate nel JSON sono proxy descrittivi sulla
-stessa cella spaziale dopo standardizzazione globale. Non sono misure di ground
-truth della registrazione fisica. MAE o correlazioni tra interi campi saranno
-aggiunte solo se necessarie e soltanto fra campi con forma e semantica
-confrontabili; DCNv2 e Grid Sample non vanno confrontati cella per cella come
-se rappresentassero la stessa parametrizzazione.
-
-L'unità sperimentale per un confronto tra configurazioni è il checkpoint/seed.
-Le celle della feature map e i nove punti del kernel non sono repliche
-statistiche indipendenti; usarli come tali produrrebbe pseudo-replicazione e
-intervalli artificialmente stretti.
-
-Per le figure principali si usa il seed 40 sia per FAM sia per SSJ, scelta
-registrata prima della nuova analisi: il FAM seed 40 coincide con la mediana
-VIS+IR e lo SSJ seed 40 è vicino alla propria mediana. Le figure restano
-illustrative; le conclusioni quantitative usano tutti i cinque seed.
+In caso di interruzione salta i JSON già completi; `--force` rigenera
+deliberatamente tutto. Per le similarità e i confronti tra varianti valgono le
+cautele metodologiche riportate sopra: le celle spaziali e i nove punti DCNv2
+non sono repliche statistiche indipendenti.
 
 ## Limiti che restano anche dopo la replica
 
 - La verifica attuale riguarda feature e offset interni. Un confronto qualitativo sui bounding box predetti, sovrapposti alle immagini RGB e IR, è ora tecnicamente possibile ma non è ancora stato eseguito.
 - Le conclusioni sulla dipendenza dall'input si basano su statistiche aggregate. Un confronto diretto dei tensori di offset tra campioni (ad esempio MAE e correlazione per livello) renderebbe quantitativa la variazione del campo cella per cella.
+- La degenerazione del seed 41 è stata identificata a posteriori. Un'ablation
+  esplorativa, dichiarata come tale, che bypassi separatamente P3, P4 e P5 in
+  inferenza sui cinque checkpoint potrebbe stabilire quanto ciascun livello
+  contribuisca alle predizioni; non trasformerebbe però MtErie in un nuovo
+  holdout né dimostrerebbe la causa del collasso.
 - Un offset appreso non è automaticamente una stima della trasformazione fisica
   fra le camere: può anche ottimizzare una trasformazione utile al detector.
   Senza ground truth geometrica, la formulazione corretta è "trasformazione

@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from sarfusion.data.wisard import TEST_FOLDERS, TRAIN_FOLDERS, VAL_FOLDERS, generate_wisard_filelist, get_wisard_folders
 from sarfusion.data.tile_aggregation import aggregate_tile_predictions
-from sarfusion.experiment.yolo import WisardTrainer
+from sarfusion.experiment.yolo import WisardTrainer, install_wandb_empty_curve_guard
 from sarfusion.models.yolov10 import YOLOv10WiSARD
 from sarfusion.utils.structures import LossOutput, WrapperModelOutput
 from sarfusion.utils.logger import get_logger
@@ -1033,6 +1033,7 @@ class Run:
 
 
 def yolo_train(parameters):
+    install_wandb_empty_curve_guard()
     if isinstance(parameters, str):
         args = load_yaml(parameters)
     else:

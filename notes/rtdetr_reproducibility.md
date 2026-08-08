@@ -483,12 +483,20 @@ Carnation esclusa dagli split può essere usata una sola volta come stress test
 esterno di Additive e FAM, ma non come validation o come nuova sorgente di
 tuning.
 
-Prima di nuove architetture restano due attività:
+La diagnostica di offset/feature sui 15 checkpoint finali FAM, FAM + SSJ e
+Grid Sample è stata completata aggregando prima per checkpoint e poi tra seed.
+Ha confermato l'attività del FAM a P3/P4, ma ha anche identificato una
+degenerazione completa del ramo P5 nel FAM seed 41: offset medi di circa 5.030
+pixel e uscita costante nello spazio, nonostante quel checkpoint ottenga la
+migliore mAP@50 FAM. Questa anomalia non genera il vantaggio su Additive:
+escludendo il seed 41, FAM vince ancora in 4/4 seed con delta medio `+0.0799`.
+I dettagli e le cautele sull'interpretazione geometrica sono in
+[`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md).
 
-1. ripetere la diagnostica di offset/feature su tutti i checkpoint finali FAM,
-   FAM + SSJ e Grid Sample, aggregando prima per seed;
-2. se YOLO deve comparire nelle conclusioni, ripetere soltanto YOLO Additive e
-   YOLO + FAM con cinque seed, feature gating, orizzonte fisso e `last.pt`.
+Restano l'error analysis Additive/FAM e, poiché YOLO deve comparire nelle
+conclusioni, il confronto essenziale YOLO Additive contro YOLO + FAM con cinque
+seed, feature gating, orizzonte fisso e `last.pt`; il training YOLO è stato
+avviato l'8 agosto 2026.
 
 La roadmap completa e la classificazione degli esperimenti storici sono in
 [`thesis_experiment_audit.md`](thesis_experiment_audit.md).

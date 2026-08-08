@@ -455,6 +455,29 @@ stopping con `patience: 0`, mantengono 200 epoche fisse e impostano
 automatico verifica sia il selettore sia l'equivalenza del protocollo fra i
 due YAML, salvo l'attivazione del FAM.
 
+Cinque seed sono necessari anche se YOLO è prevalentemente convoluzionale.
+L'assenza del matching ungherese e della deformable attention fa prevedere una
+variabilità inferiore a RT-DETR, ma non rende identiche inizializzazione,
+ordine dei batch e sequenza casuale del Modal Dropout. Inoltre la variante FAM
+contiene `DeformConv2d`, il cui backward CUDA non è strettamente
+deterministico. I seed appaiati servono quindi a stimare la dispersione e,
+soprattutto, la differenza FAM meno Additive senza fondare la dichiarazione di
+trasferibilità su una singola inizializzazione.
+
+### Incidente W&B e ripartenza
+
+La prima run Additive, seed 40, ha completato 200/200 epoche, salvato
+`last.pt` e concluso il test (`mAP@50 = 0.230`). Il processo è terminato subito
+dopo il test perché Ultralytics 8.1.34 tenta di interpolare nel callback W&B
+una curva precision--recall vuota quando `plots: false`. Il training e il
+checkpoint non sono stati coinvolti.
+
+È stata aggiunta una protezione locale che ignora soltanto curve W&B vuote o
+malformate, continuando a salvare metriche scalari e checkpoint. L'opzione CLI
+`--start-from-run` permette inoltre di riprendere una grid senza modificare il
+protocollo YAML: per Additive si riparte dall'indice 1, corrispondente al seed
+41. Test automatici verificano il guard e l'override della ripartenza.
+
 ### SSJ e vecchie grid
 
 Non è necessario ripetere fusion-only, input-level dropout o SSJ 1.0. FAM +

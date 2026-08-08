@@ -66,9 +66,21 @@ def tile_wisard(data):
     help="Creates params files with running them",
     is_flag=True,
 )
-def experiment(parameters, parallel, only_create, yolo):
+@click.option(
+    "--start-from-run",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Override experiment.start_from_run without editing the YAML.",
+)
+def experiment(parameters, parallel, only_create, yolo, start_from_run):
     from sarfusion.experiment.experiment import experiment as run_experiment
-    run_experiment(param_path=parameters, parallel=parallel, only_create=only_create, yolo=yolo)
+    run_experiment(
+        param_path=parameters,
+        parallel=parallel,
+        only_create=only_create,
+        yolo=yolo,
+        start_from_run=start_from_run,
+    )
 
 
 @main.command("run")
