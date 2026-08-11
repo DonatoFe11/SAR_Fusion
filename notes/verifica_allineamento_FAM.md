@@ -389,11 +389,321 @@ non sono repliche statistiche indipendenti.
 - La verifica attuale riguarda feature e offset interni. Un confronto qualitativo sui bounding box predetti, sovrapposti alle immagini RGB e IR, è ora tecnicamente possibile ma non è ancora stato eseguito.
 - Le conclusioni sulla dipendenza dall'input si basano su statistiche aggregate. Un confronto diretto dei tensori di offset tra campioni (ad esempio MAE e correlazione per livello) renderebbe quantitativa la variazione del campo cella per cella.
 - La degenerazione del seed 41 è stata identificata a posteriori. Un'ablation
-  esplorativa, dichiarata come tale, che bypassi separatamente P3, P4 e P5 in
-  inferenza sui cinque checkpoint potrebbe stabilire quanto ciascun livello
-  contribuisca alle predizioni; non trasformerebbe però MtErie in un nuovo
-  holdout né dimostrerebbe la causa del collasso.
+  esplorativa, dichiarata come tale, delle otto combinazioni FAM
+  attivo/disattivo a P3, P4 e P5 sui cinque checkpoint può misurare sensibilità
+  e interazioni fra livelli; non trasforma però MtErie in un nuovo holdout né
+  dimostra da sola la causa del collasso.
 - Un offset appreso non è automaticamente una stima della trasformazione fisica
   fra le camere: può anche ottimizzare una trasformazione utile al detector.
   Senza ground truth geometrica, la formulazione corretta è "trasformazione
   geometrica appresa" e non "registrazione vera misurata".
+
+## Piano di chiusura della verifica P3/P4/P5
+
+La replica multi-seed ha identificato il problema ma non ne ha ancora stabilito
+la rilevanza funzionale né la causa. La chiusura procede nell'ordine seguente:
+
+1. generare una figura dedicata al P5 del FAM seed 41, usando uno dei campioni
+   già fissati e mostrando feature RGB, IR, FAM(IR), offset e mask;
+2. valutare in sola inferenza i cinque checkpoint FAM in tutte le otto
+   combinazioni di livelli attivi fra P3, P4 e P5: nessun FAM, ciascun livello
+   da solo, ciascuna coppia e tutti e tre i livelli. Il bypass di un livello
+   deve sostituire `FAM(IR)` con la feature IR non deformata, mantenendo
+   invariati dati, soglia e tutte le altre impostazioni;
+3. riportare per seed mAP COCO, mAP@50, mAP@75 e mAR, differenze appaiate
+   rispetto al checkpoint non modificato e interazioni fra livello e seed;
+4. confrontare fra seed le norme e distribuzioni dei parametri del predittore
+   offset/mask P5, della DCNv2 P5 e delle feature pre-FAM, per distinguere un
+   predittore esploso da un'anomalia già presente nella backbone;
+5. completare la verifica della dipendenza dall'input confrontando direttamente
+   i tensori di offset degli stessi livelli fra campioni, con MAE e correlazione
+   calcolate per checkpoint prima dell'aggregazione fra seed;
+6. usare i contrasti fra le otto condizioni per descrivere sensibilità e
+   possibili interazioni/compensazioni fra livelli, senza interpretarli come
+   una decomposizione causale o additiva della mAP.
+
+Anche il caso con tutti e tre i livelli bypassati non equivale al checkpoint
+Additive: i pesi del resto della rete sono stati addestrati insieme al FAM.
+Analogamente, un buon risultato del bypass P5 rende plausibile ma non predice
+esattamente il comportamento di un nuovo modello addestrato con FAM soltanto a
+P3/P4. Tutte le condizioni sono interventi post-hoc fuori dalla distribuzione
+di training e vanno presentate come ablation di sensibilità.
+
+### Diario di esecuzione — 11 agosto 2026
+
+| Passo | Stato | Evidenza |
+|---|---|---|
+| Figura P5 FAM seed 41 | completato | campione MtErie 35, livello 2/P5, checkpoint `latest` |
+| Harness fattoriale | completato e testato | otto sottoinsiemi di P3/P4/P5; bypass = IR pre-FAM |
+| Replica FAM completo seed 41 | completata | `0.433475` mAP@50 contro `0.4335` già documentato |
+| Cinque seed × otto condizioni | completato | 40 valutazioni; JSON e CSV aggregati |
+| Audit parametri/attivazioni e offset fra campioni | completato | 5 checkpoint, 30 campioni/checkpoint, 810 coppie/checkpoint |
+
+La figura dedicata è
+[`fam_sample35_level_2.png`](../out/rtdetr_fam_diagnostics/figures/fam/seed_41/mt_erie_p5/fam_sample35_level_2.png).
+Sul campione fissato l'offset assoluto medio P5 è `163.3503` celle della
+feature map, cioè circa `5227.21 px` nell'immagine; il massimo è circa
+`18025.46 px`. L'uscita `FAM(IR)` ha deviazione spaziale arrotondata a
+`0.0000`, coerentemente con il collasso già osservato sui trenta campioni.
+Il caricamento del checkpoint non presenta chiavi mancanti o inattese.
+
+Lo script dell'ablation è
+[`scripts/run_rtdetr_fam_level_ablation.py`](../scripts/run_rtdetr_fam_level_ablation.py).
+La condizione `p3_p4_p5` del seed 41 ha riprodotto il risultato storico con il
+comando:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-fam-ablation \
+  /home/donato/miniconda3/envs/sarfusion/bin/python \
+  scripts/run_rtdetr_fam_level_ablation.py \
+  --seeds 41 --conditions p3_p4_p5 \
+  --output-dir out/rtdetr_fam_level_ablation --device cuda
+```
+
+La campagna completa usa lo stesso comando senza restringere seed o
+condizioni. Ogni risultato grezzo viene scritto immediatamente e un rilancio
+salta soltanto i job compatibili già completi:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-fam-ablation \
+  /home/donato/miniconda3/envs/sarfusion/bin/python \
+  scripts/run_rtdetr_fam_level_ablation.py \
+  --output-dir out/rtdetr_fam_level_ablation --device cuda
+```
+
+Gli output aggregati sono
+[`rtdetr_fam_level_ablation.json`](../out/rtdetr_fam_level_ablation/rtdetr_fam_level_ablation.json)
+e
+[`rtdetr_fam_level_ablation.csv`](../out/rtdetr_fam_level_ablation/rtdetr_fam_level_ablation.csv).
+La tabella riporta media e deviazione standard campionaria sui cinque
+checkpoint. `Delta full` è la differenza appaiata media rispetto al FAM
+completo; un valore negativo indica un peggioramento del bypass.
+
+| Livelli FAM attivi | mAP@50 media | SD | Delta full |
+|---|---:|---:|---:|
+| nessuno | 0.2259 | 0.0654 | -0.1521 |
+| P3 | 0.3223 | 0.0660 | -0.0558 |
+| P4 | 0.2396 | 0.0983 | -0.1384 |
+| P5 | 0.2791 | 0.0377 | -0.0989 |
+| P3 + P4 | 0.3221 | 0.0701 | -0.0559 |
+| P3 + P5 | 0.3648 | 0.0503 | -0.0132 |
+| P4 + P5 | 0.2984 | 0.0254 | -0.0796 |
+| P3 + P4 + P5 | **0.3780** | **0.0440** | 0.0000 |
+
+L'intervento più vicino al modello completo è P3+P5, ma lo supera soltanto
+nel seed 44. Il dettaglio delle due rimozioni più informative è:
+
+| Seed | FAM completo | P3 + P4 (senza P5) | P3 + P5 (senza P4) |
+|---:|---:|---:|---:|
+| 40 | 0.3783 | 0.3756 | 0.3424 |
+| 41 | 0.4335 | 0.2399 | 0.4333 |
+| 42 | 0.3129 | 0.2510 | 0.2963 |
+| 43 | 0.3964 | 0.3677 | 0.3758 |
+| 44 | 0.3690 | 0.3762 | 0.3761 |
+
+Nel disegno fattoriale l'effetto principale medio sulla mAP@50 è `+0.0860`
+per P3 (SD `0.0396`), `+0.0526` per P5 (SD `0.0647`) e `+0.0115` per P4
+(SD `0.0348`). P3 è quindi il contributo più stabile. P5 ha un effetto medio
+positivo in tutti i seed, ma estremamente variabile e dominato dal seed 41;
+P4 non ha un effetto principale stabile. Le interazioni impediscono comunque
+di trasformare questi effetti post-hoc in una prescrizione diretta per il
+training.
+
+Il risultato esclude la variante FAM soltanto P3/P4 come prima correzione:
+proprio nel checkpoint patologico, rimuovere P5 fa perdere `0.1936` mAP@50.
+Il decoder ha imparato a sfruttare o compensare lo stato degenerato di P5. Il
+collasso è dunque funzionalmente rilevante, ma non è correggibile eliminando il
+livello dopo il training.
+
+L'audit interno successivo è implementato in
+[`scripts/run_rtdetr_fam_internal_audit.py`](../scripts/run_rtdetr_fam_internal_audit.py).
+Per ogni sessione e livello confronta le 45 coppie formate dai dieci campioni,
+riportando MAE, RMSE, MAE normalizzato e correlazione di Pearson sia per i 18
+canali di offset sia per il campo netto pesato dalle mask. Analizza inoltre
+separatamente pesi e bias di offset, mask e DCNv2. Il comando usato dopo
+l'ablation di detection è:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-fam-audit \
+  /home/donato/miniconda3/envs/sarfusion/bin/python \
+  scripts/run_rtdetr_fam_internal_audit.py \
+  --output-dir out/rtdetr_fam_internal_audit --device cuda
+```
+
+L'output completo è
+[`rtdetr_fam_internal_audit.json`](../out/rtdetr_fam_internal_audit/rtdetr_fam_internal_audit.json),
+con un JSON grezzo per checkpoint. I valori seguenti sono medie prima sui 30
+campioni congelati del checkpoint; non sono ottenuti unendo i campioni dei
+cinque seed.
+
+| Seed | P5 RGB std | P5 IR std | offset ass. medio (px immagine) | FAM(IR) std spaziale |
+|---:|---:|---:|---:|---:|
+| 40 | 0.1710 | 0.0559 | 13.70 | 0.0146 |
+| 41 | **17.2976** | **20.1778** | **5057.12** | **0.0000** |
+| 42 | 0.6862 | 0.1011 | 34.64 | 0.0369 |
+| 43 | 0.6215 | 0.0713 | 14.88 | 0.0358 |
+| 44 | 0.2506 | 0.0713 | 26.54 | 0.0085 |
+
+L'anomalia nasce quindi già nelle feature pre-FAM P5 di entrambe le modalità,
+non da un'esplosione dei parametri del predittore degli offset. Nel seed 41 la
+norma L2 dei pesi P5 che producono i 18 canali di offset è `8.1768`, nello
+stesso intervallo degli altri checkpoint (`8.1980`--`8.2163`). Anche pesi e
+bias della mask e della DCNv2 sono della stessa scala degli altri seed.
+
+Gli offset P5 del seed 41 sono quasi invarianti rispetto al campione: nelle tre
+sessioni la MAE normalizzata fra coppie è `0.036`--`0.040` e la correlazione
+media è maggiore di `0.999`. Negli altri checkpoint gli offset grezzi cambiano
+molto di più fra immagini (MAE normalizzata circa `0.275`--`0.634`). Gli offset
+enormi portano i nove punti di campionamento fuori dalla feature map; per tutti
+i 30 campioni l'uscita P5 è costante nello spazio e le sue statistiche
+coincidono con il bias della `deform_conv`. Questo non è un allineamento fisico
+e neppure una trasformazione geometrica dipendente dal contenuto: è un ramo IR
+P5 ridotto a un bias appreso, al quale il resto della rete si è adattato.
+
+Questi risultati distinguono causa prossima e contesto del failure mode:
+
+- il livello critico è P5; P3 non collassa e fornisce il contributo più
+  consistente alla detection;
+- la causa prossima dell'uscita costante sono gli offset non limitati;
+- il fattore a monte è la scala patologica delle feature P5, presente sia nel
+  backbone RGB sia in quello IR;
+- P5 compensa comunque il proprio stato patologico nel modello addestrato:
+  sostituirlo post-hoc con l'identità peggiora drasticamente il seed 41.
+
+Alla luce dei controlli, la regola di decisione iniziale si risolve così:
+
+- se bypassare P5 è neutro o favorevole nella maggior parte dei seed, la prima
+  variante candidata è FAM soltanto a P3/P4;
+- se P5 è utile nei checkpoint normali ma patologico nel seed 41 e l'esplosione
+  nasce dagli offset, è più coerente limitare gli offset in unità della feature
+  map;
+- se l'anomalia è già nella scala delle feature pre-FAM, va studiata una
+  normalizzazione del predittore prima di attribuire il problema agli offset;
+- se P5 contiene informazione utile ma l'uscita deformata può collassare, un
+  percorso residuale/identity o un gate per livello può preservare il segnale
+  grezzo; il gate appreso è però più complesso e non è la prima scelta senza
+  evidenza che una rimozione statica sia insufficiente.
+
+La candidata più direttamente motivata è pertanto un FAM con offset limitati
+in modo liscio in unità della feature map. È l'unica modifica, fra quelle
+considerate, che impedisce per costruzione il campionamento migliaia di pixel
+fuori mappa e agisce sulla causa prossima osservata. Un limite preliminare di
+`4` celle conserva la quasi totalità della distribuzione ordinaria: escludendo
+il seed 41, sui 120 casi livello/checkpoint il 95-esimo percentile dei `p90`
+campionari è `1.59` celle a P3, `0.81` a P4 e `2.35` a P5; il massimo dei `p90`
+osservati a P5 è `2.81` celle. Il valore e la trasformazione devono essere
+bloccati prima di guardare i risultati del nuovo training.
+
+Questa correzione non elimina la sottostante instabilità di scala del
+backbone. Perciò il nuovo esperimento deve verificare sia la detection sia
+l'assenza del collasso interno; se le feature P5 esplodono ancora ma gli offset
+restano limitati, si potrà attribuire correttamente alla variante soltanto la
+robustezza del FAM, non la stabilizzazione del backbone. Una normalizzazione
+del predittore o il congelamento/regularizzazione del backbone restano sviluppi
+distinti e non vanno combinati nello stesso primo esperimento.
+
+### Variante bloccata per il nuovo training
+
+La variante è registrata come `bounded_dcnv2_4` in
+[`rtdetr_fusion.py`](../sarfusion/models/rtdetr_fusion.py). Applica a ciascuna
+coordinata predetta:
+
+```text
+offset = 4 * tanh(raw_offset / 4)
+```
+
+La derivata nell'origine è uno, gli offset nulli restano nulli e il limite è
+espresso in celle del livello corrente. Non sono stati aggiunti gate,
+normalizzazioni, percorsi residuali o modifiche al backbone. Il protocollo
+congelato è
+[`rtdetr_fam_bounded4_protocol.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml):
+seed `40--44`, 10 epoche, `latest`, nessuna validation, testa COCO `person`,
+Modal Dropout `20/20/60`, processi isolati.
+
+Prima del lancio:
+
+- il protocollo espande esattamente cinque run;
+- 23 test mirati su variante, diagnostica e ablation passano;
+- lo smoke test sul vecchio seed 41 conferma un massimo effettivo di `4.0000`
+  celle e un output P5 nuovamente variabile nello spazio;
+- lo smoke test è soltanto ingegneristico: il vecchio checkpoint satura il
+  limite (offset medio `3.8779` celle) e non viene usato come risultato di
+  detection.
+
+Comando della campagna:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-rtdetr-bounded4 \
+PYTHONUNBUFFERED=1 \
+/home/donato/miniconda3/envs/sarfusion/bin/python \
+  main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml
+```
+
+La campagna è stata avviata in background l'11 agosto 2026 alle `12:33`. Il
+primo processo è il seed 40, run W&B `17e3hmm3`; il log locale è
+`rtdetr_fam_bounded4_protocol.log`. L'avvio ha verificato `485/485` tensori
+trainabili, `55` tensori classificati come nuovi moduli, LR uniforme `2e-5` e
+ingresso regolare nell'epoca `1/10`. Per monitorare senza interrompere il
+training:
+
+```bash
+watch -n 10 'tail -c 30000 rtdetr_fam_bounded4_protocol.log | tr "\r" "\n" | tail -n 35'
+```
+
+`Ctrl+C` termina soltanto `watch`. Durante la campagna non va modificato
+`sarfusion/models/rtdetr_fusion.py`, perché ogni seed viene caricato in un
+nuovo processo.
+
+Per una ripresa dal seed corrispondente all'indice `N` (`0=40`, ..., `4=44`),
+dopo avere verificato il checkpoint già concluso:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-rtdetr-bounded4 \
+PYTHONUNBUFFERED=1 \
+/home/donato/miniconda3/envs/sarfusion/bin/python \
+  main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml \
+  --start-from-run N
+```
+
+Al termine non basta selezionare una singola run. Il test VIS+IR eseguito
+automaticamente dopo ogni training fornisce già la metrica primaria per tutti
+i cinque checkpoint, ma la robustezza alle modalità mancanti richiede anche
+VIS e IR. Il file congelato
+[`rtdetr_fam_bounded4_modality_evaluation.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_modality_evaluation.yaml)
+genera 15 valutazioni: cinque checkpoint `latest` per tre modalità. Il seed di
+evaluation resta fisso a `42`; i valori `40--44` dentro `pretrained_wandb`
+identificano i checkpoint di training.
+
+Prima di lanciarlo occorre verificare cinque checkpoint finali univoci e la
+chiusura regolare della campagna. Il comando è:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-rtdetr-bounded4-eval \
+PYTHONUNBUFFERED=1 \
+/home/donato/miniconda3/envs/sarfusion/bin/python \
+  main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_bounded4_modality_evaluation.yaml
+```
+
+La preview del file ha confermato cinque grid da tre run, quindi esattamente 15
+valutazioni. `modal_dropout` è disattivato e il caricamento richiede il match
+completo del checkpoint. La ripetizione VIS+IR standardizza evaluation seed,
+batch size e progetto W&B rispetto alle modalità singole; va confrontata con
+il test automatico come controllo di coerenza, non usata per scegliere quale
+valore riportare.
+
+Non si confrontano tutte le possibili soluzioni in una grid sul test. È stata
+selezionata una sola ipotesi architetturale prima del nuovo training. Il
+confronto principale sarà appaiato con FAM `current_dcnv2`; Additive resterà il
+riferimento senza allineamento.
+
+Se codice condiviso, dati e protocollo restano identici, per il confronto si
+riusano i risultati già congelati di Additive e FAM `current_dcnv2`: soltanto la
+nuova variante richiede cinque training. Va però dichiarato che una variante
+scelta dopo questa analisi su MtErie è un'estensione post-hoc. I cinque seed ne
+misurano variabilità e consistenza, ma non rendono MtErie un test indipendente.
+Una dichiarazione confermativa sulla correzione richiederebbe una regola
+bloccata prima di un nuovo holdout; in assenza di esso, il confronto va
+presentato come evidenza esplorativa e come base per sviluppi futuri.

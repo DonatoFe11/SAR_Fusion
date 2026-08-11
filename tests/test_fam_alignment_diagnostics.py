@@ -11,6 +11,7 @@ from fam_alignment_check import (
     offset_statistics,
     offset_vectors,
 )
+from sarfusion.models.rtdetr_fusion import BoundedFeatureAlignmentModule
 
 
 class GridSampleFeatureAlignmentModule(nn.Module):
@@ -70,6 +71,23 @@ class TestFAMAlignmentDiagnostics(unittest.TestCase):
 
         self.assertEqual(capture.records[0]["offset_kind"], "grid_sample")
         self.assertEqual(tuple(capture.records[0]["offset"].shape), (1, 2, 3, 3))
+        capture.remove()
+
+    def test_capture_reports_effective_bounded_offset_and_keeps_raw_value(self):
+        model = nn.Sequential(BoundedFeatureAlignmentModule(2))
+        with torch.no_grad():
+            model[0].offset_conv.weight.zero_()
+            model[0].offset_conv.bias[:18].fill_(100.0)
+        capture = FAMCapture(model)
+        rgb = torch.randn(1, 2, 3, 3)
+        ir = torch.randn(1, 2, 3, 3)
+
+        model[0](rgb, ir)
+
+        record = capture.records[0]
+        self.assertEqual(record["offset_kind"], "dcnv2_3x3")
+        self.assertAlmostEqual(record["raw_offset"].mean().item(), 100.0)
+        self.assertLessEqual(record["offset"].abs().max().item(), 4.0)
         capture.remove()
 
     def test_aggregate_keeps_record_count(self):

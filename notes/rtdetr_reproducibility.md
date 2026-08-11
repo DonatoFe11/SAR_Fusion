@@ -490,13 +490,38 @@ degenerazione completa del ramo P5 nel FAM seed 41: offset medi di circa 5.030
 pixel e uscita costante nello spazio, nonostante quel checkpoint ottenga la
 migliore mAP@50 FAM. Questa anomalia non genera il vantaggio su Additive:
 escludendo il seed 41, FAM vince ancora in 4/4 seed con delta medio `+0.0799`.
+
+La chiusura post-hoc per livello è stata completata con 40 valutazioni
+fattoriali. Il FAM completo ottiene `0.3780 ± 0.0440` mAP@50, P3+P5
+`0.3648 ± 0.0503` e P3+P4 `0.3221 ± 0.0701`. Nel seed 41 la rimozione di P5
+fa scendere la metrica da `0.4335` a `0.2399`, quindi il decoder compensa il
+failure mode e P5 non va semplicemente eliminato.
+
+L'audit dei cinque checkpoint mostra che l'esplosione è già nelle feature P5
+pre-FAM RGB e IR, mentre i pesi del predittore hanno norme ordinarie. Gli
+offset del seed 41 sono quasi invarianti fra campioni (correlazione maggiore
+di `0.999`) e campionano fuori mappa, riducendo FAM(IR) al bias della DCNv2.
+È stata bloccata prima del nuovo training la sola variante esplorativa
+`bounded_dcnv2_4`, con offset `4*tanh(raw/4)` in celle della feature map. Il
+protocollo a cinque seed è
+[`rtdetr_fam_bounded4_protocol.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml).
+La successiva campagna di modalità è già bloccata in
+[`rtdetr_fam_bounded4_modality_evaluation.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_modality_evaluation.yaml):
+cinque checkpoint `latest` per VIS, IR e VIS+IR, seed di evaluation fisso 42,
+Modal Dropout disattivato e caricamento completo obbligatorio. Il VIS+IR
+ripetuto serve come controllo di coerenza con il test automatico di fine
+training, non come selezione post-hoc del valore da riportare.
 I dettagli e le cautele sull'interpretazione geometrica sono in
 [`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md).
 
-Restano l'error analysis Additive/FAM e, poiché YOLO deve comparire nelle
-conclusioni, il confronto essenziale YOLO Additive contro YOLO + FAM con cinque
-seed, feature gating, orizzonte fisso e `last.pt`; il training YOLO è stato
-avviato l'8 agosto 2026.
+Restano il training a cinque seed della variante bounded-offset e l'error
+analysis Additive/FAM. Il confronto YOLO Additive contro YOLO + FAM a cinque seed è stato
+completato: al `last.pt` di 200 epoche Additive ottiene `0.2485 ± 0.0256` e FAM
+`0.2197 ± 0.0443` mAP@50 VIS+IR, con delta appaiato `−0.0288` e 2/5 vittorie.
+Il confronto con i checkpoint storici precoci è compatibile con degradazione
+tardiva della generalizzazione; YOLO è in standby finché non viene definita
+una validation rappresentativa. Mancano ancora le valutazioni separate VIS e
+IR sui dieci checkpoint congelati.
 
 La roadmap completa e la classificazione degli esperimenti storici sono in
 [`thesis_experiment_audit.md`](thesis_experiment_audit.md).

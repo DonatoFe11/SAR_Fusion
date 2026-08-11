@@ -1,10 +1,14 @@
 # Integrazione YOLOv10 + FAM
 
-> **Stato.** Tutti i risultati YOLO attualmente riportati sono singole run del
-> protocollo storico, con `best.pt` scelto dalla validation ed early stopping a
-> epoche diverse. Restano validi come sviluppo esplorativo, ma non possono
-> stabilire se FAM migliori YOLO. Se YOLO rimane nelle conclusioni della tesi è
-> necessario il confronto finale a cinque seed definito in fondo a questa nota.
+> **Stato.** Il confronto finale Additive--FAM a cinque seed e 200 epoche è
+> terminato l'11 agosto 2026. Al checkpoint finale FAM non migliora Additive
+> (`0.2197` contro `0.2485` mAP@50 media, 2/5 vittorie). Il confronto con le
+> vecchie run selezionate precocemente indica una probabile degradazione tardiva
+> della generalizzazione: l'orizzonte di 200 epoche va riesaminato, ma non può
+> essere sostituito post-hoc scegliendo un'epoca sul test MtErie. La linea YOLO è
+> quindi in standby mentre si completa la verifica RT-DETR del FAM; restano da
+> eseguire le valutazioni finali separate VIS e IR e da decidere un eventuale
+> nuovo protocollo basato su una validation rappresentativa.
 
 ## Contesto
 
@@ -417,7 +421,7 @@ validation ridotta e il checkpoint `best`. Per il confronto finale non si
 costruisce una nuova validation ad hoc: si usa un orizzonte fissato a priori,
 senza early stopping, e si valuta `last.pt`, come nel protocollo RT-DETR.
 
-## Protocollo finale YOLO da eseguire
+## Protocollo finale YOLO a 200 epoche
 
 La domanda finale non è quale delle vecchie grid abbia prodotto il massimo
 numero, ma se il FAM standard migliori una baseline YOLO multimodale sotto lo
@@ -464,6 +468,80 @@ deterministico. I seed appaiati servono quindi a stimare la dispersione e,
 soprattutto, la differenza FAM meno Additive senza fondare la dichiarazione di
 trasferibilità su una singola inizializzazione.
 
+### Risultati finali VIS+IR
+
+Tutte le dieci run hanno completato 200/200 epoche e prodotto un `last.pt`
+valido. La tabella riporta la mAP@50 del test MtErie eseguito automaticamente
+sul checkpoint finale predefinito:
+
+| Seed | Additive | FAM | FAM − Additive |
+|---:|---:|---:|---:|
+| 40 | 0.2304 | 0.1883 | −0.0421 |
+| 41 | 0.2740 | 0.2749 | +0.0009 |
+| 42 | 0.2494 | 0.1947 | −0.0546 |
+| 43 | 0.2159 | 0.2603 | +0.0444 |
+| 44 | 0.2728 | 0.1802 | −0.0926 |
+
+| Configurazione | Media | Mediana | Dev. std. | Min–max | IC 95% media |
+|---|---:|---:|---:|---:|---:|
+| Additive | 0.2485 | 0.2494 | 0.0256 | 0.2159–0.2740 | 0.2167–0.2803 |
+| FAM | 0.2197 | 0.1947 | 0.0443 | 0.1802–0.2749 | 0.1646–0.2747 |
+
+La differenza appaiata FAM − Additive è `−0.0288 ± 0.0528`, con mediana
+`−0.0421`, IC 95% `[−0.0944, +0.0368]` e 2/5 vittorie. Il test t appaiato
+fornisce `p=0.2894` e Wilcoxon esatto bilaterale `p=0.4375`; con cinque seed
+restano analisi esplorative. Questo protocollo non supporta quindi un beneficio
+del FAM su YOLO al checkpoint finale di 200 epoche.
+
+Le valutazioni separate VIS e IR sui dieci `last.pt` non sono ancora state
+eseguite. I risultati qui sopra riguardano soltanto VIS+IR e non chiudono la
+domanda sulla robustezza alle modalità mancanti.
+
+### Diagnosi dell'orizzonte di 200 epoche
+
+Le vecchie run feature-gated usavano lo stesso modello, gli stessi dati e gli
+stessi iperparametri, ma selezionavano `best.pt` su FHL e terminavano per early
+stopping. A seed 42 il confronto è:
+
+| Configurazione | Vecchio `best.pt` | Epoca selezionata | Nuovo `last.pt`, epoca 200 |
+|---|---:|---:|---:|
+| Additive | 0.3469 | 16 | 0.2494 |
+| FAM | 0.2965 | 89 | 0.1947 |
+
+Per Additive, le sei loss di training e il learning rate delle due run seed 42
+coincidono esattamente fino all'epoca 46, quando termina la vecchia run. La
+validation disabilitata non ha quindi modificato quella traiettoria: il nuovo
+checkpoint è la prosecuzione dello stesso addestramento fino all'epoca 200.
+Per FAM le traiettorie sono molto vicine ma non identiche, coerentemente con la
+DCNv2 e con l'isolamento dei processi.
+
+Le loss di training continuano a diminuire fino a 200 mentre la mAP test dei
+checkpoint finali è inferiore ai vecchi checkpoint precoci. Il quadro è
+compatibile con overfitting o specializzazione tardiva sulle sessioni di
+training, ma la sola loss di training non lo dimostra. Le vecchie curve FHL
+sono troppo rumorose per identificare un'epoca ottimale stabile: i minimi delle
+diverse validation loss sono dispersi e i massimi di mAP sono picchi isolati.
+
+Il risultato a 200 epoche resta l'esito valido del protocollo predefinito e non
+va sostituito retroattivamente con `best.pt`. Se YOLO tornerà una linea attiva,
+la soluzione metodologicamente preferibile sarà costruire una validation
+rappresentativa dal solo training, separata per sessione o blocchi temporali,
+e definire prima del test la regola di checkpoint. Scegliere direttamente 100
+epoche dopo avere osservato MtErie introdurrebbe un nuovo tuning sul test.
+
+### Stato operativo
+
+La linea YOLO viene messa temporaneamente in standby. Prima di riprenderla:
+
+1. completare la verifica RT-DETR del FAM e la relativa decisione
+   architetturale;
+2. eseguire, quando utile, le 30 valutazioni VIS/IR/VIS+IR dei checkpoint YOLO
+   già congelati;
+3. decidere se i risultati a 200 epoche debbano restare un risultato negativo
+   del protocollo oppure se una nuova validation giustifichi un retraining;
+4. non avviare una nuova campagna fissando 100 epoche soltanto sulla base del
+   test già osservato.
+
 ### Incidente W&B e ripartenza
 
 La prima run Additive, seed 40, ha completato 200/200 epoche, salvato
@@ -487,10 +565,11 @@ RT-DETR non mostra un vantaggio medio di SSJ, quindi aggiungerlo automaticamente
 al protocollo YOLO non è giustificato.
 
 La diagnostica interna YOLO esistente usa inoltre tre soli campioni di
-validation. Va ripetuta sui cinque checkpoint FAM finali e sugli stessi trenta
-campioni/sessioni usati per RT-DETR soltanto dopo il training confermativo. Le
-statistiche devono essere aggregate per checkpoint, evitando di trattare celle
-spaziali come repliche indipendenti.
+validation. Non è prioritaria mentre la linea YOLO è in standby. Se la linea
+verrà ripresa, andrà ripetuta sui cinque checkpoint FAM finali e sugli stessi
+trenta campioni/sessioni usati per RT-DETR. Le statistiche dovranno essere
+aggregate per checkpoint, evitando di trattare celle spaziali come repliche
+indipendenti.
 
 Se il confronto finale confermerà una robustezza IR insufficiente, eventuali
 loss ausiliarie mono-modali o teste specifiche costituiscono un nuovo lavoro,

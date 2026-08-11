@@ -70,7 +70,7 @@ class FeatureAlignmentModule(nn.Module):
         out = self.offset_conv(concat)  # [B, 27, H, W]
         
         # Split: 18 channels for offsets (x,y for 9 points), 9 for mask
-        offset = out[:, :18, :, :]  # [B, 18, H, W]
+        offset = self.transform_offset(out[:, :18, :, :])  # [B, 18, H, W]
         mask = torch.sigmoid(out[:, 18:, :, :])  # [B, 9, H, W]
         
         # Stochastic Spatial Jitter (SSJ): Inietta rumore Gaussiano negli offset spaziali
@@ -82,6 +82,28 @@ class FeatureAlignmentModule(nn.Module):
         ir_aligned = self.deform_conv(ir_feat, offset, mask)
         
         return ir_aligned
+
+    def transform_offset(self, offset):
+        """Map raw predictor outputs to DCNv2 offsets in feature-map cells."""
+        return offset
+
+
+class BoundedFeatureAlignmentModule(FeatureAlignmentModule):
+    """DCNv2 FAM with smoothly bounded sampling offsets.
+
+    Four feature-map cells were fixed before training from the completed
+    five-checkpoint audit: it lies above the largest per-sample P90 observed
+    in the non-pathological P5 checkpoints (2.81 cells), while ruling out the
+    hundreds-of-cells failure mode. Dividing by the limit inside tanh keeps a
+    unit derivative at zero, so small raw offsets retain the original FAM's
+    local parameterization.
+    """
+
+    OFFSET_LIMIT_CELLS = 4.0
+
+    def transform_offset(self, offset):
+        limit = self.OFFSET_LIMIT_CELLS
+        return limit * torch.tanh(offset / limit)
 
 
 class IdentityInitializedFeatureAlignmentModule(FeatureAlignmentModule):
@@ -221,6 +243,7 @@ class GridSampleFeatureAlignmentModule(nn.Module):
 
 FAM_VARIANTS = {
     "current_dcnv2": FeatureAlignmentModule,
+    "bounded_dcnv2_4": BoundedFeatureAlignmentModule,
     "identity_dcnv2": IdentityInitializedFeatureAlignmentModule,
     "grid_sample": GridSampleFeatureAlignmentModule,
 }
@@ -438,9 +461,11 @@ class RTDetrFusionModel(RTDetrModel):
         self.post_init()
         # Hugging Face post_init may visit newly attached modules. Restore the
         # ablation's defining initialization after that global initialization.
-        if fam_variant != "current_dcnv2" and self.backbone.fam_modules is not None:
+        if self.backbone.fam_modules is not None:
             for fam_module in self.backbone.fam_modules:
-                fam_module.reset_identity_parameters()
+                reset_identity = getattr(fam_module, "reset_identity_parameters", None)
+                if reset_identity is not None:
+                    reset_identity()
 
 
 # ============================================================

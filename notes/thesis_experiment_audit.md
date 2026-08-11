@@ -76,12 +76,13 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | RT-DETR finale: Additive, FAM, IR Dropout, SSJ, Identity, Grid Sample | 6 configurazioni x 5 seed, checkpoint finale, 90 valutazioni di modalità | evidenza quantitativa principale | completa |
 | Lazy FAM, Frozen FAM e Spatial Dropout | singole run; il Lazy contiene un bug | analisi storica che ha motivato i controlli successivi | non ripetere il bug né il Frozen Random |
 | Ablation Identity DCNv2 e Grid Sample | cinque seed ciascuna nel protocollo finale | ablation quantitativa valida sul benchmark interno | completa |
-| Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint | evidenza meccanicistica finale; include la degenerazione P5 del FAM seed 41 | completa; resta opzionale un'ablation di livello in inferenza |
+| Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5 e audit interno | evidenza meccanicistica principale; identifica origine e ruolo funzionale della degenerazione P5 del FAM seed 41 | completa; variante bounded-offset bloccata, nuovo training a cinque seed da eseguire |
 | Analisi qualitativa Lazy vs SSJ | due checkpoint storici scelti dopo il training | illustrazione storica, non evidenza finale | sostituire le figure principali con checkpoint finali |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
 | DINO completo | cinque run base, prestazioni molto basse | risultato negativo della configurazione valutata | non ripetere e non avviare FAM/SSJ senza una nuova ipotesi |
-| YOLO fusion-only, input dropout e feature gating | una run per configurazione, `best.pt`, early stopping variabile | sviluppo esplorativo | ripetere il confronto essenziale se YOLO resta nelle conclusioni |
+| YOLO storico: fusion-only, input dropout e feature gating | una run per configurazione, `best.pt`, early stopping variabile | sviluppo esplorativo | non usare per una conclusione multi-seed |
+| YOLO finale Additive/FAM | 2 configurazioni x 5 seed, 200 epoche, `last.pt`; VIS+IR completo | esito del protocollo fissato, compatibile con degradazione tardiva | in standby; completare VIS/IR e ridisegnare la validation prima di un eventuale retraining |
 
 ## Evidenza finale già valida su RT-DETR
 
@@ -183,11 +184,33 @@ I risultati principali sono:
 - Grid Sample è più stabile internamente e preserva maggiormente le feature,
   ma non supera FAM in modo consistente nella detection.
 
-La documentazione e le tabelle complete sono in
-[`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md). Un'ablation
-post-hoc che bypassi un livello FAM alla volta in inferenza sarebbe utile per
-capire la rilevanza di P5, ma va etichettata come esplorativa e non richiede
-nuovo training.
+La figura P5, le 40 valutazioni fattoriali (otto condizioni per cinque seed) e
+l'audit interno sono completati. Il FAM completo resta il migliore con mAP@50
+media `0.3780`; P3+P5 è la rimozione più vicina (`0.3648`), mentre P3+P4 scende
+a `0.3221`. Nel seed patologico togliere P5 riduce la mAP@50 da `0.4335` a
+`0.2399`: il decoder si è adattato al ramo degenerato, quindi una rimozione
+statica post-hoc non è una correzione.
+
+L'audit mostra che nel seed 41 la scala è già patologica nelle feature P5
+pre-FAM di entrambe le modalità (std media RGB `17.30`, IR `20.18`, contro
+rispettivamente `0.17--0.69` e `0.056--0.101` negli altri seed). I pesi del
+predittore hanno invece scala ordinaria. Gli offset medi raggiungono circa
+`5057 px` d'immagine, sono quasi identici fra campioni (correlazione maggiore
+di `0.999`) e portano la DCNv2 fuori mappa, riducendo l'uscita IR P5 al bias
+appreso.
+
+È stata quindi bloccata una sola variante `bounded_dcnv2_4`, che applica
+`4*tanh(raw/4)` agli offset in celle della feature map. Non introduce gate,
+residui, normalizzazioni o modifiche al backbone. Il limite 4 è stato fissato
+prima del training usando la distribuzione dei quattro checkpoint non
+patologici; il protocollo è in
+[`rtdetr_fam_bounded4_protocol.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml).
+La variante va eseguita sui seed `40--44` e confrontata con i risultati già
+congelati di Additive e FAM corrente, senza una grid di rimedi. Poiché nasce da
+un'analisi post-hoc di MtErie, il confronto sullo stesso benchmark resta
+esplorativo; cinque seed misurano la robustezza ma non sostituiscono un nuovo
+holdout indipendente. Documentazione e tabelle complete sono in
+[`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md).
 
 ### 2. Error analysis e figure finali RT-DETR
 
@@ -219,20 +242,20 @@ La vecchia osservazione secondo cui il Lazy FAM non produceva predizioni su
 circa il 38% delle immagini può restare nella storia del debugging, ma non deve
 essere una conclusione operativa sul modello finale.
 
-### 3. Replica essenziale di YOLO
+### 3. Replica essenziale di YOLO — eseguita, linea in standby
 
-YOLO deve essere ritrainato **solo se deve comparire nelle conclusioni come
-verifica della trasferibilità del FAM**. Le run esistenti non sono adatte a
-questa conclusione finale perché usano un solo seed, selezionano `best.pt` su
-una validation non rappresentativa e terminano a epoche diverse per early
-stopping.
+Il confronto finale è stato eseguito su cinque seed appaiati per
+configurazione. Tutte le run hanno raggiunto 200 epoche e il test VIS+IR del
+`last.pt`; Additive ottiene `0.2485 ± 0.0256` mAP@50 e FAM
+`0.2197 ± 0.0443`. FAM − Additive vale `−0.0288 ± 0.0528` e FAM vince in
+2/5 seed. Mancano le valutazioni separate VIS e IR.
 
-Il protocollo minimo raccomandato contiene soltanto:
+Il protocollo eseguito contiene:
 
 1. YOLOv10 dual-backbone senza FAM, feature gating 20/20/60;
 2. YOLOv10 dual-backbone con FAM standard, feature gating 20/20/60.
 
-Per entrambe:
+Per entrambe sono stati usati:
 
 - seed appaiati `40–44`;
 - un nuovo processo per seed;
@@ -244,14 +267,19 @@ Per entrambe:
 - valutazione VIS, IR e VIS+IR con lo stesso checkpoint;
 - statistiche e confronti appaiati analoghi a RT-DETR.
 
-FAM + SSJ non è obbligatorio nel blocco confermativo: RT-DETR non mostra un
-guadagno medio di SSJ e la vecchia grid YOLO può restare come indagine
-esplorativa. Va aggiunto come terza configurazione a cinque seed soltanto se la
-tesi mantiene una domanda esplicita sulla trasferibilità di SSJ.
+Il confronto storico a seed 42 aveva selezionato checkpoint molto precedenti
+(epoca 16 per Additive e 89 per FAM) e valori test superiori di circa 0.10. Le
+loss di training continuano a scendere fino a 200; per Additive la traiettoria
+vecchia e nuova coincide esattamente fino all'arresto storico. Il risultato è
+compatibile con degradazione tardiva della generalizzazione, ma FHL non offre
+una curva sufficientemente stabile per scegliere un nuovo checkpoint.
 
-Non occorre ripetere le grid YOLO fusion-only e input-level dropout. Il feature
-gating è l'implementazione coerente con una modalità realmente assente e
-risponde alla domanda finale più rilevante.
+YOLO resta quindi in standby. Non si fissa retroattivamente un orizzonte di 100
+epoche dopo avere visto MtErie. Un eventuale nuovo protocollo richiede prima
+una validation rappresentativa costruita dal solo training e separata per
+sessione o blocchi temporali. FAM + SSJ non è giustificato dal risultato
+RT-DETR e non va aggiunto come nuova grid. I dettagli sono in
+[`yolov10_fam_integrazione.md`](yolov10_fam_integrazione.md).
 
 ### 4. Valutazione di stress Carnation, opzionale
 
@@ -290,7 +318,7 @@ statisticamente dimostrato **su ogni architettura**, allora Deformable DETR e
 YOLO andrebbero entrambi riallenati col medesimo protocollo di checkpoint e
 seed; i dati attuali non supportano una frase così forte. La scelta consigliata
 è una tesi più focalizzata: dimostrazione principale su RT-DETR, trasferibilità
-su YOLO verificata dal confronto essenziale, altre architetture come studi
+su YOLO valutata dal confronto essenziale, altre architetture come studi
 esplorativi.
 
 ## Ordine operativo
@@ -301,17 +329,25 @@ esplorativi.
    aggregato per checkpoint/seed.
 3. Eseguire e documentare la diagnostica sui 15 checkpoint RT-DETR. **Fatto:**
    30 JSON, 1.350 righe e aggregati multi-seed verificati.
-4. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
-5. Preparare e verificare con smoke test i due YAML YOLO finali. **YAML e
-   selezione di `last.pt` implementati.**
-6. Eseguire le 10 run YOLO e le 30 valutazioni di modalità. **Completata la
-   run Additive seed 40; una failure post-training del callback W&B è stata
-   corretta senza invalidare checkpoint o test. La ripartenza salta il seed 40
-   già valido.**
-7. Se si decide di includere lo stress test opzionale, preparare lo split
+4. Generare la figura P5 seed 41, verificare parametri/attivazioni del ramo
+   patologico, confrontare direttamente i tensori di offset fra campioni e
+   implementare sui cinque checkpoint l'ablation in inferenza fattoriale delle
+   otto combinazioni FAM attivo/disattivo a P3, P4 e P5. **Fatto.**
+5. Bloccare dai controlli una sola variante correttiva. **Fatto:**
+   `bounded_dcnv2_4`, limite fissato a quattro celle, 23 test mirati e smoke
+   test superati. **In esecuzione dall'11 agosto 2026 alle 12:33:** training
+   seed `40–44`. **Preparato e verificato:** YAML con 15 valutazioni finali
+   (cinque checkpoint per VIS, IR e VIS+IR); seguirà il confronto con FAM
+   corrente e Additive.
+6. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
+7. Preparare e verificare con smoke test i due YAML YOLO finali. **Fatto.**
+8. Eseguire le 10 run YOLO. **Fatto:** 200 righe e `last.pt` per tutti i seed;
+   test VIS+IR completati. **In standby:** restano le valutazioni separate VIS
+   e IR e l'eventuale ridisegno del protocollo di checkpoint.
+9. Se si decide di includere lo stress test opzionale, preparare lo split
    Carnation e valutare i 10 checkpoint RT-DETR Additive/FAM una sola volta.
-8. Consolidare risultati e figure nei Markdown.
-9. Aggiornare `notes/Search_and_Rescue/main.tex`.
+10. Consolidare risultati e figure nei Markdown.
+11. Aggiornare `notes/Search_and_Rescue/main.tex`.
 
 Ogni deviazione da questo ordine o dal protocollo va annotata prima di vedere
 le metriche interessate.

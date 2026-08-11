@@ -222,6 +222,7 @@ class FAMCapture:
 
     SUPPORTED_CLASS_NAMES = {
         "FeatureAlignmentModule",
+        "BoundedFeatureAlignmentModule",
         "IdentityInitializedFeatureAlignmentModule",
         "GridSampleFeatureAlignmentModule",
     }
@@ -269,6 +270,12 @@ class FAMCapture:
             rec["rgb"] = rgb_feat.detach().cpu()
             rec["ir"] = ir_feat.detach().cpu()
             rec["ir_aligned"] = output.detach().cpu()
+            if rec.get("offset_kind") == "dcnv2_3x3" and hasattr(
+                module, "transform_offset"
+            ):
+                raw_offset = rec["offset"]
+                rec["raw_offset"] = raw_offset
+                rec["offset"] = module.transform_offset(raw_offset)
         return hook
 
     def _make_offset_hook(self, level_idx, module_class):
@@ -718,7 +725,12 @@ def main():
     )
     parser.add_argument(
         "--fam-variant",
-        choices=["current_dcnv2", "identity_dcnv2", "grid_sample"],
+        choices=[
+            "current_dcnv2",
+            "bounded_dcnv2_4",
+            "identity_dcnv2",
+            "grid_sample",
+        ],
         default=None,
         help="[hf only] override model.params.fam_variant from the YAML",
     )
