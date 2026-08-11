@@ -209,14 +209,23 @@ def aggregate_sample_rows(rows):
     ]
 
 
-def audit_seed(seed, checkpoint, config_path, dataset_root, device, datasets=None):
+def audit_seed(
+    seed,
+    checkpoint,
+    config_path,
+    dataset_root,
+    device,
+    project=PROJECT,
+    fam_variant="current_dcnv2",
+    datasets=None,
+):
     run_config = load_run_config(config_path, run_index=seed - 40)
     model_params = run_config["model"]
     model_params["params"].update(
         {
             "use_fam": True,
             "freeze_fam": False,
-            "fam_variant": "current_dcnv2",
+            "fam_variant": fam_variant,
             "ir_dropout_rate": 0.0,
             "spatial_jitter_std": 0.0,
         }
@@ -282,6 +291,8 @@ def audit_seed(seed, checkpoint, config_path, dataset_root, device, datasets=Non
     payload = {
         "schema_version": 1,
         "protocol_id": PROTOCOL_ID,
+        "project": project,
+        "fam_variant": fam_variant,
         "seed": seed,
         "checkpoint": str(Path(checkpoint).resolve()),
         "sample_sets": SAMPLE_SETS,
@@ -297,7 +308,38 @@ def audit_seed(seed, checkpoint, config_path, dataset_root, device, datasets=Non
     return jsonable(payload), datasets
 
 
+def assert_compatible_existing_audit(
+    payload,
+    *,
+    seed,
+    checkpoint,
+    project,
+    fam_variant,
+):
+    """Fail closed when a resumable raw audit belongs to another campaign."""
+    # Raw files produced before project/variant parameterization correspond to
+    # the historical defaults and remain resumable only for those defaults.
+    payload_project = payload.get("project", PROJECT)
+    payload_variant = payload.get("fam_variant", "current_dcnv2")
+    expected_checkpoint = str(Path(checkpoint).resolve())
+    if (
+        payload.get("protocol_id") != PROTOCOL_ID
+        or payload.get("seed") != seed
+        or payload.get("checkpoint") != expected_checkpoint
+        or payload_project != project
+        or payload_variant != fam_variant
+    ):
+        raise RuntimeError("Existing audit is incompatible; inspect it before --force")
+
+
 def combine_seed_audits(seed_payloads, output_dir):
+    projects = {payload.get("project", PROJECT) for payload in seed_payloads}
+    fam_variants = {
+        payload.get("fam_variant", "current_dcnv2") for payload in seed_payloads
+    }
+    if len(projects) != 1 or len(fam_variants) != 1:
+        raise RuntimeError("Cannot combine audits from different projects or FAM variants")
+
     pairwise_groups = {}
     for payload in seed_payloads:
         for row in payload["pairwise_checkpoint_aggregates"]:
@@ -370,6 +412,8 @@ def combine_seed_audits(seed_payloads, output_dir):
     combined = {
         "schema_version": 1,
         "protocol_id": PROTOCOL_ID,
+        "project": projects.pop(),
+        "fam_variant": fam_variants.pop(),
         "sample_sets": SAMPLE_SETS,
         "experimental_unit": "checkpoint/seed",
         "seed_audits": sorted(seed_payloads, key=lambda row: row["seed"]),
@@ -388,6 +432,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=int, nargs="+", default=[40, 41, 42, 43, 44])
     parser.add_argument("--config", default=CONFIG_PATH)
+    parser.add_argument("--project", default=PROJECT)
+    parser.add_argument("--fam-variant", default="current_dcnv2")
     parser.add_argument("--dataset-root", default="dataset/WiSARD")
     parser.add_argument("--output-dir", default="out/rtdetr_fam_internal_audit")
     parser.add_argument("--device", default="auto")
@@ -408,7 +454,7 @@ def main():
 
     checkpoints = {
         seed: resolve_local_wandb_checkpoint(
-            PROJECT,
+            args.project,
             seed,
             checkpoint="latest",
             wandb_root=REPO_ROOT / "wandb",
@@ -416,6 +462,7 @@ def main():
         for seed in args.seeds
     }
     if args.dry_run:
+        print(f"project={args.project} fam_variant={args.fam_variant}")
         for seed, checkpoint in checkpoints.items():
             print(f"seed={seed} checkpoint={checkpoint} device={device}")
         return
@@ -427,15 +474,16 @@ def main():
         if raw_path.is_file() and not args.force:
             with raw_path.open(encoding="utf-8") as input_file:
                 payload = json.load(input_file)
-            expected_checkpoint = str(Path(checkpoints[seed]).resolve())
-            if (
-                payload.get("protocol_id") != PROTOCOL_ID
-                or payload.get("seed") != seed
-                or payload.get("checkpoint") != expected_checkpoint
-            ):
-                raise RuntimeError(
-                    f"Existing audit {raw_path} is incompatible; inspect it before --force"
+            try:
+                assert_compatible_existing_audit(
+                    payload,
+                    seed=seed,
+                    checkpoint=checkpoints[seed],
+                    project=args.project,
+                    fam_variant=args.fam_variant,
                 )
+            except RuntimeError as error:
+                raise RuntimeError(f"{raw_path}: {error}") from error
             print(f"[skip] {raw_path}")
         else:
             print(f"[run] internal FAM audit seed={seed}")
@@ -445,6 +493,8 @@ def main():
                 config_path,
                 dataset_root,
                 device,
+                project=args.project,
+                fam_variant=args.fam_variant,
                 datasets=datasets,
             )
             with raw_path.open("w", encoding="utf-8") as output_file:

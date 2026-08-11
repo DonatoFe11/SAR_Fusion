@@ -49,6 +49,7 @@ CONDITIONS = {
 FULL_FAM_CONDITION = "p3_p4_p5"
 SUPPORTED_FAM_CLASSES = {
     "FeatureAlignmentModule",
+    "BoundedFeatureAlignmentModule",
     "IdentityInitializedFeatureAlignmentModule",
     "GridSampleFeatureAlignmentModule",
 }

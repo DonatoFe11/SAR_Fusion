@@ -3,6 +3,8 @@ import unittest
 import torch
 
 from scripts.run_rtdetr_fam_internal_audit import (
+    PROTOCOL_ID,
+    assert_compatible_existing_audit,
     summarize_seed_values,
     tensor_pair_metrics,
     tensor_statistics,
@@ -45,6 +47,28 @@ class TestRTDetrFAMInternalAudit(unittest.TestCase):
         self.assertEqual(list(summary["seed_values"]), ["40", "41", "42"])
         self.assertEqual(summary["seed_aggregate"]["n"], 3)
         self.assertAlmostEqual(summary["seed_aggregate"]["mean"], 2.0)
+
+    def test_legacy_raw_is_compatible_only_with_historical_defaults(self):
+        payload = {
+            "protocol_id": PROTOCOL_ID,
+            "seed": 40,
+            "checkpoint": "/tmp/checkpoint.safetensors",
+        }
+        assert_compatible_existing_audit(
+            payload,
+            seed=40,
+            checkpoint="/tmp/checkpoint.safetensors",
+            project="RTDETR_FAM_Protocol",
+            fam_variant="current_dcnv2",
+        )
+        with self.assertRaisesRegex(RuntimeError, "incompatible"):
+            assert_compatible_existing_audit(
+                payload,
+                seed=40,
+                checkpoint="/tmp/checkpoint.safetensors",
+                project="RTDETR_FAM_Bounded4_Protocol",
+                fam_variant="bounded_dcnv2_4",
+            )
 
 
 if __name__ == "__main__":

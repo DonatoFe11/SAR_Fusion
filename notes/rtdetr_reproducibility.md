@@ -505,17 +505,37 @@ di `0.999`) e campionano fuori mappa, riducendo FAM(IR) al bias della DCNv2.
 `bounded_dcnv2_4`, con offset `4*tanh(raw/4)` in celle della feature map. Il
 protocollo a cinque seed è
 [`rtdetr_fam_bounded4_protocol.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml).
+Il training è terminato senza crash con mAP@50 VIS+IR
+`0.3495 ± 0.0686`: rispetto al FAM corrente il delta appaiato è `-0.0285`, con
+due vittorie su cinque e dispersione maggiore. La variante non costituisce
+quindi un miglioramento prestazionale stabile.
 La successiva campagna di modalità è già bloccata in
 [`rtdetr_fam_bounded4_modality_evaluation.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_modality_evaluation.yaml):
 cinque checkpoint `latest` per VIS, IR e VIS+IR, seed di evaluation fisso 42,
 Modal Dropout disattivato e caricamento completo obbligatorio. Il VIS+IR
 ripetuto serve come controllo di coerenza con il test automatico di fine
 training, non come selezione post-hoc del valore da riportare.
+Le 15 valutazioni sono terminate con mAP@50 VIS `0.2252 ± 0.0544`, IR
+`0.1943 ± 0.0272` e VIS+IR `0.3496 ± 0.0685`. Il massimo scarto assoluto fra
+VIS+IR ripetuto e automatico è `0.00038`, quindi il controllo di coerenza è
+superato.
+
+L'audit interno è stato ripetuto sui cinque checkpoint bounded e sugli stessi
+30 campioni per checkpoint. In tutti i livelli e seed gli offset effettivi
+restano strettamente inferiori a quattro celle; nessuno dei 150 casi P5 ha
+uscita spazialmente costante. Il massimo P5 più vicino al limite è `3.9915`
+celle nel seed 41, corrispondente a un valore grezzo di `13.69`: il vincolo è
+quindi attivo e impedisce il campionamento catastrofico fuori mappa. Nei cinque
+training non ricompare neppure l'esplosione di scala delle feature pre-FAM.
+La correzione meccanicistica riesce sul failure mode osservato, ma il modello
+principale resta `current_dcnv2` perché bounded FAM peggiora media e dispersione
+della detection.
+
 I dettagli e le cautele sull'interpretazione geometrica sono in
 [`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md).
 
-Restano il training a cinque seed della variante bounded-offset e l'error
-analysis Additive/FAM. Il confronto YOLO Additive contro YOLO + FAM a cinque seed è stato
+Resta l'error analysis Additive/FAM. Il confronto
+YOLO Additive contro YOLO + FAM a cinque seed è stato
 completato: al `last.pt` di 200 epoche Additive ottiene `0.2485 ± 0.0256` e FAM
 `0.2197 ± 0.0443` mAP@50 VIS+IR, con delta appaiato `−0.0288` e 2/5 vittorie.
 Il confronto con i checkpoint storici precoci è compatibile con degradazione

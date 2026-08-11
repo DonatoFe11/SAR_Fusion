@@ -20,6 +20,10 @@ class FeatureAlignmentModule(nn.Module):
         return ir + self.increment
 
 
+class BoundedFeatureAlignmentModule(FeatureAlignmentModule):
+    pass
+
+
 class ThreeLevelModel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -61,6 +65,14 @@ class TestRTDetrFAMLevelAblation(unittest.TestCase):
         model = nn.Sequential(FeatureAlignmentModule(1))
         with self.assertRaisesRegex(RuntimeError, "exactly three"):
             find_fam_modules(model)
+
+    def test_bounded_variant_is_discovered_at_all_three_levels(self):
+        model = nn.Sequential(
+            BoundedFeatureAlignmentModule(1),
+            BoundedFeatureAlignmentModule(2),
+            BoundedFeatureAlignmentModule(3),
+        )
+        self.assertEqual(len(find_fam_modules(model)), 3)
 
     def test_invalid_level_fails_before_forward(self):
         model = ThreeLevelModel()

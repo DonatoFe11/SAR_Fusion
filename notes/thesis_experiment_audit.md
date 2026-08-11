@@ -76,7 +76,7 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | RT-DETR finale: Additive, FAM, IR Dropout, SSJ, Identity, Grid Sample | 6 configurazioni x 5 seed, checkpoint finale, 90 valutazioni di modalità | evidenza quantitativa principale | completa |
 | Lazy FAM, Frozen FAM e Spatial Dropout | singole run; il Lazy contiene un bug | analisi storica che ha motivato i controlli successivi | non ripetere il bug né il Frozen Random |
 | Ablation Identity DCNv2 e Grid Sample | cinque seed ciascuna nel protocollo finale | ablation quantitativa valida sul benchmark interno | completa |
-| Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5 e audit interno | evidenza meccanicistica principale; identifica origine e ruolo funzionale della degenerazione P5 del FAM seed 41 | completa; variante bounded-offset bloccata, nuovo training a cinque seed da eseguire |
+| Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5; variante bounded-offset su cinque seed | evidenza meccanicistica principale; identifica il failure mode P5 e verifica una correzione mirata | completa; il bounding elimina il collasso osservato ma non migliora la detection |
 | Analisi qualitativa Lazy vs SSJ | due checkpoint storici scelti dopo il training | illustrazione storica, non evidenza finale | sostituire le figure principali con checkpoint finali |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
@@ -199,17 +199,24 @@ predittore hanno invece scala ordinaria. Gli offset medi raggiungono circa
 di `0.999`) e portano la DCNv2 fuori mappa, riducendo l'uscita IR P5 al bias
 appreso.
 
-È stata quindi bloccata una sola variante `bounded_dcnv2_4`, che applica
+È stata quindi valutata una sola variante `bounded_dcnv2_4`, che applica
 `4*tanh(raw/4)` agli offset in celle della feature map. Non introduce gate,
 residui, normalizzazioni o modifiche al backbone. Il limite 4 è stato fissato
 prima del training usando la distribuzione dei quattro checkpoint non
 patologici; il protocollo è in
 [`rtdetr_fam_bounded4_protocol.yaml`](../parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml).
-La variante va eseguita sui seed `40--44` e confrontata con i risultati già
-congelati di Additive e FAM corrente, senza una grid di rimedi. Poiché nasce da
-un'analisi post-hoc di MtErie, il confronto sullo stesso benchmark resta
-esplorativo; cinque seed misurano la robustezza ma non sostituiscono un nuovo
-holdout indipendente. Documentazione e tabelle complete sono in
+Sui seed `40--44` ottiene `0.3496 ± 0.0685` mAP@50 VIS+IR, contro
+`0.3780 ± 0.0439` del FAM corrente: delta appaiato medio `-0.0284`, due
+vittorie su cinque. L'audit sugli stessi 30 campioni per checkpoint conferma
+che tutti gli offset effettivi restano sotto quattro celle e che non ricompare
+alcuna uscita P5 spazialmente costante. Il rimedio elimina dunque il failure
+mode osservato nei cinque nuovi training, ma non migliora accuratezza o
+dispersione; `current_dcnv2` resta il modello principale.
+
+Poiché la variante nasce da un'analisi post-hoc di MtErie, il confronto sullo
+stesso benchmark resta esplorativo; cinque seed misurano la robustezza ma non
+sostituiscono un nuovo holdout indipendente. Non si avvia una grid di ulteriori
+rimedi sullo stesso test. Documentazione e tabelle complete sono in
 [`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md).
 
 ### 2. Error analysis e figure finali RT-DETR
@@ -335,10 +342,15 @@ esplorativi.
    otto combinazioni FAM attivo/disattivo a P3, P4 e P5. **Fatto.**
 5. Bloccare dai controlli una sola variante correttiva. **Fatto:**
    `bounded_dcnv2_4`, limite fissato a quattro celle, 23 test mirati e smoke
-   test superati. **In esecuzione dall'11 agosto 2026 alle 12:33:** training
-   seed `40–44`. **Preparato e verificato:** YAML con 15 valutazioni finali
-   (cinque checkpoint per VIS, IR e VIS+IR); seguirà il confronto con FAM
-   corrente e Additive.
+   test superati. **Training completato:** cinque `latest`, zero crash, mAP@50
+   VIS+IR `0.3495 ± 0.0686`, delta appaiato `-0.0285` rispetto al FAM corrente
+   e 2/5 vittorie. **Valutazioni completate:** 15/15 combinazioni; VIS
+   `0.2252 ± 0.0544`, IR `0.1943 ± 0.0272`, VIS+IR `0.3496 ± 0.0685`; il
+   VIS+IR ripetuto coincide con il test automatico entro `0.00038`.
+   **Diagnostica completata:** offset effettivi inferiori a quattro celle in
+   ogni livello e seed, nessun collasso P5 nei 150 casi osservati. La variante
+   corregge il failure mode ma non migliora la detection; non viene promossa a
+   modello finale.
 6. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
 7. Preparare e verificare con smoke test i due YAML YOLO finali. **Fatto.**
 8. Eseguire le 10 run YOLO. **Fatto:** 200 righe e `last.pt` per tutti i seed;

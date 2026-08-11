@@ -387,40 +387,41 @@ non sono repliche statistiche indipendenti.
 ## Limiti che restano anche dopo la replica
 
 - La verifica attuale riguarda feature e offset interni. Un confronto qualitativo sui bounding box predetti, sovrapposti alle immagini RGB e IR, è ora tecnicamente possibile ma non è ancora stato eseguito.
-- Le conclusioni sulla dipendenza dall'input si basano su statistiche aggregate. Un confronto diretto dei tensori di offset tra campioni (ad esempio MAE e correlazione per livello) renderebbe quantitativa la variazione del campo cella per cella.
-- La degenerazione del seed 41 è stata identificata a posteriori. Un'ablation
-  esplorativa, dichiarata come tale, delle otto combinazioni FAM
-  attivo/disattivo a P3, P4 e P5 sui cinque checkpoint può misurare sensibilità
-  e interazioni fra livelli; non trasforma però MtErie in un nuovo holdout né
-  dimostra da sola la causa del collasso.
+- La dipendenza dall'input è stata quantificata con MAE e correlazione fra
+  tensori, ma rimane una misura interna: non fornisce ground truth geometrica.
+- La degenerazione del seed 41, l'ablation fattoriale e la scelta del bounding
+  sono posteriori all'osservazione di MtErie. Anche con cinque nuovi training,
+  MtErie non diventa un holdout indipendente e l'esito correttivo resta
+  esplorativo.
 - Un offset appreso non è automaticamente una stima della trasformazione fisica
   fra le camere: può anche ottimizzare una trasformazione utile al detector.
   Senza ground truth geometrica, la formulazione corretta è "trasformazione
   geometrica appresa" e non "registrazione vera misurata".
 
-## Piano di chiusura della verifica P3/P4/P5
+## Chiusura della verifica P3/P4/P5
 
-La replica multi-seed ha identificato il problema ma non ne ha ancora stabilito
-la rilevanza funzionale né la causa. La chiusura procede nell'ordine seguente:
+La verifica è stata chiusa nell'ordine predefinito:
 
-1. generare una figura dedicata al P5 del FAM seed 41, usando uno dei campioni
-   già fissati e mostrando feature RGB, IR, FAM(IR), offset e mask;
-2. valutare in sola inferenza i cinque checkpoint FAM in tutte le otto
-   combinazioni di livelli attivi fra P3, P4 e P5: nessun FAM, ciascun livello
-   da solo, ciascuna coppia e tutti e tre i livelli. Il bypass di un livello
-   deve sostituire `FAM(IR)` con la feature IR non deformata, mantenendo
-   invariati dati, soglia e tutte le altre impostazioni;
-3. riportare per seed mAP COCO, mAP@50, mAP@75 e mAR, differenze appaiate
-   rispetto al checkpoint non modificato e interazioni fra livello e seed;
-4. confrontare fra seed le norme e distribuzioni dei parametri del predittore
-   offset/mask P5, della DCNv2 P5 e delle feature pre-FAM, per distinguere un
-   predittore esploso da un'anomalia già presente nella backbone;
-5. completare la verifica della dipendenza dall'input confrontando direttamente
-   i tensori di offset degli stessi livelli fra campioni, con MAE e correlazione
-   calcolate per checkpoint prima dell'aggregazione fra seed;
-6. usare i contrasti fra le otto condizioni per descrivere sensibilità e
-   possibili interazioni/compensazioni fra livelli, senza interpretarli come
-   una decomposizione causale o additiva della mAP.
+1. È stata generata una figura dedicata al P5 del FAM seed 41, usando un
+   campione già fissato e mostrando feature RGB, IR, FAM(IR), offset e mask.
+2. Sono stati valutati in sola inferenza i cinque checkpoint FAM in tutte le
+   otto combinazioni di livelli attivi fra P3, P4 e P5, sostituendo nel bypass
+   `FAM(IR)` con la feature IR non deformata.
+3. Sono stati riportati per seed mAP COCO, mAP@50, mAP@75 e mAR, differenze
+   appaiate rispetto al checkpoint non modificato e interazioni fra livelli.
+4. Sono state confrontate fra seed le distribuzioni dei parametri del
+   predittore offset/mask P5, della DCNv2 P5 e delle feature pre-FAM.
+5. La dipendenza dall'input è stata verificata confrontando direttamente i
+   tensori di offset fra campioni, con MAE e correlazione calcolate per
+   checkpoint prima dell'aggregazione fra seed.
+6. I contrasti fra le otto condizioni sono stati usati come misure di
+   sensibilità e possibile compensazione fra livelli, non come decomposizione
+   causale o additiva della mAP.
+
+I risultati mostrano che P5 è funzionalmente rilevante anche nel checkpoint
+patologico e che il decoder si è adattato alla degenerazione. Questo ha escluso
+la rimozione statica P5 e ha motivato il singolo test `bounded_dcnv2_4` descritto
+di seguito.
 
 Anche il caso con tutti e tre i livelli bypassati non equivale al checkpoint
 Additive: i pesi del resto della rete sono stati addestrati insieme al FAM.
@@ -602,7 +603,7 @@ robustezza del FAM, non la stabilizzazione del backbone. Una normalizzazione
 del predittore o il congelamento/regularizzazione del backbone restano sviluppi
 distinti e non vanno combinati nello stesso primo esperimento.
 
-### Variante bloccata per il nuovo training
+### Variante bounded-offset: protocollo e risultati
 
 La variante è registrata come `bounded_dcnv2_4` in
 [`rtdetr_fusion.py`](../sarfusion/models/rtdetr_fusion.py). Applica a ciascuna
@@ -640,12 +641,30 @@ PYTHONUNBUFFERED=1 \
   --parameters parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml
 ```
 
-La campagna è stata avviata in background l'11 agosto 2026 alle `12:33`. Il
-primo processo è il seed 40, run W&B `17e3hmm3`; il log locale è
-`rtdetr_fam_bounded4_protocol.log`. L'avvio ha verificato `485/485` tensori
-trainabili, `55` tensori classificati come nuovi moduli, LR uniforme `2e-5` e
-ingresso regolare nell'epoca `1/10`. Per monitorare senza interrompere il
-training:
+La campagna, avviata l'11 agosto 2026 alle `12:33`, è terminata il 12 agosto
+alle `00:28` con cinque marker `FINISHED` e nessun `CRASHED`. Il log locale è
+`rtdetr_fam_bounded4_protocol.log`; per ogni seed il resolver trova un solo
+checkpoint `latest`. L'avvio aveva verificato `485/485` tensori trainabili,
+`55` tensori classificati come nuovi moduli e LR uniforme `2e-5`.
+
+| Seed | Run W&B | mAP@50 VIS+IR automatica |
+|---:|---|---:|
+| 40 | `17e3hmm3` | 0.4208 |
+| 41 | `0i4v9asi` | 0.3319 |
+| 42 | `rw5hcavh` | 0.4214 |
+| 43 | `qdu3cq88` | 0.2735 |
+| 44 | `nxeudkzt` | 0.2998 |
+
+La media è `0.3495 ± 0.0686`, mediana `0.3319`. Rispetto al FAM
+`current_dcnv2` congelato (`0.3780 ± 0.0440`), il delta appaiato medio è
+`-0.0285` con due vittorie su cinque. I delta per seed sono `+0.0426`,
+`-0.1015`, `+0.1085`, `-0.1229` e `-0.0692`. La variante non migliora quindi
+stabilmente la detection VIS+IR e mostra dispersione maggiore. La sola metrica
+di detection non stabiliva se il failure mode interno fosse stato eliminato;
+per questo è stato eseguito anche l'audit sui nuovi checkpoint.
+
+Durante una futura ripresa si può monitorare senza interrompere il processo
+con:
 
 ```bash
 watch -n 10 'tail -c 30000 rtdetr_fam_bounded4_protocol.log | tr "\r" "\n" | tail -n 35'
@@ -667,7 +686,7 @@ PYTHONUNBUFFERED=1 \
   --start-from-run N
 ```
 
-Al termine non basta selezionare una singola run. Il test VIS+IR eseguito
+Dopo il training non è stata selezionata una singola run. Il test VIS+IR eseguito
 automaticamente dopo ogni training fornisce già la metrica primaria per tutti
 i cinque checkpoint, ma la robustezza alle modalità mancanti richiede anche
 VIS e IR. Il file congelato
@@ -676,8 +695,8 @@ genera 15 valutazioni: cinque checkpoint `latest` per tre modalità. Il seed di
 evaluation resta fisso a `42`; i valori `40--44` dentro `pretrained_wandb`
 identificano i checkpoint di training.
 
-Prima di lanciarlo occorre verificare cinque checkpoint finali univoci e la
-chiusura regolare della campagna. Il comando è:
+Prima del lancio sono stati verificati cinque checkpoint finali univoci e la
+chiusura regolare della campagna. Il comando usato è:
 
 ```bash
 MPLCONFIGDIR=/tmp/matplotlib-rtdetr-bounded4-eval \
@@ -687,23 +706,102 @@ PYTHONUNBUFFERED=1 \
   --parameters parameters/RTDETR/rtdetr_fam_bounded4_modality_evaluation.yaml
 ```
 
-La preview del file ha confermato cinque grid da tre run, quindi esattamente 15
-valutazioni. `modal_dropout` è disattivato e il caricamento richiede il match
-completo del checkpoint. La ripetizione VIS+IR standardizza evaluation seed,
-batch size e progetto W&B rispetto alle modalità singole; va confrontata con
-il test automatico come controllo di coerenza, non usata per scegliere quale
-valore riportare.
+La preview aveva confermato cinque grid da tre run. La campagna è terminata con
+15 combinazioni uniche e metriche complete; `modal_dropout` era disattivato e
+il caricamento richiedeva il match completo del checkpoint.
 
-Non si confrontano tutte le possibili soluzioni in una grid sul test. È stata
-selezionata una sola ipotesi architetturale prima del nuovo training. Il
-confronto principale sarà appaiato con FAM `current_dcnv2`; Additive resterà il
-riferimento senza allineamento.
+| Seed checkpoint | VIS | IR | VIS+IR |
+|---:|---:|---:|---:|
+| 40 | 0.2657 | 0.1504 | 0.4207 |
+| 41 | 0.2232 | 0.2247 | 0.3319 |
+| 42 | 0.2927 | 0.1934 | 0.4216 |
+| 43 | 0.1703 | 0.2001 | 0.2737 |
+| 44 | 0.1739 | 0.2027 | 0.3002 |
+| **Media ± SD** | **0.2252 ± 0.0544** | **0.1943 ± 0.0272** | **0.3496 ± 0.0685** |
 
-Se codice condiviso, dati e protocollo restano identici, per il confronto si
-riusano i risultati già congelati di Additive e FAM `current_dcnv2`: soltanto la
-nuova variante richiede cinque training. Va però dichiarato che una variante
-scelta dopo questa analisi su MtErie è un'estensione post-hoc. I cinque seed ne
-misurano variabilità e consistenza, ma non rendono MtErie un test indipendente.
-Una dichiarazione confermativa sulla correzione richiederebbe una regola
-bloccata prima di un nuovo holdout; in assenza di esso, il confronto va
-presentato come evidenza esplorativa e come base per sviluppi futuri.
+Il VIS+IR ripetuto standardizza evaluation seed, batch size e progetto W&B
+rispetto alle modalità singole. La differenza media dal test automatico è
+`+0.00014` e la massima differenza assoluta è `0.00038`: il controllo di
+coerenza è superato e non vi è una scelta post-hoc fra due stime discordanti.
+
+Il runner dell'audit interno accetta esplicitamente progetto e variante. Dopo
+avere esteso anche il riconoscimento dei moduli a
+`BoundedFeatureAlignmentModule`, 22 test mirati passano e il dry-run risolve i
+cinque checkpoint corretti. Il comando usato è:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-fam-bounded4-audit \
+/home/donato/miniconda3/envs/sarfusion/bin/python \
+  scripts/run_rtdetr_fam_internal_audit.py \
+  --project RTDETR_FAM_Bounded4_Protocol \
+  --config parameters/RTDETR/rtdetr_fam_bounded4_protocol.yaml \
+  --fam-variant bounded_dcnv2_4 \
+  --output-dir out/rtdetr_fam_bounded4_internal_audit \
+  --device cuda
+```
+
+L'audit è completo: cinque JSON grezzi, ciascuno con 90 osservazioni e 810
+confronti fra tensori. L'output aggregato è
+[`rtdetr_fam_internal_audit.json`](../out/rtdetr_fam_bounded4_internal_audit/rtdetr_fam_internal_audit.json).
+La tabella seguente usa i 30 campioni congelati per checkpoint a P5. `Raw max`
+è ricostruito esattamente dal massimo effettivo tramite l'inversa monotona
+`4*atanh(offset/4)`.
+
+| Seed | RGB std | IR std | offset eff. medio | offset eff. max | raw max | FAM(IR) std spaziale media | minimo |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 40 | 0.1757 | 0.0903 | 0.6315 | 3.6370 | 6.0930 | 0.01394 | 0.01249 |
+| 41 | 0.3169 | 0.0694 | 0.6767 | **3.9915** | **13.6921** | 0.01262 | 0.01113 |
+| 42 | 0.1433 | 0.0474 | 0.4906 | 3.6668 | 6.2717 | 0.01420 | 0.01215 |
+| 43 | 0.2978 | 0.1386 | 1.4362 | 3.9168 | 9.1116 | 0.01904 | 0.01636 |
+| 44 | 0.1017 | 0.0909 | 0.4130 | 2.8911 | 3.6537 | 0.02338 | 0.01221 |
+
+La correzione meccanicistica riesce:
+
+- tutti gli offset effettivi P3/P4/P5 restano strettamente sotto quattro
+  celle; il caso più vicino al limite è P5 seed 41;
+- il predittore proverebbe comunque offset grezzi fino a `13.69` celle, quindi
+  il bounding non è inattivo e contiene valori che sarebbero fuori scala;
+- nessuno dei 150 casi checkpoint/campione P5 ha deviazione spaziale nulla;
+- le scale RGB/IR pre-FAM P5 sono ordinarie in tutti i seed, senza una replica
+  dell'esplosione `17.30/20.18` del vecchio seed 41;
+- nessuna uscita P5 si riduce al solo bias della `deform_conv`;
+- gli offset grezzi tornano dipendenti dal campione. Non compare il pattern
+  simultaneo del vecchio seed 41 (MAE normalizzata circa `0.04` e correlazione
+  maggiore di `0.999` in tutte le sessioni).
+
+Questo dimostra che la variante impedisce per costruzione il campionamento
+catastrofico fuori mappa e, nei cinque training osservati, elimina il collasso
+P5. Non dimostra che stabilizzi il backbone in generale: l'assenza di feature
+esplose è un risultato empirico su cinque seed, non una proprietà matematica
+del bounding.
+
+Il confronto prestazionale racconta però una storia diversa:
+
+| Configurazione | VIS | IR | VIS+IR |
+|---|---:|---:|---:|
+| Additive | 0.1543 ± 0.0331 | 0.1567 ± 0.0464 | 0.3081 ± 0.0677 |
+| FAM corrente | **0.2442 ± 0.0307** | **0.2028 ± 0.0635** | **0.3780 ± 0.0439** |
+| Bounded FAM | 0.2252 ± 0.0544 | 0.1943 ± 0.0272 | 0.3496 ± 0.0685 |
+
+Bounded meno FAM corrente vale in media `-0.0190` su VIS, `-0.0086` su IR e
+`-0.0284` su VIS+IR, con due vittorie su cinque in ciascuna modalità. Rispetto
+ad Additive conserva un vantaggio medio (`+0.0709`, `+0.0376`, `+0.0415`), ma
+vince rispettivamente in 4/5, 4/5 e 3/5 seed; è quindi meno consistente del FAM
+corrente. VIS+IR supera comunque la migliore modalità singola in 5/5 seed, con
+delta medio `+0.1124`.
+
+La conclusione è un trade-off negativo per la selezione del modello: il limite
+corregge il failure mode interno specifico, ma non migliora accuratezza o
+variabilità della detection. Il modello principale resta quindi FAM
+`current_dcnv2`. Bounded FAM va riportato come esperimento correttivo post-hoc
+e risultato negativo informativo, non come nuova architettura finale. Non si
+avviano altre varianti sulla base dello stesso test.
+
+Non sono state confrontate tutte le possibili soluzioni in una grid sul test:
+è stata selezionata e congelata una sola ipotesi prima dei cinque nuovi
+training. Il confronto ha riusato i risultati già congelati di Additive e FAM
+`current_dcnv2`, poiché codice condiviso, dati e protocollo erano identici.
+La scelta dopo l'analisi di MtErie rende comunque bounded FAM un'estensione
+post-hoc: cinque seed ne misurano variabilità e consistenza, ma non rendono
+MtErie un test indipendente. Una conferma esterna richiederebbe la stessa regola
+bloccata prima di un nuovo holdout.
