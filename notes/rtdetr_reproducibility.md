@@ -484,7 +484,11 @@ esterno di Additive e FAM, ma non come validation o come nuova sorgente di
 tuning. Il protocollo è stato congelato prima dell'inferenza in
 [`rtdetr_carnation_stress_test.md`](rtdetr_carnation_stress_test.md): 739 frame
 comuni, seed `40--44`, checkpoint `latest` e tre modalità per un totale di 30
-valutazioni.
+valutazioni, ora tutte complete. FAM migliora Additive in VIS+IR di `+0.0962`
+mAP@50 medio e vince in 4/5 seed, ma la stessa configurazione FAM VIS-only
+supera VIS+IR in 5/5 seed. Lo stress test indica quindi una maggiore tolleranza
+del FAM rispetto alla fusione diretta, non la correzione completa del forte
+mismatch di scala Carnation.
 
 La diagnostica di offset/feature sui 15 checkpoint finali FAM, FAM + SSJ e
 Grid Sample è stata completata aggregando prima per checkpoint e poi tra seed.

@@ -309,7 +309,15 @@ def evaluate_model(model, loader, device, max_batches=None):
 
 
 def summarize_values(values):
-    values = [float(value) for value in values if value is not None]
+    # TorchMetrics uses -1 for an AP/AR slice with no eligible ground-truth
+    # instances.  Every scalar metric in this protocol is otherwise
+    # non-negative, so the sentinel must be treated as unavailable rather than
+    # averaged as a real score.
+    values = [
+        float(value)
+        for value in values
+        if value is not None and float(value) >= 0.0
+    ]
     if not values:
         return None
     sample_std = statistics.stdev(values) if len(values) > 1 else 0.0
@@ -402,7 +410,11 @@ def build_aggregates(payloads, protocol, protocol_hash, source_manifest, output_
                     for row in rows
                     if row["modality"] == modality and row["seed"] == seed
                 }
-                if set(values) == {"additive", "fam"} and None not in values.values():
+                if (
+                    set(values) == {"additive", "fam"}
+                    and None not in values.values()
+                    and all(float(value) >= 0.0 for value in values.values())
+                ):
                     seed_values[str(seed)] = values["fam"] - values["additive"]
             paired_deltas[modality][metric] = {
                 "seed_values": seed_values,

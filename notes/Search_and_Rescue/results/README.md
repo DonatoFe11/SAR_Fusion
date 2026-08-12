@@ -58,3 +58,25 @@ L'aggregato locale completo contiene 30 unità sperimentali, è marcato
 ```text
 bcfc3a16f27e32f8d42da9c48b0ee2c87ef1eccfc8e93bd144f38ba73eea98b7
 ```
+
+## RT-DETR Additive--FAM: stress test Carnation
+
+Il file
+[`rtdetr_carnation_stress_test.csv`](rtdetr_carnation_stress_test.csv)
+contiene 30 righe: due configurazioni, cinque seed e tre condizioni VIS+IR,
+VIS-only e IR-only. Ogni valutazione usa gli stessi 739 identificatori di
+frame comuni alle sequenze Carnation VIS 0023 e IR 0024. La figura
+`../images/rtdetr_carnation_paired_map50.png` mostra i confronti appaiati.
+
+Il protocollo `rtdetr_carnation_stress_test_v1` è stato congelato e versionato
+prima dell'inferenza. Carnation è un caso mirato di forte mismatch di scala,
+non una sostituzione del benchmark interno MtErie e non una sorgente di tuning.
+Dettagli e interpretazione sono in
+[`../../rtdetr_carnation_stress_test.md`](../../rtdetr_carnation_stress_test.md).
+
+L'aggregato locale completo contiene 30 unità sperimentali, è marcato
+`protocol_complete: true` e ha SHA-256:
+
+```text
+00916ece2484062b9c591602dd9ccf9129546965213465cbf084b1a12e7484c4
+```

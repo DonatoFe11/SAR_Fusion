@@ -78,6 +78,7 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | Ablation Identity DCNv2 e Grid Sample | cinque seed ciascuna nel protocollo finale | ablation quantitativa valida sul benchmark interno | completa |
 | Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5; variante bounded-offset su cinque seed | evidenza meccanicistica principale; identifica il failure mode P5 e verifica una correzione mirata | completa; il bounding elimina il collasso osservato ma non migliora la detection |
 | Error analysis e figure Additive--FAM | dieci checkpoint, cinque soglie e sei frame GT-only mostrati a due soglie | evidenza finale sui failure mode di detection; sostituisce il confronto storico Lazy--SSJ | completa |
+| Stress test Carnation Additive--FAM | dieci checkpoint, tre modalità e 739 frame comuni; protocollo congelato prima dell'inferenza | test esterno mirato al forte mismatch di scala, non stima rappresentativa di generalizzazione | completo; FAM attenua il danno in fusione ma VIS-only resta superiore a VIS+IR in 5/5 checkpoint FAM |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
 | DINO completo | cinque run base, prestazioni molto basse | risultato negativo della configurazione valutata | non ripetere e non avviare FAM/SSJ senza una nuova ipotesi |
@@ -306,15 +307,24 @@ sessione o blocchi temporali. FAM + SSJ non è giustificato dal risultato
 RT-DETR e non va aggiunto come nuova grid. I dettagli sono in
 [`yolov10_fam_integrazione.md`](yolov10_fam_integrazione.md).
 
-### 4. Valutazione di stress Carnation — protocollo congelato, inferenza da eseguire
+### 4. Valutazione di stress Carnation — completata
 
-Il protocollo `rtdetr_carnation_stress_test_v1` è stato congelato prima di
-osservare metriche. Valuta una sola volta Additive e FAM finali sulla sequenza
-Carnation, separando VIS, IR e VIS+IR e usando gli stessi 739 identificatori di
-frame nelle tre modalità. Sono vietati tuning, selezione di seed, scelta di
-checkpoint e nuove varianti basate sul risultato. Configurazione, inventario,
-vincoli e comandi sono in
-[`rtdetr_carnation_stress_test.md`](rtdetr_carnation_stress_test.md).
+Il protocollo `rtdetr_carnation_stress_test_v1` è stato congelato e versionato
+prima di osservare metriche. Le 30 valutazioni Additive/FAM sui cinque seed e
+nelle tre modalità sono complete sugli stessi 739 identificatori di frame.
+
+In VIS+IR, FAM ottiene `0.2408 ± 0.0380` mAP@50 contro
+`0.1445 ± 0.0709` di Additive: delta appaiato medio `+0.0962`, quattro vittorie
+su cinque. Il vantaggio non basta però a rendere la fusione preferibile al
+solo VIS sotto il forte mismatch di scala. Nei checkpoint FAM, VIS-only ottiene
+`0.3196 ± 0.0518` e supera VIS+IR in 5/5 seed, con delta fusion meno VIS
+`−0.0789`. FAM peggiora inoltre IR-only in 4/5 seed (`0.0979` contro `0.1288`).
+
+Carnation supporta quindi una conclusione circoscritta: FAM attenua la
+fragilità dell'Additive fusion, ma non corregge abbastanza una differenza di
+scala estrema da rendere sempre utile la seconda modalità. Non si avviano
+nuove varianti o tuning sullo stress set. Configurazione, risultati e cautele
+sono in [`rtdetr_carnation_stress_test.md`](rtdetr_carnation_stress_test.md).
 
 ### 5. Aggiornamento della tesi
 
@@ -385,9 +395,10 @@ esplorativi.
    marginalmente oltre la tolleranza `0.002`, ed è documentato senza cambiare
    la soglia. L'eventuale ridisegno del protocollo di checkpoint resta separato
    e non autorizza una selezione post-hoc a 100 epoche.
-9. Eseguire il protocollo Carnation già congelato sui 10 checkpoint finali,
-   per 30 valutazioni complessive VIS+IR/VIS/IR, e documentarne l'esito senza
-   avviare tuning successivo sullo stress set.
+9. Eseguire il protocollo Carnation già congelato sui 10 checkpoint finali.
+   **Fatto:** 30/30 valutazioni su 739 frame; FAM migliora Additive in fusion
+   ma non supera VIS-only sotto il mismatch di scala. Lo stress set è chiuso
+   senza tuning successivo.
 10. Consolidare risultati e figure nei Markdown.
 11. Aggiornare `notes/Search_and_Rescue/main.tex`.
 

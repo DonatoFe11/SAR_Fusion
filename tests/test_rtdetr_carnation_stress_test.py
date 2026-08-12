@@ -54,6 +54,10 @@ class TestRTDETRCarnationStressTest(unittest.TestCase):
         self.assertAlmostEqual(summary["sample_std"], 0.15811388300841897)
         self.assertEqual(len(summary["ci95_t"]), 2)
 
+    def test_undefined_torchmetrics_sentinel_is_not_averaged(self):
+        self.assertIsNone(summarize_values([-1.0, -1.0]))
+        self.assertEqual(summarize_values([-1.0, 0.25])["mean"], 0.25)
+
     def test_existing_raw_result_must_match_frozen_job(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "raw.json"
