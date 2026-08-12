@@ -479,9 +479,12 @@ Il test MtErie era già stato consultato durante lo sviluppo di architetture ed
 iperparametri. Le metriche di questa sezione costituiscono quindi il benchmark
 interno principale e un confronto appaiato a protocollo bloccato, non una stima
 da holdout cieco. La limitazione va dichiarata esplicitamente. La sequenza
-Carnation esclusa dagli split può essere usata una sola volta come stress test
+Carnation esclusa dagli split viene usata una sola volta come stress test
 esterno di Additive e FAM, ma non come validation o come nuova sorgente di
-tuning.
+tuning. Il protocollo è stato congelato prima dell'inferenza in
+[`rtdetr_carnation_stress_test.md`](rtdetr_carnation_stress_test.md): 739 frame
+comuni, seed `40--44`, checkpoint `latest` e tre modalità per un totale di 30
+valutazioni.
 
 La diagnostica di offset/feature sui 15 checkpoint finali FAM, FAM + SSJ e
 Grid Sample è stata completata aggregando prima per checkpoint e poi tra seed.

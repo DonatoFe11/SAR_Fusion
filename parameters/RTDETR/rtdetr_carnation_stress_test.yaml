@@ -1,0 +1,58 @@
+# Frozen before any Carnation model inference or metric inspection.
+# This is a one-shot out-of-distribution stress test, not a replacement for
+# the MtErie internal benchmark and not a source of model selection or tuning.
+
+protocol:
+  id: rtdetr_carnation_stress_test_v1
+  frozen_on: "2026-08-12"
+  status: frozen_before_inference
+  purpose: one_shot_scale_mismatch_stress_test
+
+  training_config: parameters/RTDETR/rtdetr_protocol.yaml
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+  fam_variant: current_dcnv2
+
+  dataset_root: dataset/WiSARD
+  source:
+    vis_folder: 210529_Carnation_Enterprise_VIS_0023
+    ir_folder: 210529_Carnation_Enterprise_IR_0024
+    pairing: shared_numeric_frame_suffix
+    expected_common_frames: 739
+    expected_common_frame_ids_sha256: 65b63f88e336793a1a799b1d6d5d6965acb9737a823a2b061107d818cfe6194d
+    expected_vis_boxes: 1942
+    expected_ir_boxes: 1713
+    expected_vis_empty_frames: 4
+    expected_ir_empty_frames: 4
+    expected_vis_inventory_sha256: c809183edf814091c7201bb0cafb8a9a7a74f838fe057849f0de6b9930423456
+    expected_ir_inventory_sha256: 6a75559333d1118bccda4a849208f171a17293d58d31eb90d17f222e6a8faf5c
+
+  # All modes use the same 739 numeric frame IDs. VIS+IR is evaluated in the
+  # VIS coordinate system after the existing adapt_ir2rgb preprocessing.
+  # VIS and IR use their own annotations, exactly as in the final RT-DETR
+  # modality evaluation. Missing channels are zero-padded; Modal Dropout is off.
+  modalities:
+    vis_ir: fusion
+    vis: rgb
+    ir: ir
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_carnation_stress_test
+
+  configurations:
+    additive:
+      project: RTDETR_Protocol
+      expected_use_fam: false
+    fam:
+      project: RTDETR_FAM_Protocol
+      expected_use_fam: true
+
+  interpretation:
+    model_selection_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+    new_training_decision_allowed: false
+    representative_test_claim_allowed: false

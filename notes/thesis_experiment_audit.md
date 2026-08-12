@@ -306,11 +306,15 @@ sessione o blocchi temporali. FAM + SSJ non è giustificato dal risultato
 RT-DETR e non va aggiunto come nuova grid. I dettagli sono in
 [`yolov10_fam_integrazione.md`](yolov10_fam_integrazione.md).
 
-### 4. Valutazione di stress Carnation, opzionale
+### 4. Valutazione di stress Carnation — protocollo congelato, inferenza da eseguire
 
-Dopo aver bloccato codice e protocollo, valutare una sola volta Additive e FAM
-finali sulla sequenza Carnation, separando VIS, IR e VIS+IR. Non fare tuning,
-selezione di seed o scelta di checkpoint su questi risultati.
+Il protocollo `rtdetr_carnation_stress_test_v1` è stato congelato prima di
+osservare metriche. Valuta una sola volta Additive e FAM finali sulla sequenza
+Carnation, separando VIS, IR e VIS+IR e usando gli stessi 739 identificatori di
+frame nelle tre modalità. Sono vietati tuning, selezione di seed, scelta di
+checkpoint e nuove varianti basate sul risultato. Configurazione, inventario,
+vincoli e comandi sono in
+[`rtdetr_carnation_stress_test.md`](rtdetr_carnation_stress_test.md).
 
 ### 5. Aggiornamento della tesi
 
@@ -381,8 +385,9 @@ esplorativi.
    marginalmente oltre la tolleranza `0.002`, ed è documentato senza cambiare
    la soglia. L'eventuale ridisegno del protocollo di checkpoint resta separato
    e non autorizza una selezione post-hoc a 100 epoche.
-9. Se si decide di includere lo stress test opzionale, preparare lo split
-   Carnation e valutare i 10 checkpoint RT-DETR Additive/FAM una sola volta.
+9. Eseguire il protocollo Carnation già congelato sui 10 checkpoint finali,
+   per 30 valutazioni complessive VIS+IR/VIS/IR, e documentarne l'esito senza
+   avviare tuning successivo sullo stress set.
 10. Consolidare risultati e figure nei Markdown.
 11. Aggiornare `notes/Search_and_Rescue/main.tex`.
 
