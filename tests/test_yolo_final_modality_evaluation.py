@@ -5,8 +5,10 @@ import unittest
 from pathlib import Path
 
 from scripts.run_yolo_final_modality_evaluation import (
+    build_aggregates,
     load_compatible_raw,
     load_protocol,
+    render_paired_map50,
     resolve_run_checkpoint,
     summarize_values,
 )
@@ -110,7 +112,65 @@ class TestYOLOFinalModalityEvaluation(unittest.TestCase):
         self.assertAlmostEqual(summary["median"], 0.3)
         self.assertAlmostEqual(summary["sample_std"], 0.15811388300841897)
 
+    def test_completion_is_separate_from_cross_evaluator_sanity(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            protocol = load_protocol(
+                REPO_ROOT
+                / "parameters"
+                / "YOLO"
+                / "yolov10_final_modality_evaluation.yaml"
+            )
+            payloads = []
+            for modality in protocol["modalities"]:
+                for configuration in protocol["configurations"]:
+                    for seed in protocol["seeds"]:
+                        payloads.append(
+                            {
+                                "configuration": configuration,
+                                "seed": seed,
+                                "modality": modality,
+                                "metrics": {metric: 0.5 for metric in (
+                                    "map", "map_50", "map_75", "map_small",
+                                    "map_medium", "map_large", "mar_1",
+                                    "mar_10", "mar_100",
+                                )},
+                            }
+                        )
+
+            combined = build_aggregates(
+                payloads,
+                protocol,
+                protocol_hash="test-hash",
+                output_dir=Path(temporary_directory),
+                complete=True,
+            )
+
+            self.assertTrue(combined["protocol_complete"])
+            self.assertFalse(combined["vis_ir_sanity_passed"])
+            self.assertTrue(combined["vis_ir_sanity_review_required"])
+
+    def test_paired_modality_renderer_writes_figure(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            rows = []
+            for modality in ("vis_ir", "vis", "ir"):
+                for configuration in ("additive", "fam"):
+                    for seed in range(40, 45):
+                        rows.append(
+                            {
+                                "modality": modality,
+                                "configuration": configuration,
+                                "seed": seed,
+                                "metrics": {"map_50": 0.1 + seed / 1000},
+                            }
+                        )
+
+            render_paired_map50({"results": rows}, root)
+
+            self.assertTrue(
+                (root / "figures/yolov10_final_modality_paired_map50.png").is_file()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
-

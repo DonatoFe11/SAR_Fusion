@@ -82,7 +82,7 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
 | DINO completo | cinque run base, prestazioni molto basse | risultato negativo della configurazione valutata | non ripetere e non avviare FAM/SSJ senza una nuova ipotesi |
 | YOLO storico: fusion-only, input dropout e feature gating | una run per configurazione, `best.pt`, early stopping variabile | sviluppo esplorativo | non usare per una conclusione multi-seed |
-| YOLO finale Additive/FAM | 2 configurazioni x 5 seed, 200 epoche, `last.pt`; VIS+IR completo | esito del protocollo fissato, compatibile con degradazione tardiva | in standby; completare VIS/IR e ridisegnare la validation prima di un eventuale retraining |
+| YOLO finale Additive/FAM | 2 configurazioni x 5 seed, 200 epoche, `last.pt`; 30 valutazioni VIS+IR/VIS/IR | esito finale di trasferibilità e robustezza, compatibile con degradazione tardiva | completa; nessun retraining senza una nuova validation predefinita |
 
 ## Evidenza finale già valida su RT-DETR
 
@@ -263,13 +263,17 @@ La vecchia osservazione secondo cui il Lazy FAM non produceva predizioni su
 circa il 38% delle immagini può restare nella storia del debugging, ma non deve
 essere una conclusione operativa sul modello finale.
 
-### 3. Replica essenziale di YOLO — eseguita, linea in standby
+### 3. Replica essenziale di YOLO — completa, linea in standby
 
 Il confronto finale è stato eseguito su cinque seed appaiati per
 configurazione. Tutte le run hanno raggiunto 200 epoche e il test VIS+IR del
 `last.pt`; Additive ottiene `0.2485 ± 0.0256` mAP@50 e FAM
 `0.2197 ± 0.0443`. FAM − Additive vale `−0.0288 ± 0.0528` e FAM vince in
-2/5 seed. Mancano le valutazioni separate VIS e IR.
+2/5 seed. Le valutazioni standalone finali confermano il risultato VIS+IR
+(`0.2498` contro `0.2213`), non mostrano un vantaggio VIS (`0.1964` contro
+`0.1929`) e mostrano un piccolo incremento IR in 5/5 seed (`0.0277` contro
+`0.0369`). Quest'ultimo resta troppo basso per essere operativo e, poiché il
+FAM è bypassato in IR-only, descrive un effetto del training sui pesi appresi.
 
 Il protocollo eseguito contiene:
 
@@ -372,10 +376,11 @@ esplorativi.
    versionati della tesi.
 7. Preparare e verificare con smoke test i due YAML YOLO finali. **Fatto.**
 8. Eseguire le 10 run YOLO. **Fatto:** 200 righe e `last.pt` per tutti i seed;
-   test VIS+IR automatici completati. **Protocollo di valutazione congelato:**
-   il runner resumable ricalcola VIS+IR e completa VIS e IR sui dieci
-   checkpoint; l'eventuale ridisegno del protocollo di checkpoint resta
-   separato e non autorizza una selezione post-hoc a 100 epoche.
+   test VIS+IR automatici e 30 valutazioni standalone VIS+IR/VIS/IR
+   completati. Il sanity check fra evaluator ha uno scarto massimo `0.002077`,
+   marginalmente oltre la tolleranza `0.002`, ed è documentato senza cambiare
+   la soglia. L'eventuale ridisegno del protocollo di checkpoint resta separato
+   e non autorizza una selezione post-hoc a 100 epoche.
 9. Se si decide di includere lo stress test opzionale, preparare lo split
    Carnation e valutare i 10 checkpoint RT-DETR Additive/FAM una sola volta.
 10. Consolidare risultati e figure nei Markdown.

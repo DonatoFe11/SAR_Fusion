@@ -545,10 +545,12 @@ FP non diminuiscono in modo uniforme fra soglie e seed. Il confronto
 YOLO Additive contro YOLO + FAM a cinque seed è stato
 completato: al `last.pt` di 200 epoche Additive ottiene `0.2485 ± 0.0256` e FAM
 `0.2197 ± 0.0443` mAP@50 VIS+IR, con delta appaiato `−0.0288` e 2/5 vittorie.
-Il confronto con i checkpoint storici precoci è compatibile con degradazione
-tardiva della generalizzazione; YOLO è in standby finché non viene definita
-una validation rappresentativa. Mancano ancora le valutazioni separate VIS e
-IR sui dieci checkpoint congelati.
+Le 30 valutazioni standalone sono complete: VIS non mostra un beneficio
+stabile (`0.1964` Additive, `0.1929` FAM), mentre IR migliora in 5/5 seed
+(`0.0277` contro `0.0369`) ma resta operativamente insufficiente. Il confronto
+con i checkpoint storici precoci è compatibile con degradazione tardiva della
+generalizzazione; YOLO resta in standby finché non viene definita una
+validation rappresentativa.
 
 La roadmap completa e la classificazione degli esperimenti storici sono in
 [`thesis_experiment_audit.md`](thesis_experiment_audit.md).

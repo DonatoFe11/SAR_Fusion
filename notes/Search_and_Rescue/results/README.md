@@ -38,3 +38,23 @@ Le figure versionate in `../images/` sono:
 Nelle due tavole qualitative, ogni riga corrisponde a una sequenza MtErie e
 mostra il frame small-target e il frame vuoto fissati prima dell'inferenza. Le
 figure individuali alla risoluzione originale restano nell'output locale.
+
+## YOLOv10 Additive--FAM per modalità
+
+Il file
+[`yolo_final_modality_evaluation.csv`](yolo_final_modality_evaluation.csv)
+contiene 30 righe: due configurazioni, cinque seed e tre condizioni VIS+IR,
+VIS-only e IR-only. Tutti i valori sono stati calcolati con lo stesso evaluator
+standalone sui 708 frame MtErie. La figura
+`../images/yolov10_final_modality_paired_map50.png` visualizza i confronti
+appaiati per seed.
+
+La campagna usa il protocollo `yolov10_final_modality_evaluation_v1`; dettagli,
+risultati e audit dello scarto marginale fra evaluator sono in
+[`../../yolo_final_modality_evaluation.md`](../../yolo_final_modality_evaluation.md).
+L'aggregato locale completo contiene 30 unità sperimentali, è marcato
+`protocol_complete: true` e ha SHA-256:
+
+```text
+bcfc3a16f27e32f8d42da9c48b0ee2c87ef1eccfc8e93bd144f38ba73eea98b7
+```

@@ -6,9 +6,10 @@
 > vecchie run selezionate precocemente indica una probabile degradazione tardiva
 > della generalizzazione: l'orizzonte di 200 epoche va riesaminato, ma non può
 > essere sostituito post-hoc scegliendo un'epoca sul test MtErie. La verifica
-> RT-DETR del FAM è ora completa. Il protocollo per valutare VIS+IR, VIS e IR
-> sui dieci `last.pt` YOLO è stato congelato ed è in attesa di esecuzione; un
-> eventuale nuovo training richiederebbe prima una validation rappresentativa.
+> RT-DETR del FAM e le 30 valutazioni finali YOLO per modalità sono complete.
+> FAM non migliora VIS+IR, è inconcludente in VIS e migliora IR in 5/5 seed, ma
+> la mAP@50 IR media resta soltanto `0.0369`. Un eventuale nuovo training
+> richiederebbe prima una validation rappresentativa.
 
 ## Contesto
 
@@ -493,9 +494,28 @@ fornisce `p=0.2894` e Wilcoxon esatto bilaterale `p=0.4375`; con cinque seed
 restano analisi esplorative. Questo protocollo non supporta quindi un beneficio
 del FAM su YOLO al checkpoint finale di 200 epoche.
 
-Le valutazioni separate VIS e IR sui dieci `last.pt` non sono ancora state
-eseguite. I risultati qui sopra riguardano soltanto VIS+IR e non chiudono la
-domanda sulla robustezza alle modalità mancanti.
+### Risultati finali standalone VIS+IR, VIS e IR
+
+La valutazione feature-gated sui dieci `last.pt` è completa. Lo stesso
+evaluator standalone è stato usato per tutte le modalità:
+
+| Modalità | Additive, media ± SD | FAM, media ± SD | Delta FAM − Additive | Vittorie FAM |
+|---|---:|---:|---:|---:|
+| VIS+IR | 0.2498 ± 0.0254 | 0.2213 ± 0.0441 | −0.0285 ± 0.0526 | 2/5 |
+| VIS | 0.1964 ± 0.0218 | 0.1929 ± 0.0407 | −0.0035 ± 0.0494 | 2/5 |
+| IR | 0.0277 ± 0.0032 | 0.0369 ± 0.0009 | +0.0092 ± 0.0030 | 5/5 |
+
+Il risultato VIS+IR replica la conclusione del test automatico. VIS non mostra
+un vantaggio stabile. IR migliora in tutti i seed, ma resta troppo basso per
+essere operativo. Poiché nelle condizioni mono-modali il FAM viene bypassato,
+il delta VIS/IR riguarda l'effetto del training con FAM sui pesi appresi e non
+un allineamento eseguito durante quella inferenza.
+
+Il sanity check standalone--Ultralytics ha mancato di misura la tolleranza
+predefinita: massimo `0.002077` anziché al più `0.002`. La soglia non è stata
+modificata; l'esito è documentato come differenza sistematica fra evaluator e
+non cambia il ranking appaiato. Protocollo, valori grezzi, test e cautele sono
+in [`yolo_final_modality_evaluation.md`](yolo_final_modality_evaluation.md).
 
 ### Diagnosi dell'orizzonte di 200 epoche
 
@@ -531,18 +551,13 @@ epoche dopo avere osservato MtErie introdurrebbe un nuovo tuning sul test.
 
 ### Stato operativo
 
-La linea YOLO è stata riaperta soltanto per completare la valutazione dei
-checkpoint già congelati, senza nuovo training. La verifica RT-DETR richiesta
-al punto 1 è conclusa; il protocollo di inferenza è documentato in
-[`yolo_final_modality_evaluation.md`](yolo_final_modality_evaluation.md).
-
-Ordine corrente:
-
-1. eseguire le 30 valutazioni VIS/IR/VIS+IR dei checkpoint YOLO già congelati;
-2. decidere se i risultati a 200 epoche debbano restare un risultato negativo
-   del protocollo oppure se una nuova validation giustifichi un retraining;
-3. non avviare una nuova campagna fissando 100 epoche soltanto sulla base del
-   test già osservato.
+La valutazione dei checkpoint già congelati è completa, senza nuovo training.
+Il risultato a 200 epoche resta l'esito finale del protocollo: negativo per il
+beneficio FAM in fusione, neutro e variabile in VIS e positivo ma
+operativamente insufficiente in IR. La linea YOLO torna quindi in standby.
+Non si avvia una campagna a 100 epoche sulla base del test già osservato; un
+eventuale retraining richiede prima una validation rappresentativa e una regola
+di checkpoint definita ex ante.
 
 ### Incidente W&B e ripartenza
 
