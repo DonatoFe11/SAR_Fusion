@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import gc
 import hashlib
 import json
 import math
 import platform
 import statistics
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import torch
@@ -527,6 +528,97 @@ def write_payload(path, payload):
         output_file.write("\n")
 
 
+def configure_cuda(protocol, requested_device):
+    device = torch.device(requested_device)
+    if device.type != "cuda" or not torch.cuda.is_available():
+        raise RuntimeError("The frozen compute benchmark requires CUDA")
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.benchmark = bool(protocol["execution"]["cudnn_benchmark"])
+    torch.set_float32_matmul_precision("highest")
+    torch.manual_seed(int(protocol["input"]["generator_seed"]))
+    torch.cuda.manual_seed_all(int(protocol["input"]["generator_seed"]))
+    return device
+
+
+def run_isolated_worker(
+    protocol,
+    checkpoints,
+    configuration,
+    trial,
+    order_position,
+    warmup_iterations,
+    measured_iterations,
+    requested_device,
+    include_profile,
+    output_path,
+):
+    """Measure one configuration in a fresh process-owned CUDA allocator."""
+    device = configure_cuda(protocol, requested_device)
+    print(
+        f"[worker load] trial={trial} position={order_position} "
+        f"configuration={configuration}"
+    )
+    model, detector = build_model_for_configuration(
+        protocol,
+        configuration,
+        checkpoints[configuration]["path"],
+        device,
+    )
+    pixel_values, pixel_mask = build_inputs(protocol, device)
+    parameters = parameter_summary(model)
+    modules, shape_records = capture_fam_shapes(
+        model, detector, pixel_values, pixel_mask
+    )
+    fam_cost = None
+    if configuration == "additive" and modules:
+        raise RuntimeError("Additive unexpectedly contains FAM modules")
+    if configuration == "fam":
+        if len(modules) != 3:
+            raise RuntimeError(f"Expected three FAM modules, found {len(modules)}")
+        fam_cost = fam_conventional_cost(modules, shape_records)
+
+    static = {
+        "checkpoint": str(checkpoints[configuration]["path"]),
+        "checkpoint_sha256": checkpoints[configuration]["sha256"],
+        "checkpoint_size_bytes": checkpoints[configuration]["size_bytes"],
+        "parameters": parameters,
+        "fam_feature_shapes": shape_records,
+    }
+    warmup(detector, pixel_values, pixel_mask, warmup_iterations)
+    memory = measure_peak_memory(detector, pixel_values, pixel_mask)
+    latencies = measure_latency(detector, pixel_values, pixel_mask, measured_iterations)
+    trial_row = {
+        "trial": trial,
+        "order_position": order_position,
+        "configuration": configuration,
+        "warmup_iterations": warmup_iterations,
+        "measured_iterations": measured_iterations,
+        "latency_ms": latencies,
+        "latency_summary_ms": summarize_values(latencies),
+        "memory": memory,
+    }
+    profiler = (
+        profile_supported_flops(detector, pixel_values, pixel_mask)
+        if include_profile
+        else None
+    )
+    payload = {
+        "configuration": configuration,
+        "environment": environment_summary(device),
+        "static": static,
+        "fam_conventional_cost": fam_cost,
+        "trial_result": trial_row,
+        "profiler": profiler,
+    }
+    write_payload(output_path, payload)
+    print(
+        f"[worker done] trial={trial} configuration={configuration} "
+        f"mean={trial_row['latency_summary_ms']['mean']:.3f} ms "
+        f"peak={memory['peak_allocated_bytes'] / 2**20:.1f} MiB"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--protocol", default=DEFAULT_PROTOCOL)
@@ -535,6 +627,15 @@ def main():
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--worker-configuration", choices=CONFIGURATION_NAMES, help=argparse.SUPPRESS
+    )
+    parser.add_argument("--worker-trial", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--worker-order-position", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--worker-warmup", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--worker-measured", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--worker-profile", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--worker-output", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     protocol_path = Path(args.protocol)
@@ -553,15 +654,30 @@ def main():
         return
 
     requested_device = args.device or protocol["execution"]["device"]
-    device = torch.device(requested_device)
-    if device.type != "cuda" or not torch.cuda.is_available():
-        raise RuntimeError("The frozen compute benchmark requires CUDA")
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    torch.backends.cudnn.benchmark = bool(protocol["execution"]["cudnn_benchmark"])
-    torch.set_float32_matmul_precision("highest")
-    torch.manual_seed(int(protocol["input"]["generator_seed"]))
-    torch.cuda.manual_seed_all(int(protocol["input"]["generator_seed"]))
+    if args.worker_configuration is not None:
+        required = {
+            "--worker-trial": args.worker_trial,
+            "--worker-order-position": args.worker_order_position,
+            "--worker-warmup": args.worker_warmup,
+            "--worker-measured": args.worker_measured,
+            "--worker-output": args.worker_output,
+        }
+        missing = [name for name, value in required.items() if value is None]
+        if missing:
+            parser.error(f"Missing isolated-worker arguments: {missing}")
+        run_isolated_worker(
+            protocol,
+            checkpoints,
+            args.worker_configuration,
+            args.worker_trial,
+            args.worker_order_position,
+            args.worker_warmup,
+            args.worker_measured,
+            requested_device,
+            args.worker_profile,
+            Path(args.worker_output),
+        )
+        return
 
     output_path = Path(args.output or protocol["output"])
     if not output_path.is_absolute():
@@ -580,83 +696,75 @@ def main():
         warmup_iterations = 2
         measured_iterations = 5
 
-    environment = environment_summary(device)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    environment = None
     static_rows = {}
     profiler_rows = {}
     fam_cost = None
     trial_rows = []
-    for trial_index, order in enumerate(trial_order, start=1):
-        for order_position, configuration in enumerate(order, start=1):
-            print(
-                f"[load] trial={trial_index} position={order_position} "
-                f"configuration={configuration}"
-            )
-            gc.collect()
-            torch.cuda.empty_cache()
-            model, detector = build_model_for_configuration(
-                protocol,
-                configuration,
-                checkpoints[configuration]["path"],
-                device,
-            )
-            pixel_values, pixel_mask = build_inputs(protocol, device)
-            parameters = parameter_summary(model)
-            modules, shape_records = capture_fam_shapes(
-                model, detector, pixel_values, pixel_mask
-            )
-            if configuration == "additive" and modules:
-                raise RuntimeError("Additive unexpectedly contains FAM modules")
-            if configuration == "fam":
-                if len(modules) != 3:
-                    raise RuntimeError(f"Expected three FAM modules, found {len(modules)}")
-                current_fam_cost = fam_conventional_cost(modules, shape_records)
-                if fam_cost is None:
-                    fam_cost = current_fam_cost
-                elif current_fam_cost != fam_cost:
-                    raise RuntimeError("FAM shapes/cost changed between trials")
-            current_static = {
-                "checkpoint": str(checkpoints[configuration]["path"]),
-                "checkpoint_sha256": checkpoints[configuration]["sha256"],
-                "checkpoint_size_bytes": checkpoints[configuration]["size_bytes"],
-                "parameters": parameters,
-                "fam_feature_shapes": shape_records,
-            }
-            if configuration not in static_rows:
-                static_rows[configuration] = current_static
-            elif current_static != static_rows[configuration]:
-                raise RuntimeError(f"Static model metadata changed for {configuration}")
-
-            warmup(detector, pixel_values, pixel_mask, warmup_iterations)
-            memory = measure_peak_memory(detector, pixel_values, pixel_mask)
-            latencies = measure_latency(
-                detector, pixel_values, pixel_mask, measured_iterations
-            )
-            if configuration not in profiler_rows:
-                profiler_rows[configuration] = profile_supported_flops(
-                    detector, pixel_values, pixel_mask
+    profiled = set()
+    with tempfile.TemporaryDirectory(
+        prefix="rtdetr-compute-workers-", dir=output_path.parent
+    ) as temporary_directory:
+        temporary_root = Path(temporary_directory)
+        for trial_index, order in enumerate(trial_order, start=1):
+            for order_position, configuration in enumerate(order, start=1):
+                worker_output = temporary_root / (
+                    f"trial_{trial_index}_{order_position}_{configuration}.json"
                 )
-            trial_row = {
-                "trial": trial_index,
-                "order_position": order_position,
-                "configuration": configuration,
-                "warmup_iterations": warmup_iterations,
-                "measured_iterations": measured_iterations,
-                "latency_ms": latencies,
-                "latency_summary_ms": summarize_values(latencies),
-                "memory": memory,
-            }
-            trial_rows.append(trial_row)
-            print(
-                f"[done] trial={trial_index} configuration={configuration} "
-                f"mean={trial_row['latency_summary_ms']['mean']:.3f} ms "
-                f"peak={memory['peak_allocated_bytes'] / 2**20:.1f} MiB"
-            )
-            del pixel_mask, pixel_values, detector, model
-            gc.collect()
-            torch.cuda.empty_cache()
+                include_profile = configuration not in profiled
+                command = [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "--protocol",
+                    str(protocol_path.resolve()),
+                    "--device",
+                    requested_device,
+                    "--worker-configuration",
+                    configuration,
+                    "--worker-trial",
+                    str(trial_index),
+                    "--worker-order-position",
+                    str(order_position),
+                    "--worker-warmup",
+                    str(warmup_iterations),
+                    "--worker-measured",
+                    str(measured_iterations),
+                    "--worker-output",
+                    str(worker_output),
+                ]
+                if include_profile:
+                    command.append("--worker-profile")
+                subprocess.run(command, cwd=REPO_ROOT, check=True)
+                with worker_output.open(encoding="utf-8") as input_file:
+                    worker = json.load(input_file)
+                if worker["configuration"] != configuration:
+                    raise RuntimeError("Isolated worker returned the wrong configuration")
+                if environment is None:
+                    environment = worker["environment"]
+                elif worker["environment"] != environment:
+                    raise RuntimeError("CUDA/software environment changed between workers")
+                current_static = worker["static"]
+                if configuration not in static_rows:
+                    static_rows[configuration] = current_static
+                elif current_static != static_rows[configuration]:
+                    raise RuntimeError(f"Static model metadata changed for {configuration}")
+                current_fam_cost = worker["fam_conventional_cost"]
+                if current_fam_cost is not None:
+                    if fam_cost is None:
+                        fam_cost = current_fam_cost
+                    elif current_fam_cost != fam_cost:
+                        raise RuntimeError("FAM shapes/cost changed between workers")
+                if worker["profiler"] is not None:
+                    profiler_rows[configuration] = worker["profiler"]
+                    profiled.add(configuration)
+                trial_rows.append(worker["trial_result"])
 
-    if fam_cost is None:
-        raise RuntimeError("FAM conventional cost was not computed")
+    if environment is None or fam_cost is None:
+        raise RuntimeError("Isolated benchmark workers did not return required metadata")
+    if set(profiler_rows) != set(CONFIGURATION_NAMES):
+        raise RuntimeError("Missing supported-operator profiles")
+
     configurations, comparison, complete = aggregate_results(
         protocol, trial_rows, static_rows, profiler_rows, fam_cost
     )

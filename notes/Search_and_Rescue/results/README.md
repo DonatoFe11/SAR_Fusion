@@ -80,3 +80,22 @@ L'aggregato locale completo contiene 30 unità sperimentali, è marcato
 ```text
 00916ece2484062b9c591602dd9ccf9129546965213465cbf084b1a12e7484c4
 ```
+
+## RT-DETR Additive--FAM: costo computazionale
+
+Il file [`rtdetr_compute_benchmark.csv`](rtdetr_compute_benchmark.csv)
+contiene il riepilogo delle due configurazioni finali: parametri, dimensione
+dello stato, proxy GFLOPs, latenza, throughput e memoria CUDA. Ogni latenza
+deriva da tre trial in processi isolati, 100 forward per trial, batch 1 e input
+FP32 `[1, 4, 640, 640]` su RTX 4070 Laptop GPU. Preprocessing e postprocessing
+sono esclusi.
+
+Il protocollo `rtdetr_additive_fam_compute_benchmark_v1` è stato congelato e
+pushato prima della misura. Metodo, limiti del conteggio DCNv2 e interpretazione
+sono documentati in
+[`../../rtdetr_compute_benchmark.md`](../../rtdetr_compute_benchmark.md). Il
+JSON locale completo è marcato `protocol_complete: true` e ha SHA-256:
+
+```text
+cb942c8876f763d17b14bfc40a0e3371efd10c907266ab8cd9b2c41ca5902cbb
+```

@@ -79,6 +79,7 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5; variante bounded-offset su cinque seed | evidenza meccanicistica principale; identifica il failure mode P5 e verifica una correzione mirata | completa; il bounding elimina il collasso osservato ma non migliora la detection |
 | Error analysis e figure Additive--FAM | dieci checkpoint, cinque soglie e sei frame GT-only mostrati a due soglie | evidenza finale sui failure mode di detection; sostituisce il confronto storico Lazy--SSJ | completa |
 | Stress test Carnation Additive--FAM | dieci checkpoint, tre modalità e 739 frame comuni; protocollo congelato prima dell'inferenza | test esterno mirato al forte mismatch di scala, non stima rappresentativa di generalizzazione | completo; FAM attenua il danno in fusione ma VIS-only resta superiore a VIS+IR in 5/5 checkpoint FAM |
+| Costo RT-DETR Additive--FAM | parametri, proxy GFLOPs, tre trial di latenza e memoria in processi isolati | quantifica il trade-off del modello principale sul solo forward del detector | completo; FAM migliora la detection ma aggiunge 77,5% parametri e 17,9% latenza sulla GPU misurata |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
 | DINO completo | cinque run base, prestazioni molto basse | risultato negativo della configurazione valutata | non ripetere e non avviare FAM/SSJ senza una nuova ipotesi |
@@ -326,7 +327,24 @@ scala estrema da rendere sempre utile la seconda modalità. Non si avviano
 nuove varianti o tuning sullo stress set. Configurazione, risultati e cautele
 sono in [`rtdetr_carnation_stress_test.md`](rtdetr_carnation_stress_test.md).
 
-### 5. Aggiornamento della tesi
+### 5. Costo computazionale RT-DETR — completato
+
+Il protocollo `rtdetr_additive_fam_compute_benchmark_v1` è stato congelato e
+pushato prima delle misure. Su RTX 4070 Laptop GPU, batch 1 e input FP32
+`[1, 4, 640, 640]`, FAM passa da 66,20 a 117,49 milioni di parametri e da
+208,37 a 304,54 GFLOPs nella proxy che corregge il mancato conteggio DCNv2 del
+profiler. La latenza del solo detector passa da `66,91 ± 0,30` a
+`78,87 ± 0,37` ms sui tre trial (`+17,9%`); il picco CUDA passa da 436,26 a
+712,18 MiB.
+
+Ogni trial/configurazione è stato eseguito in un processo isolato. Un primo
+output in-process, nel quale l'allocazione cresceva cumulativamente fra modelli,
+è stato rigettato come artefatto dell'implementazione e non usato. Il conteggio
+FLOPs resta una proxy convenzionale e la latenza esclude preprocessing e
+postprocessing. Risultati e limiti sono in
+[`rtdetr_compute_benchmark.md`](rtdetr_compute_benchmark.md).
+
+### 6. Aggiornamento della tesi
 
 Solo dopo le attività precedenti:
 
@@ -399,8 +417,11 @@ esplorativi.
    **Fatto:** 30/30 valutazioni su 739 frame; FAM migliora Additive in fusion
    ma non supera VIS-only sotto il mismatch di scala. Lo stress set è chiuso
    senza tuning successivo.
-10. Consolidare risultati e figure nei Markdown.
-11. Aggiornare `notes/Search_and_Rescue/main.tex`.
+10. Eseguire il benchmark computazionale Additive--FAM già congelato.
+    **Fatto:** tre trial e 300 forward per configurazione in processi isolati;
+    risultato completo e riepilogo versionato.
+11. Consolidare risultati e figure nei Markdown.
+12. Aggiornare `notes/Search_and_Rescue/main.tex`.
 
 Ogni deviazione da questo ordine o dal protocollo va annotata prima di vedere
 le metriche interessate.

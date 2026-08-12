@@ -559,6 +559,17 @@ con i checkpoint storici precoci è compatibile con degradazione tardiva della
 generalizzazione; YOLO resta in standby finché non viene definita una
 validation rappresentativa.
 
+Il costo della scelta RT-DETR principale è stato misurato con il protocollo
+congelato `rtdetr_additive_fam_compute_benchmark_v1`: tre trial in processi
+isolati e 300 forward per configurazione su RTX 4070 Laptop GPU, batch 1 e
+input FP32 `640×640`. Additive usa 66,20 milioni di parametri, 208,37 GFLOPs
+nella proxy e `66,91 ± 0,30` ms; FAM usa 117,49 milioni di parametri,
+304,54 GFLOPs e `78,87 ± 0,37` ms. FAM comporta quindi `+77,5%` parametri e
+`+17,9%` latenza sulla macchina misurata. Preprocessing e postprocessing sono
+esclusi e il conteggio DCNv2 è una correzione analitica incompleta; dettagli e
+artefatti sono in
+[`rtdetr_compute_benchmark.md`](rtdetr_compute_benchmark.md).
+
 La roadmap completa e la classificazione degli esperimenti storici sono in
 [`thesis_experiment_audit.md`](thesis_experiment_audit.md).
 

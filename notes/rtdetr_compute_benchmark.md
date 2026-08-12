@@ -3,9 +3,9 @@
 ## Stato
 
 Il protocollo `rtdetr_additive_fam_compute_benchmark_v1` è stato congelato il
-12 agosto 2026 prima delle misure GPU. Il benchmark confronta soltanto le due
-configurazioni finali RT-DETR Additive e FAM `current_dcnv2`; non introduce
-training, tuning o selezione di checkpoint.
+12 agosto 2026 prima delle misure GPU ed è ora **completo**. Il benchmark
+confronta soltanto le due configurazioni finali RT-DETR Additive e FAM
+`current_dcnv2`; non introduce training, tuning o selezione di checkpoint.
 
 Configurazione e runner:
 
@@ -74,5 +74,69 @@ Il benchmark è completo soltanto se:
 
 ## Risultati
 
-Non ancora eseguiti. Il protocollo deve essere committato e pushato prima della
-prima misura GPU.
+Il protocollo è stato eseguito su NVIDIA GeForce RTX 4070 Laptop GPU, con
+PyTorch 2.4.0, torchvision 0.19.0 e CUDA 12.1 sotto WSL2. Ogni configurazione
+ha 300 forward misurati in tre trial indipendenti. Le deviazioni standard dopo
+`±` sono calcolate sulle tre latenze medie di trial, non trattando i 300 forward
+come repliche sperimentali indipendenti.
+
+| Configurazione | Parametri | Stato modello | Proxy GFLOPs | Latenza (ms) | Throughput (img/s) | Picco CUDA | Picco incrementale forward |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Additive | 66.20 M | 253.44 MiB | 208.37 | 66.91 ± 0.30 | 14.95 | 436.26 MiB | 139.14 MiB |
+| FAM | 117.49 M | 449.10 MiB | 304.54 | 78.87 ± 0.37 | 12.68 | 712.18 MiB | 220.65 MiB |
+
+Le medie dei singoli trial sono `66.77`, `67.25` e `66.70` ms per Additive e
+`78.49`, `78.88` e `79.24` ms per FAM. Considerando tutti i forward, le mediane
+sono rispettivamente `66.29` e `78.82` ms e i percentili 95 `73.18` e `83.45`
+ms.
+
+Rispetto ad Additive, FAM introduce:
+
+- 51.290.705 parametri (`+77,5%`) e 195,66 MiB di stato del modello;
+- `+96,18` GFLOPs nella proxy (`+46,2%`);
+- `+11,96` ms per forward (`+17,9%`) e un throughput teorico del solo detector
+  inferiore del `15,2%`;
+- `+275,92` MiB di picco CUDA totale e `+81,51` MiB di picco incrementale del
+  forward.
+
+La proxy FAM di `304,54` GFLOPs combina `213,95` GFLOPs attribuiti dagli
+operatori supportati dal profiler e `90,60` GFLOPs equivalenti per le tre
+convoluzioni DCNv2 non conteggiate dal profiler. Il costo convenzionale
+complessivo dei tre FAM, includendo anche i predittori degli offset già
+osservati dal profiler, è `96,17` GFLOPs. I valori non comprendono tutto il
+costo del campionamento bilineare e della modulazione DCNv2: la latenza GPU
+misurata resta il dato operativo, mentre i GFLOPs servono come proxy
+architetturale riproducibile.
+
+## Controllo dell'isolamento
+
+La prima implementazione del runner ricostruiva i modelli nello stesso processo
+Python. Un controllo sui valori di memoria ha mostrato che riferimenti interni
+del detector restavano vivi fra le ricostruzioni: il picco cresceva
+artificialmente da trial a trial fino a circa 2,4 GiB. Quel risultato è stato
+rigettato prima dell'interpretazione e non è riportato come misura.
+
+Il runner è stato corretto senza cambiare il protocollo scientifico: ogni
+coppia trial/configurazione viene ora eseguita in un nuovo processo, che termina
+prima della misura successiva. Nel risultato valido le allocazioni di base sono
+identiche nei tre trial (`297,13` MiB Additive e `491,54` MiB FAM), così come i
+picchi. Questa separazione rende indipendente lo stato dell'allocatore CUDA e
+conserva l'ordine alternato predefinito.
+
+## Artefatti
+
+Il riepilogo versionato è
+[`rtdetr_compute_benchmark.csv`](Search_and_Rescue/results/rtdetr_compute_benchmark.csv).
+Il JSON completo locale è
+`out/rtdetr_additive_fam_compute_benchmark.json`, dichiara
+`protocol_complete: true` e ha SHA-256:
+
+```text
+cb942c8876f763d17b14bfc40a0e3371efd10c907266ab8cd9b2c41ca5902cbb
+```
+
+Il risultato mostra un trade-off netto: nel benchmark interno FAM migliora la
+detection rispetto ad Additive, ma non è un miglioramento gratuito. La tesi
+deve quindi riportare insieme beneficio di accuratezza, crescita del modello e
+costo di inferenza; il termine *real-time* può essere usato solo riferendosi
+alla macchina e allo scope qui dichiarati, non a una pipeline SAR end-to-end.
