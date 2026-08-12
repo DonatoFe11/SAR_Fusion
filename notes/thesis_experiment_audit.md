@@ -77,7 +77,7 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | Lazy FAM, Frozen FAM e Spatial Dropout | singole run; il Lazy contiene un bug | analisi storica che ha motivato i controlli successivi | non ripetere il bug né il Frozen Random |
 | Ablation Identity DCNv2 e Grid Sample | cinque seed ciascuna nel protocollo finale | ablation quantitativa valida sul benchmark interno | completa |
 | Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5; variante bounded-offset su cinque seed | evidenza meccanicistica principale; identifica il failure mode P5 e verifica una correzione mirata | completa; il bounding elimina il collasso osservato ma non migliora la detection |
-| Analisi qualitativa Lazy vs SSJ | due checkpoint storici scelti dopo il training | illustrazione storica, non evidenza finale | sostituire le figure principali con checkpoint finali |
+| Error analysis e figure Additive--FAM | dieci checkpoint, cinque soglie e sei frame GT-only mostrati a due soglie | evidenza finale sui failure mode di detection; sostituisce il confronto storico Lazy--SSJ | completa |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
 | DINO completo | cinque run base, prestazioni molto basse | risultato negativo della configurazione valutata | non ripetere e non avviare FAM/SSJ senza una nuova ipotesi |
@@ -252,8 +252,12 @@ Usa la soglia primaria `0.01` già fissata per le valutazioni finali,
 sensitivity analysis `0.05/0.10/0.25/0.50`, matching uno-a-uno a IoU `0.50` e
 stratificazione COCO small/medium/large. Il manifest GT-only seleziona sei
 frame prima dell'inferenza: un target small e un frame vuoto per ciascuna
-sequenza MtErie. Runner, manifest e smoke test sono completati; restano
-l'esecuzione sui dieci checkpoint e l'interpretazione.
+sequenza MtErie. La campagna è completa su dieci checkpoint. FAM aumenta la
+recall in 5/5 seed alle soglie `0.10`, `0.25` e `0.50`; a `0.25` il delta medio
+è `+0.0990` e la quota di frame non vuoti con almeno un FN scende di `0.0824`.
+Gli FP medi non migliorano in modo uniforme fra soglie e seed. Le dodici
+figure predefinite sono state generate e ispezionate; i dettagli sono nella
+nota dedicata.
 
 La vecchia osservazione secondo cui il Lazy FAM non produceva predizioni su
 circa il 38% delle immagini può restare nella storia del debugging, ma non deve
@@ -362,6 +366,8 @@ esplorativi.
    corregge il failure mode ma non migliora la detection; non viene promossa a
    modello finale.
 6. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
+   **Fatto:** dieci checkpoint, cinque soglie, stratificazione per dimensione,
+   35.400 righe e dodici figure GT-only predefinite.
 7. Preparare e verificare con smoke test i due YAML YOLO finali. **Fatto.**
 8. Eseguire le 10 run YOLO. **Fatto:** 200 righe e `last.pt` per tutti i seed;
    test VIS+IR completati. **In standby:** restano le valutazioni separate VIS

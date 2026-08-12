@@ -795,6 +795,55 @@ def render_paired_summary(combined, output_dir):
     print(f"Saved paired summary: {output_path}")
 
 
+def render_threshold_sensitivity(combined, output_dir):
+    """Plot across-seed means for every predeclared confidence threshold."""
+    import matplotlib.pyplot as plt
+
+    thresholds = list(CONFIDENCE_THRESHOLDS)
+    summaries = combined["across_seed_summaries"]
+    panels = (
+        ("precision", "Precision", True),
+        ("recall", "Recall", True),
+        ("fp_per_image", "False positives / image", False),
+        ("nonempty_miss_frame_fraction", "Non-empty frames with ≥1 FN", False),
+    )
+    figure, axes = plt.subplots(2, 2, figsize=(10, 8), constrained_layout=True)
+    for axis, (metric, title, higher_is_better) in zip(axes.flat, panels):
+        for configuration, color in (("additive", "tab:orange"), ("fam", "tab:blue")):
+            means = [
+                summaries[f"{threshold:.2f}"][configuration][metric]["mean"]
+                for threshold in thresholds
+            ]
+            standard_deviations = [
+                summaries[f"{threshold:.2f}"][configuration][metric]["sample_std"]
+                for threshold in thresholds
+            ]
+            axis.errorbar(
+                thresholds,
+                means,
+                yerr=standard_deviations,
+                marker="o",
+                capsize=3,
+                label=configuration.capitalize(),
+                color=color,
+            )
+        axis.set_xscale("log")
+        axis.set_xticks(thresholds, [f"{threshold:.2f}" for threshold in thresholds])
+        axis.set_xlabel("Confidence threshold")
+        axis.set_title(title + (" ↑" if higher_is_better else " ↓"))
+        axis.grid(alpha=0.25)
+    axes[0, 0].legend()
+    figure.suptitle(
+        "RT-DETR confidence-threshold sensitivity · means ± SD across five seeds · IoU≥0.50"
+    )
+    figure_dir = output_dir / "figures"
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    output_path = figure_dir / "rtdetr_additive_fam_threshold_sensitivity.png"
+    figure.savefig(output_path, dpi=200)
+    plt.close(figure)
+    print(f"Saved threshold sensitivity: {output_path}")
+
+
 def raw_result_path(output_dir, configuration, seed):
     return output_dir / "raw" / f"{configuration}_seed_{seed}.json"
 
@@ -973,6 +1022,7 @@ def main():
     )
     render_qualitative_figures(payloads, manifest, dataset_root, output_dir)
     render_paired_summary(combined, output_dir)
+    render_threshold_sensitivity(combined, output_dir)
 
 
 if __name__ == "__main__":

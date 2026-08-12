@@ -11,6 +11,7 @@ from scripts.run_rtdetr_error_analysis import (
     analyze_image,
     greedy_match,
     render_qualitative_figures,
+    render_threshold_sensitivity,
     select_qualitative_samples,
     size_category_from_normalized_box,
     summarize_rows,
@@ -157,6 +158,29 @@ class TestRTDetrErrorAnalysis(unittest.TestCase):
             render_qualitative_figures(payloads, manifest, root, root / "output")
             self.assertTrue(
                 (root / "output/figures/qualitative/sample_007_small_target_conf_001.png").is_file()
+            )
+
+    def test_threshold_sensitivity_renderer_writes_figure(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            metrics = {
+                "precision": {"mean": 0.5, "sample_std": 0.1},
+                "recall": {"mean": 0.6, "sample_std": 0.1},
+                "fp_per_image": {"mean": 1.0, "sample_std": 0.2},
+                "nonempty_miss_frame_fraction": {"mean": 0.4, "sample_std": 0.1},
+            }
+            combined = {
+                "across_seed_summaries": {
+                    f"{threshold:.2f}": {
+                        configuration: metrics
+                        for configuration in ("additive", "fam")
+                    }
+                    for threshold in CONFIDENCE_THRESHOLDS
+                }
+            }
+            render_threshold_sensitivity(combined, root)
+            self.assertTrue(
+                (root / "figures/rtdetr_additive_fam_threshold_sensitivity.png").is_file()
             )
 
 

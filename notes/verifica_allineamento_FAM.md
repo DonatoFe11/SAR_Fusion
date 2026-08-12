@@ -386,7 +386,11 @@ non sono repliche statistiche indipendenti.
 
 ## Limiti che restano anche dopo la replica
 
-- La verifica attuale riguarda feature e offset interni. Un confronto qualitativo sui bounding box predetti, sovrapposti alle immagini RGB e IR, è ora tecnicamente possibile ma non è ancora stato eseguito.
+- La verifica meccanicistica riguarda feature e offset interni. Il successivo
+  confronto Additive--FAM sui bounding box è stato completato separatamente su
+  dieci checkpoint e dodici figure predefinite; caratterizza TP/FP/FN, ma non
+  costituisce ground truth dell'allineamento geometrico interno. È documentato
+  in [`rtdetr_error_analysis.md`](rtdetr_error_analysis.md).
 - La dipendenza dall'input è stata quantificata con MAE e correlazione fra
   tensori, ma rimane una misura interna: non fornisce ground truth geometrica.
 - La degenerazione del seed 41, l'ablation fattoriale e la scelta del bounding
