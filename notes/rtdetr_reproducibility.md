@@ -534,7 +534,11 @@ della detection.
 I dettagli e le cautele sull'interpretazione geometrica sono in
 [`verifica_allineamento_FAM.md`](verifica_allineamento_FAM.md).
 
-Resta l'error analysis Additive/FAM. Il confronto
+Resta l'esecuzione dell'error analysis Additive/FAM. Il protocollo è congelato
+in [`rtdetr_error_analysis.md`](rtdetr_error_analysis.md): dieci checkpoint,
+soglia primaria `0.01` come nelle valutazioni finali, sensitivity analysis fino
+a `0.50`, matching a IoU `0.50`, stratificazione per dimensione e sei frame
+qualitativi selezionati dalle sole annotazioni. Il confronto
 YOLO Additive contro YOLO + FAM a cinque seed è stato
 completato: al `last.pt` di 200 epoche Additive ottiene `0.2485 ± 0.0256` e FAM
 `0.2197 ± 0.0443` mAP@50 VIS+IR, con delta appaiato `−0.0288` e 2/5 vittorie.

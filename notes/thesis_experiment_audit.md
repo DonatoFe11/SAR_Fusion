@@ -245,6 +245,16 @@ Il protocollo raccomandato non richiede training:
 - descrivere le figure come esempi e fondare le conclusioni sui risultati
   aggregati.
 
+Il protocollo è stato ora congelato in
+[`rtdetr_error_analysis.md`](rtdetr_error_analysis.md) e implementato in
+[`run_rtdetr_error_analysis.py`](../scripts/run_rtdetr_error_analysis.py).
+Usa la soglia primaria `0.01` già fissata per le valutazioni finali,
+sensitivity analysis `0.05/0.10/0.25/0.50`, matching uno-a-uno a IoU `0.50` e
+stratificazione COCO small/medium/large. Il manifest GT-only seleziona sei
+frame prima dell'inferenza: un target small e un frame vuoto per ciascuna
+sequenza MtErie. Runner, manifest e smoke test sono completati; restano
+l'esecuzione sui dieci checkpoint e l'interpretazione.
+
 La vecchia osservazione secondo cui il Lazy FAM non produceva predizioni su
 circa il 38% delle immagini può restare nella storia del debugging, ma non deve
 essere una conclusione operativa sul modello finale.
