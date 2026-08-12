@@ -367,11 +367,15 @@ esplorativi.
    modello finale.
 6. Eseguire l'error analysis Additive/FAM e produrre le figure predefinite.
    **Fatto:** dieci checkpoint, cinque soglie, stratificazione per dimensione,
-   35.400 righe e dodici figure GT-only predefinite.
+   35.400 righe e dodici figure GT-only predefinite. CSV, grafici aggregati e
+   due tavole contenenti tutti gli esempi sono stati copiati negli artefatti
+   versionati della tesi.
 7. Preparare e verificare con smoke test i due YAML YOLO finali. **Fatto.**
 8. Eseguire le 10 run YOLO. **Fatto:** 200 righe e `last.pt` per tutti i seed;
-   test VIS+IR completati. **In standby:** restano le valutazioni separate VIS
-   e IR e l'eventuale ridisegno del protocollo di checkpoint.
+   test VIS+IR automatici completati. **Protocollo di valutazione congelato:**
+   il runner resumable ricalcola VIS+IR e completa VIS e IR sui dieci
+   checkpoint; l'eventuale ridisegno del protocollo di checkpoint resta
+   separato e non autorizza una selezione post-hoc a 100 epoche.
 9. Se si decide di includere lo stress test opzionale, preparare lo split
    Carnation e valutare i 10 checkpoint RT-DETR Additive/FAM una sola volta.
 10. Consolidare risultati e figure nei Markdown.

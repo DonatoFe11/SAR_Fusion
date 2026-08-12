@@ -5,10 +5,10 @@
 > (`0.2197` contro `0.2485` mAP@50 media, 2/5 vittorie). Il confronto con le
 > vecchie run selezionate precocemente indica una probabile degradazione tardiva
 > della generalizzazione: l'orizzonte di 200 epoche va riesaminato, ma non può
-> essere sostituito post-hoc scegliendo un'epoca sul test MtErie. La linea YOLO è
-> quindi in standby mentre si completa la verifica RT-DETR del FAM; restano da
-> eseguire le valutazioni finali separate VIS e IR e da decidere un eventuale
-> nuovo protocollo basato su una validation rappresentativa.
+> essere sostituito post-hoc scegliendo un'epoca sul test MtErie. La verifica
+> RT-DETR del FAM è ora completa. Il protocollo per valutare VIS+IR, VIS e IR
+> sui dieci `last.pt` YOLO è stato congelato ed è in attesa di esecuzione; un
+> eventuale nuovo training richiederebbe prima una validation rappresentativa.
 
 ## Contesto
 
@@ -531,15 +531,17 @@ epoche dopo avere osservato MtErie introdurrebbe un nuovo tuning sul test.
 
 ### Stato operativo
 
-La linea YOLO viene messa temporaneamente in standby. Prima di riprenderla:
+La linea YOLO è stata riaperta soltanto per completare la valutazione dei
+checkpoint già congelati, senza nuovo training. La verifica RT-DETR richiesta
+al punto 1 è conclusa; il protocollo di inferenza è documentato in
+[`yolo_final_modality_evaluation.md`](yolo_final_modality_evaluation.md).
 
-1. completare la verifica RT-DETR del FAM e la relativa decisione
-   architetturale;
-2. eseguire, quando utile, le 30 valutazioni VIS/IR/VIS+IR dei checkpoint YOLO
-   già congelati;
-3. decidere se i risultati a 200 epoche debbano restare un risultato negativo
+Ordine corrente:
+
+1. eseguire le 30 valutazioni VIS/IR/VIS+IR dei checkpoint YOLO già congelati;
+2. decidere se i risultati a 200 epoche debbano restare un risultato negativo
    del protocollo oppure se una nuova validation giustifichi un retraining;
-4. non avviare una nuova campagna fissando 100 epoche soltanto sulla base del
+3. non avviare una nuova campagna fissando 100 epoche soltanto sulla base del
    test già osservato.
 
 ### Incidente W&B e ripartenza
