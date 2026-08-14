@@ -1,0 +1,88 @@
+# Frozen before running the corrected paired-modality evaluation.
+# This protocol re-evaluates existing checkpoints; it does not train or select models.
+
+protocol:
+  id: rtdetr_paired_modality_evaluation_v1
+  frozen_on: "2026-08-14"
+  status: frozen_before_inference
+  purpose: paired_sensor_ablation_same_frames_and_ground_truth
+
+  training_config: parameters/RTDETR/rtdetr_protocol.yaml
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+
+  dataset_root: dataset/WiSARD
+  source:
+    paired_folders:
+      - [210417_MtErie_Enterprise_VIS_0003, 210417_MtErie_Enterprise_IR_0004]
+      - [210417_MtErie_Enterprise_VIS_0005, 210417_MtErie_Enterprise_IR_0006]
+      - [210417_MtErie_Enterprise_VIS_0007, 210417_MtErie_Enterprise_IR_0008]
+    pairing: existing_wisard_sorted_zip
+    ground_truth: vis
+    expected_frames: 708
+    expected_vis_boxes: 1770
+    expected_vis_empty_frames: 19
+    expected_inventory_sha256: d6ceca387baaa22b63c31d762c2cb636b52e78acdaa9d8c33e668948a0718900
+
+  # A single paired loader is traversed once per checkpoint. Every batch and
+  # every VIS ground-truth target is reused for all requested conditions.
+  modalities:
+    vis_ir: keep_all_four_channels
+    vis: zero_ir_channel
+    ir: zero_three_vis_channels
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_paired_modality_evaluation
+
+  configurations:
+    additive:
+      display_name: Additive
+      project: RTDETR_Protocol
+      use_fam: false
+      fam_variant: current_dcnv2
+    fam:
+      display_name: FAM
+      project: RTDETR_FAM_Protocol
+      use_fam: true
+      fam_variant: current_dcnv2
+    fam_ir_dropout:
+      display_name: FAM + IR Dropout
+      project: RTDETR_FAM_IR_Dropout_Protocol
+      use_fam: true
+      fam_variant: current_dcnv2
+    fam_ssj:
+      display_name: FAM + SSJ
+      project: RTDETR_FAM_SSJ_Protocol
+      use_fam: true
+      fam_variant: current_dcnv2
+    identity_dcnv2:
+      display_name: Identity DCNv2
+      project: RTDETR_FAM_Identity_DCNv2_Ablation
+      use_fam: true
+      fam_variant: identity_dcnv2
+    grid_sample:
+      display_name: Grid Sample
+      project: RTDETR_FAM_Grid_Sample_Ablation
+      use_fam: true
+      fam_variant: grid_sample
+
+  # The unmasked condition must reproduce the old VIS+IR evaluation up to
+  # harmless evaluator rounding. This checks checkpoint/model reconstruction.
+  expected_fusion_map50:
+    tolerance: 0.002
+    additive: {40: 0.2566, 41: 0.4029, 42: 0.2960, 43: 0.3476, 44: 0.2373}
+    fam: {40: 0.3780, 41: 0.4334, 42: 0.3130, 43: 0.3964, 44: 0.3693}
+    fam_ir_dropout: {40: 0.4087, 41: 0.3234, 42: 0.4444, 43: 0.3988, 44: 0.3598}
+    fam_ssj: {40: 0.3670, 41: 0.3737, 42: 0.3527, 43: 0.4031, 44: 0.3792}
+    identity_dcnv2: {40: 0.4339, 41: 0.2117, 42: 0.2928, 43: 0.2861, 44: 0.4161}
+    grid_sample: {40: 0.4050, 41: 0.3479, 42: 0.4084, 43: 0.3326, 44: 0.3566}
+
+  interpretation:
+    model_selection_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+    new_training_decision_allowed: false
+
