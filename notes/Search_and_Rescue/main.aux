@@ -1,86 +1,35 @@
 \relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\HyPL@Entry{0<</S/r>>}
 \providecommand \oddpage@label [2]{}
-\@writefile{toc}{\contentsline {section}{\numberline {1}Risultati Sperimentali Modal Dropout su DETR}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Addestramento su $D_{\text  {RGB--IR}}$}{1}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Risultati del modello addestrato su $D_{\text  {RGB--IR}}$ con diverse configurazioni di modal dropout.}}{1}{}\protected@file@percent }
-\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{tab:rgbir_train}{{1}{1}{}{table.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Addestramento su $D_{\text  {RGBs--IRa}}$}{2}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Risultati del modello addestrato su $D_{\text  {RGBs--IRa}}$ con diverse configurazioni di modal dropout.}}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Addestramento su $D$}{2}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Risultati del modello addestrato su $D$ con diverse configurazioni di modal dropout.}}{2}{}\protected@file@percent }
-\newlabel{tab:all_train}{{3}{2}{}{table.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Confronto diretto tra i risultati originali e i migliori risultati ottenuti con Modal Dropout. Le righe sono raggruppate per set di addestramento e test per evidenziare l'impatto della nuova metodologia.}}{3}{}\protected@file@percent }
-\newlabel{tab:summary_comparison}{{4}{3}{}{table.4}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {2}Evoluzione con RT-DETR (Real-Time DETR)}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}RT-DETR con Additive Feature Fusion}{3}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Risultati RT-DETR (Fusion) trainato per 25 epoche su immagine integrale al variare della soglia di confidenza.}}{3}{}\protected@file@percent }
-\newlabel{tab:rtdetr_base_25}{{5}{3}{}{table.5}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Risultati RT-DETR (Fusion) trainato per 10 epoche su immagine integrale al variare della soglia di confidenza.}}{4}{}\protected@file@percent }
-\newlabel{tab:rtdetr_base_10}{{6}{4}{}{table.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}RT-DETR con Strategia di Tiling (SAHI-style)}{5}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Confronto della robustezza multimodale: RT-DETR Integrale vs RT-DETR con Tiling.}}{5}{}\protected@file@percent }
-\newlabel{tab:rtdetr_comparison_final}{{7}{5}{}{table.7}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}RT-DETR con Framework CMX}{5}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Risultati RT-DETR con integrazione CMX (25 epoche).}}{5}{}\protected@file@percent }
-\newlabel{tab:rtdetr_cmx}{{8}{5}{}{table.8}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Il Tentativo Ibrido: FAM + CMX + Positional Encoding}{5}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Risultati RT-DETR Architettura Ibrida (FAM + CMX + Pos. Encoding).}}{6}{}\protected@file@percent }
-\newlabel{tab:rtdetr_cmx_hybrid}{{9}{6}{}{table.9}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Ottimizzazione di RT-DETR: Feature Alignment Module}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Architettura del FAM}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Evoluzione architetturale}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Modello A: inizializzazione lazy}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Modello B: inizializzazione eager}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}Modello C: FAM congelato}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4}Modello D: Spatial Dropout}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.5}Modello E: Stochastic Spatial Jitter}{8}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.6}Interazione tra SSJ e modal dropout}{8}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Confronto tra le configurazioni}{8}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Evoluzione architetturale del FAM e impatto dello Spatial Jitter (mAP@50).}}{8}{}\protected@file@percent }
-\newlabel{tab:rtdetr_fam_archit}{{10}{8}{}{table.10}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Verifica diretta dell'allineamento appreso}{8}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Statistiche degli offset FAM sul test set MtErie, aggregati su dieci campioni e riportati in pixel dell'input al modello. In ciascuna colonna l'ordine è: media / mediana / 90-esimo percentile / massimo.}}{9}{}\protected@file@percent }
-\newlabel{tab:fam_alignment_offsets}{{11}{9}{}{table.11}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {12}{\ignorespaces Controllo cross-sessione degli offset FAM. Le sessioni FHL 210924 e Baker 220109 appartengono al train split; per ogni riga sono aggregati dieci campioni. In ciascuna cella l'ordine è: media / mediana / 90-esimo percentile, in pixel dell'input al modello.}}{9}{}\protected@file@percent }
-\newlabel{tab:fam_alignment_cross_session}{{12}{9}{}{table.12}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Analisi qualitativa delle predizioni IR-only}{9}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Confronto su un'immagine IR con segnale termico debole.}}{10}{}\protected@file@percent }
-\newlabel{fig:qualitative_weak}{{1}{10}{}{figure.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Confronto su un'immagine IR con segnale termico netto.}}{10}{}\protected@file@percent }
-\newlabel{fig:qualitative_strong}{{2}{10}{}{figure.2}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Evoluzione con Deformable DETR: Dalla Fusione Spaziale alla Channel Concatenation}{11}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Il fallimento della Fusione Spaziale (Spatial Concatenation)}{11}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Implementazione della Channel Concatenation con Proiezione}{11}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Integrazione del modulo FAM e SSJ}{12}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Instabilità Run-to-Run dell'Attenzione Deformabile}{12}{}\protected@file@percent }
-\newlabel{sec:instabilita_deformable}{{4.4}{12}{}{subsection.4.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Risultati su Deformable DETR: Baseline, FAM e FAM + SSJ}{13}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {13}{\ignorespaces Risultati Deformable DETR (Fusion), confidence threshold 0.01. Per le configurazioni basate su Deformable DETR i valori sono mediana [range] su 5 run con seed differenti; per RT-DETR e DETR (attenzione standard, deterministica) si riportano i valori a singola run.}}{13}{}\protected@file@percent }
-\newlabel{tab:def_detr_results}{{13}{13}{}{table.13}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Integrazione di DINO (DETR with Improved DeNoising Anchor Boxes)}{14}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Mixed Query Selection}{14}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Contrastive DeNoising (CDN)}{14}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Look-Forward-Twice}{14}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Inizializzazione dal checkpoint}{15}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Risultati e decisione sperimentale}{15}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {14}{\ignorespaces Risultati della campagna DINO completa base, a soglia di confidenza 0.01. I valori sono mediana [min--max] su cinque seed.}}{15}{}\protected@file@percent }
-\newlabel{tab:dino_status}{{14}{15}{}{table.14}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6}YOLOv10 con dual backbone e FAM}{16}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Risultati fusion-only}{16}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {15}{\ignorespaces Risultati YOLOv10 single-class. Ogni riga rappresenta una singola run indipendente; il training è stato eseguito esclusivamente in modalità fusion.}}{16}{}\protected@file@percent }
-\newlabel{tab:yolo_results}{{15}{16}{}{table.15}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Modal dropout: input-level e feature gating}{16}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {16}{\ignorespaces YOLOv10 con modal dropout input-level 20/20/60. Valori mAP@50 sul test set; ogni riga è una singola run.}}{17}{}\protected@file@percent }
-\newlabel{tab:yolo_md_input}{{16}{17}{}{table.16}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {17}{\ignorespaces YOLOv10 con modal dropout 20/20/60 e feature gating. Valori mAP@50 sul test set; ogni riga è una singola run.}}{17}{}\protected@file@percent }
-\newlabel{tab:yolo_md_feature}{{17}{17}{}{table.17}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Diagnostica preliminare del FAM}{17}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Validation set e selezione del checkpoint}{18}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7}Riepilogo dei Risultati}{19}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {18}{\ignorespaces Riepilogo delle prestazioni mAP@50. Salvo diversa indicazione, i risultati sono singole run a soglia di confidenza 0.01. $^\dagger $ Mediana su cinque seed; gli intervalli completi sono riportati nelle tabelle dedicate. Le prime quattro righe YOLO derivano da training fusion-only; FG indica il feature gating con modal dropout 20/20/60.}}{19}{}\protected@file@percent }
-\newlabel{tab:summary_rtdetr_onwards}{{18}{19}{}{table.18}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Analisi comparativa}{19}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusioni e Prospettive Future}{20}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}Sviluppi futuri}{20}{}\protected@file@percent }
-\gdef \@abspage@last{21}
+\babel@aux{english}{}
+\HyPL@Entry{1<</S/r>>}
+\@writefile{toc}{\contentsline {chapter}{Abstract}{i}{chapter*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{Acronyms}{ix}{chapter*.5}\protected@file@percent }
+\@input{pages/03_introduction.aux}
+\HyPL@Entry{10<</S/D>>}
+\@input{pages/04_background.aux}
+\@input{pages/05_methodology.aux}
+\@input{pages/06_experimental_evaluation.aux}
+\@input{pages/07_discussion_conclusions.aux}
+\@input{pages/08_appendices.aux}
+\bibstyle{plain}
+\bibdata{references}
+\bibcite{akyon2022sahi}{1}
+\bibcite{baltrusaitis2019multimodal}{2}
+\bibcite{broyles2022wisard}{3}
+\bibcite{carion2020detr}{4}
+\bibcite{hwang2015multispectral}{5}
+\bibcite{lin2014coco}{6}
+\bibcite{neverova2016moddrop}{7}
+\bibcite{wang2024yolov10}{8}
+\bibcite{wang2020multimodal}{9}
+\bibcite{zhang2023dino}{10}
+\bibcite{zhang2023cmx}{11}
+\bibcite{zhao2024rtdetr}{12}
+\bibcite{zhu2019dcnv2}{13}
+\bibcite{zhu2021deformable}{14}
+\gdef \@abspage@last{55}

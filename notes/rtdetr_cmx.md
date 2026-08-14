@@ -1,5 +1,12 @@
 # RT-DETR + CMX: fusione cross-modale e variante ibrida
 
+> **Stato storico/esplorativo.** I risultati CMX derivano da singole run del
+> protocollo precedente. Documentano il fallimento di queste specifiche
+> implementazioni e hanno motivato il FAM, ma non stimano la variabilità tra
+> seed. I confronti con il vecchio RT-DETR `0.357` non sono una classifica
+> finale; il riferimento aggiornato è in
+> [`rtdetr_reproducibility.md`](rtdetr_reproducibility.md).
+
 Questa nota documenta le due implementazioni CMX sperimentate con RT-DETR:
 
 - **CMX puro**: [`sarfusion/models/rtdetr_cmx.py`](../sarfusion/models/rtdetr_cmx.py);

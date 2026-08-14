@@ -1,0 +1,68 @@
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{adjustbox}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{siunitx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink,noabbrev]{cleveref}
+
+\geometry{top=2.5cm,bottom=2.5cm,left=3cm,right=2.5cm}
+\graphicspath{{images/}}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+\setlength{\parindent}{1.2em}
+\setlength{\parskip}{0.25em}
+\renewcommand{\arraystretch}{1.15}
+
+\hypersetup{
+  pdftitle={Reliable RGB--Thermal Fusion for UAV-Based Search and Rescue},
+  pdfauthor={Donato Festa},
+  pdfsubject={Master's thesis in Computer Science -- Artificial Intelligence}
+}
+
+\sisetup{
+  round-mode=places,
+  round-precision=4,
+  detect-all
+}
+
+\newcommand{\mapfifty}{mAP@50}
+\newcommand{\visir}{VIS+IR}
+\newcommand{\rtdetr}{RT-DETR}
+\newcommand{\fammodule}{FAM}
+\newcommand{\ssj}{SSJ}
+\newcommand{\yolovten}{YOLOv10}
+
+% Missing figures are rendered as explicit placeholders so that the thesis can
+% be compiled before every planned visual asset has been produced.
+\newcommand{\thesisimage}[3][0.9\textwidth]{%
+  \IfFileExists{#2}{%
+    \includegraphics[width=#1]{#2}%
+  }{%
+    \fbox{%
+      \parbox[c][0.18\textheight][c]{0.84\textwidth}{%
+        \centering
+        \textbf{Figure placeholder}\\[0.5em]
+        #3\\[0.5em]
+        \texttt{\detokenize{#2}}%
+      }%
+    }%
+  }%
+}

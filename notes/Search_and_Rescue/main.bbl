@@ -1,0 +1,96 @@
+\begin{thebibliography}{10}
+
+\bibitem{akyon2022sahi}
+Fatih~Cagatay Akyon, Sinan~Onur Altinuc, and Alptekin Temizel.
+\newblock Slicing aided hyper inference and fine-tuning for small object
+  detection.
+\newblock In {\em IEEE International Conference on Image Processing}, pages
+  966--970, 2022.
+
+\bibitem{baltrusaitis2019multimodal}
+Tadas Baltru\v{s}aitis, Chaitanya Ahuja, and Louis-Philippe Morency.
+\newblock Multimodal machine learning: A survey and taxonomy.
+\newblock {\em IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  41(2):423--443, 2019.
+
+\bibitem{broyles2022wisard}
+Daniel Broyles, Christopher~R. Hayner, and Karen Leung.
+\newblock {WiSARD}: A labeled visual and thermal image dataset for wilderness
+  search and rescue.
+\newblock In {\em IEEE/RSJ International Conference on Intelligent Robots and
+  Systems}, pages 9467--9474, 2022.
+
+\bibitem{carion2020detr}
+Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander
+  Kirillov, and Sergey Zagoruyko.
+\newblock End-to-end object detection with transformers.
+\newblock In {\em European Conference on Computer Vision}, pages 213--229,
+  2020.
+
+\bibitem{hwang2015multispectral}
+Soonmin Hwang, Jaesik Park, Namil Kim, Yukyung Choi, and In~So Kweon.
+\newblock Multispectral pedestrian detection: Benchmark dataset and baseline.
+\newblock In {\em IEEE Conference on Computer Vision and Pattern Recognition},
+  pages 1037--1045, 2015.
+
+\bibitem{lin2014coco}
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva
+  Ramanan, Piotr Doll\'{a}r, and C.~Lawrence Zitnick.
+\newblock Microsoft {COCO}: Common objects in context.
+\newblock In {\em European Conference on Computer Vision}, pages 740--755,
+  2014.
+
+\bibitem{neverova2016moddrop}
+Natalia Neverova, Christian Wolf, Graham~W. Taylor, and Florian Nebout.
+\newblock {ModDrop}: Adaptive multi-modal gesture recognition.
+\newblock {\em IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  38(8):1692--1706, 2016.
+
+\bibitem{wang2024yolov10}
+Ao~Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, and Guiguang
+  Ding.
+\newblock {YOLOv10}: Real-time end-to-end object detection.
+\newblock In {\em Advances in Neural Information Processing Systems},
+  volume~37, 2024.
+
+\bibitem{wang2020multimodal}
+Weiyao Wang, Du~Tran, and Matt Feiszli.
+\newblock What makes training multi-modal classification networks hard?
+\newblock In {\em IEEE/CVF Conference on Computer Vision and Pattern
+  Recognition}, pages 12695--12705, 2020.
+
+\bibitem{zhang2023dino}
+Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel~M. Ni, and
+  Heung-Yeung Shum.
+\newblock {DINO}: {DETR} with improved denoising anchor boxes for end-to-end
+  object detection.
+\newblock In {\em International Conference on Learning Representations}, 2023.
+
+\bibitem{zhang2023cmx}
+Jiaming Zhang, Huayao Liu, Kailun Yang, Xinxin Hu, Ruiping Liu, and Rainer
+  Stiefelhagen.
+\newblock {CMX}: Cross-modal fusion for {RGB-X} semantic segmentation with
+  transformers.
+\newblock {\em IEEE Transactions on Intelligent Transportation Systems},
+  24(12):14679--14694, 2023.
+
+\bibitem{zhao2024rtdetr}
+Yian Zhao, Wenyu Lv, Shangliang Xu, Jinman Wei, Guanzhong Wang, Qingqing Dang,
+  Yi~Liu, and Jie Chen.
+\newblock {DETRs} beat {YOLOs} on real-time object detection.
+\newblock In {\em IEEE/CVF Conference on Computer Vision and Pattern
+  Recognition}, pages 16965--16974, 2024.
+
+\bibitem{zhu2019dcnv2}
+Xizhou Zhu, Han Hu, Stephen Lin, and Jifeng Dai.
+\newblock Deformable {ConvNets} v2: More deformable, better results.
+\newblock In {\em IEEE/CVF Conference on Computer Vision and Pattern
+  Recognition}, pages 9308--9316, 2019.
+
+\bibitem{zhu2021deformable}
+Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, and Jifeng Dai.
+\newblock Deformable {DETR}: Deformable transformers for end-to-end object
+  detection.
+\newblock In {\em International Conference on Learning Representations}, 2021.
+
+\end{thebibliography}

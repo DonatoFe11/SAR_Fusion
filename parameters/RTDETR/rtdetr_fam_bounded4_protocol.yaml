@@ -1,0 +1,81 @@
+# Frozen closure experiment selected after the completed P3/P4/P5 and
+# internal-offset audits. The only architectural difference from the final
+# current_dcnv2 campaign is bounded_dcnv2_4:
+#
+#     offset = 4 * tanh(raw_offset / 4)
+#
+# The limit is in feature-map cells and was fixed before these training runs.
+
+experiment:
+  name: RTDETR_FAM_Bounded4_Protocol
+  group: RTDETR_FAM_closure
+  continue_with_errors: true
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: [40, 41, 42, 43, 44]
+  repetition: [0]
+  task: [detection]
+  run_test: [true]
+  test_checkpoint: [latest]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, Protocol, FAM, BoundedOffset4, Closure]]
+
+  train:
+    max_epochs: [10]
+    run_validation: [false]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    compile: [false]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [bounded_dcnv2_4]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

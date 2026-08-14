@@ -55,6 +55,7 @@ Additional dependencies beyond the sarfusion environment: scikit-learn, matplotl
 """
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -68,15 +69,6 @@ from sarfusion.models import build_model
 from sarfusion.data import get_dataloaders
 from sarfusion.utils.utils import load_yaml
 from sarfusion.utils.grid import make_grid
-
-# --- YOLO-specific imports (used only with --model-type yolo) ---
-from ultralytics.data.utils import check_det_dataset
-from ultralytics.cfg import cfg2dict, IterableSimpleNamespace
-from ultralytics.utils import colorstr
-
-from sarfusion.data.wisard import WiSARDYOLODataset
-from sarfusion.experiment.yolo import WISARD_DEFAULT_CFG
-
 
 # ---------------------------------------------------------------------------
 # 0. Reconstructing a run configuration from the grid-search format
@@ -224,9 +216,16 @@ def load_yolo_model(checkpoint_path, device):
 
 class FAMCapture:
     """Capture inputs (rgb_feat, ir_feat) and output (ir_aligned) of every
-    FeatureAlignmentModule in the model. Modules are identified by class name,
-    making this independent of their architecture path and applicable to
-    RT-DETR, Deformable DETR/DINO, and YOLOv10FusionFAM."""
+    supported FAM in the model. Modules are identified by class name, making
+    this independent of their architecture path and applicable to RT-DETR,
+    Deformable DETR/DINO, and YOLOv10FusionFAM."""
+
+    SUPPORTED_CLASS_NAMES = {
+        "FeatureAlignmentModule",
+        "BoundedFeatureAlignmentModule",
+        "IdentityInitializedFeatureAlignmentModule",
+        "GridSampleFeatureAlignmentModule",
+    }
 
     def __init__(self, model):
         self.records = {}  # level_idx -> dict
@@ -237,23 +236,23 @@ class FAMCapture:
         level = 0
         last_name = None
         for name, module in model.named_modules():
-            if type(module).__name__ == "FeatureAlignmentModule":
+            module_class = type(module).__name__
+            if module_class in self.SUPPORTED_CLASS_NAMES:
                 self.hooks.append(
                     module.register_forward_hook(self._make_fam_hook(level, name))
                 )
                 if hasattr(module, "offset_conv"):
                     self.hooks.append(
                         module.offset_conv.register_forward_hook(
-                            self._make_offset_hook(level)
+                            self._make_offset_hook(level, module_class)
                         )
                     )
                 last_name = name
                 level += 1
         if level == 0:
             raise RuntimeError(
-                "No FeatureAlignmentModule found in the model. Check that "
-                "use_fam=True in the config and that the class is named "
-                "exactly 'FeatureAlignmentModule'."
+                "No supported FAM found in the model. Check that use_fam=True "
+                "and that the configured FAM variant is supported."
             )
         print(f"Registered hooks on {level} FeatureAlignmentModule instances (e.g. '{last_name}')")
 
@@ -271,14 +270,35 @@ class FAMCapture:
             rec["rgb"] = rgb_feat.detach().cpu()
             rec["ir"] = ir_feat.detach().cpu()
             rec["ir_aligned"] = output.detach().cpu()
+            if rec.get("offset_kind") == "dcnv2_3x3" and hasattr(
+                module, "transform_offset"
+            ):
+                raw_offset = rec["offset"]
+                rec["raw_offset"] = raw_offset
+                rec["offset"] = module.transform_offset(raw_offset)
         return hook
 
-    def _make_offset_hook(self, level_idx):
+    def _make_offset_hook(self, level_idx, module_class):
         def hook(module, inputs, output):
             out = output.detach().cpu()
             rec = self.records.setdefault(level_idx, {})
-            rec["offset"] = out[:, :18]
-            rec["mask"] = torch.sigmoid(out[:, 18:])
+            if module_class == "GridSampleFeatureAlignmentModule":
+                if out.shape[1] != 2:
+                    raise RuntimeError(
+                        "Grid Sample FAM must predict two offset channels, got "
+                        f"{out.shape[1]}."
+                    )
+                rec["offset_kind"] = "grid_sample"
+                rec["offset"] = out
+            else:
+                if out.shape[1] != 27:
+                    raise RuntimeError(
+                        "DCNv2 FAM must predict 18 offset and 9 mask channels, "
+                        f"got {out.shape[1]}."
+                    )
+                rec["offset_kind"] = "dcnv2_3x3"
+                rec["offset"] = out[:, :18]
+                rec["mask"] = torch.sigmoid(out[:, 18:])
         return hook
 
     def remove(self):
@@ -372,20 +392,191 @@ def overlay(img_a, img_b, alpha=0.5):
 # 4. FAM offset field (additional diagnostic)
 # ---------------------------------------------------------------------------
 
-def plot_offset_field(ax, offset, mask, stride=4):
+def offset_vectors(offset, offset_kind):
+    """Return offsets as ``(points, 2, H, W)`` in feature-map pixels."""
+    if offset_kind == "dcnv2_3x3":
+        if offset.ndim != 3 or offset.shape[0] != 18:
+            raise ValueError(
+                "DCNv2 offsets must have shape (18, H, W), got "
+                f"{tuple(offset.shape)}"
+            )
+        return offset.reshape(9, 2, *offset.shape[-2:])
+    if offset_kind == "grid_sample":
+        if offset.ndim != 3 or offset.shape[0] != 2:
+            raise ValueError(
+                "Grid Sample offsets must have shape (2, H, W), got "
+                f"{tuple(offset.shape)}"
+            )
+        return offset.unsqueeze(0)
+    raise ValueError(f"Unsupported offset kind: {offset_kind!r}")
+
+
+def net_offset_field(offset, offset_kind, mask=None):
+    """Return one descriptive 2-D displacement per feature-map cell.
+
+    Grid Sample already predicts one displacement. DCNv2 predicts nine and is
+    summarized with the modulation-mask-weighted mean used by the quiver plot.
+    This summary describes the learned sampling field; it is not a ground-truth
+    sensor-registration vector.
     """
-    offset: (18, H, W) - 9 kernel points x (dx, dy); mask: (9, H, W).
-    Visualizes the mask-weighted mean displacement across the nine sampling
-    points per cell, providing an intuitive view of the net shift learned by
-    the FAM at each position.
+    vectors = offset_vectors(offset, offset_kind)
+    if offset_kind == "grid_sample":
+        return vectors[0]
+    if mask is None or mask.shape[0] != vectors.shape[0]:
+        raise ValueError("DCNv2 net offsets require a 9-channel modulation mask")
+    weights = mask.unsqueeze(1)
+    return (vectors * weights).sum(0) / weights.sum(0).clamp_min(1e-6)
+
+
+def _distribution_stats(values):
+    values = values.detach().float().reshape(-1)
+    return {
+        "mean": values.mean().item(),
+        "median": values.median().item(),
+        "p90": torch.quantile(values, 0.9).item(),
+        "max": values.max().item(),
+    }
+
+
+def tensor_statistics(tensor):
+    """Compact, JSON-serializable activation statistics for one CHW tensor."""
+    return {
+        "mean": tensor.mean().item(),
+        "global_std": tensor.std().item(),
+        "spatial_std": tensor.std(dim=(1, 2)).mean().item(),
+        "min": tensor.min().item(),
+        "max": tensor.max().item(),
+    }
+
+
+def feature_similarity(rgb, other):
+    """Descriptive same-cell similarity after per-map global standardization."""
+    rgb_std = standardize(rgb).permute(1, 2, 0).reshape(-1, rgb.shape[0])
+    other_std = standardize(other).permute(1, 2, 0).reshape(-1, other.shape[0])
+    cosine = torch.nn.functional.cosine_similarity(rgb_std, other_std, dim=1)
+    rmse = torch.sqrt(torch.mean((rgb_std - other_std) ** 2))
+    return {
+        "mean_spatial_cosine": cosine.mean().item(),
+        "standardized_rmse": rmse.item(),
+    }
+
+
+def offset_statistics(offset, offset_kind, input_hw, mask=None):
+    """Describe one predicted offset field without treating cells as replicates."""
+    vectors = offset_vectors(offset, offset_kind)
+    input_h, input_w = input_hw
+    feature_h, feature_w = offset.shape[-2:]
+    scale = torch.tensor(
+        [input_w / feature_w, input_h / feature_h],
+        dtype=vectors.dtype,
+        device=vectors.device,
+    ).view(1, 2, 1, 1)
+    vectors_input = vectors * scale
+    net = net_offset_field(offset, offset_kind, mask=mask)
+    net_input = net * scale[0]
+
+    coordinate_abs_feature = _distribution_stats(vectors.abs())
+    coordinate_abs_input = _distribution_stats(vectors_input.abs())
+    vector_magnitude_feature = _distribution_stats(torch.linalg.vector_norm(vectors, dim=1))
+    vector_magnitude_input = _distribution_stats(torch.linalg.vector_norm(vectors_input, dim=1))
+    net_magnitude_feature = _distribution_stats(torch.linalg.vector_norm(net, dim=0))
+    net_magnitude_input = _distribution_stats(torch.linalg.vector_norm(net_input, dim=0))
+
+    spatial_std = vectors.reshape(vectors.shape[0], 2, -1).std(dim=2).mean().item()
+    coordinate_abs_mean = coordinate_abs_feature["mean"]
+    result = {
+        "kind": offset_kind,
+        "feature_shape": [feature_h, feature_w],
+        "input_pixels_per_feature_cell": [input_w / feature_w, input_h / feature_h],
+        "coordinate_abs_feature_px": coordinate_abs_feature,
+        "coordinate_abs_input_px": coordinate_abs_input,
+        "vector_magnitude_feature_px": vector_magnitude_feature,
+        "vector_magnitude_input_px": vector_magnitude_input,
+        "net_vector_magnitude_feature_px": net_magnitude_feature,
+        "net_vector_magnitude_input_px": net_magnitude_input,
+        "signed_coordinate_mean_feature_px": vectors.mean(dim=(0, 2, 3)).tolist(),
+        "offset_spatial_std_feature_px": spatial_std,
+        "uniformity_ratio": spatial_std / max(coordinate_abs_mean, 1e-8),
+    }
+    if mask is not None:
+        result["mask"] = {
+            "mean": mask.mean().item(),
+            "std": mask.std().item(),
+            "min": mask.min().item(),
+            "max": mask.max().item(),
+        }
+    return result
+
+
+def diagnostic_level_record(rec, input_hw):
+    """Build all per-sample/per-level metrics used by the protocol runner."""
+    rgb = rec["rgb"][0]
+    ir = rec["ir"][0]
+    aligned = rec["ir_aligned"][0]
+    result = {
+        "module_name": rec.get("module_name", ""),
+        "feature_shape": list(rgb.shape),
+        "activations": {
+            "rgb": tensor_statistics(rgb),
+            "ir": tensor_statistics(ir),
+            "fam_ir": tensor_statistics(aligned),
+        },
+        "feature_similarity_proxy": {
+            "rgb_vs_ir": feature_similarity(rgb, ir),
+            "rgb_vs_fam_ir": feature_similarity(rgb, aligned),
+        },
+    }
+    if "offset" in rec:
+        result["offset"] = offset_statistics(
+            rec["offset"][0],
+            rec["offset_kind"],
+            input_hw=input_hw,
+            mask=rec.get("mask", [None])[0] if "mask" in rec else None,
+        )
+    return result
+
+
+def _numeric_leaves(value, prefix=""):
+    """Yield dotted paths and finite numeric leaves from a nested structure."""
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            yield from _numeric_leaves(nested, child_prefix)
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        numeric = float(value)
+        if np.isfinite(numeric):
+            yield prefix, numeric
+
+
+def aggregate_numeric_records(records):
+    """Aggregate sample-level metrics while keeping samples as the units."""
+    values_by_path = {}
+    for record in records:
+        for path, value in _numeric_leaves(record):
+            values_by_path.setdefault(path, []).append(value)
+
+    aggregate = {}
+    for path, values in sorted(values_by_path.items()):
+        array = np.asarray(values, dtype=np.float64)
+        aggregate[path] = {
+            "n": int(array.size),
+            "mean": float(array.mean()),
+            "median": float(np.median(array)),
+            "sample_std": float(array.std(ddof=1)) if array.size > 1 else 0.0,
+            "min": float(array.min()),
+            "max": float(array.max()),
+        }
+    return aggregate
+
+
+def plot_offset_field(ax, offset, mask=None, offset_kind="dcnv2_3x3", stride=4):
+    """
+    Visualize the direct Grid Sample displacement or the mask-weighted mean
+    displacement across DCNv2's nine sampling points.
     """
     _, H, W = offset.shape
-    off = offset.reshape(9, 2, H, W)
-    m = mask.reshape(9, 1, H, W)
-    denom = m.sum(0) + 1e-6
-    mean_dx = (off[:, 0:1] * m).sum(0) / denom
-    mean_dy = (off[:, 1:2] * m).sum(0) / denom
-    mean_dx, mean_dy = mean_dx[0].numpy(), mean_dy[0].numpy()
+    net = net_offset_field(offset, offset_kind, mask=mask)
+    mean_dx, mean_dy = net[0].numpy(), net[1].numpy()
 
     ys, xs = np.mgrid[0:H:stride, 0:W:stride]
     ax.quiver(
@@ -395,10 +586,15 @@ def plot_offset_field(ax, offset, mask, stride=4):
     )
     ax.set_xlim(0, W)
     ax.set_ylim(H, 0)
-    ax.set_title("FAM offset field\n(mask-weighted mean over 9 points)", fontsize=9)
+    title = (
+        "Grid Sample displacement field"
+        if offset_kind == "grid_sample"
+        else "DCNv2 offset field\n(mask-weighted mean over 9 points)"
+    )
+    ax.set_title(title, fontsize=9)
 
 
-def offset_spatial_uniformity(offset):
+def offset_spatial_uniformity(offset, offset_kind="dcnv2_3x3"):
     """
     offset: (18, H, W) - 9 kernel points x (dx, dy), in feature-map pixels.
 
@@ -412,7 +608,8 @@ def offset_spatial_uniformity(offset):
     global shift); a ratio near 1 indicates variation comparable to the mean
     offset magnitude and hence a genuinely position-dependent correction.
     """
-    off = offset.reshape(9, 2, -1)  # (9, 2, H*W)
+    vectors = offset_vectors(offset, offset_kind)
+    off = vectors.reshape(vectors.shape[0], 2, -1)
     spatial_std = off.std(dim=2).mean().item()   # variation across output cells
     magnitude = off.abs().mean().item()          # mean offset magnitude
     uniformity_ratio = spatial_std / max(magnitude, 1e-8)
@@ -427,13 +624,18 @@ def offset_spatial_uniformity(offset):
 # 5. Synchronized RGB-IR sample (same training/evaluation pipeline)
 # ---------------------------------------------------------------------------
 
-def load_sample(dataset_params, dataloader_params, sample_idx, split, device):
-    """Load an HF-model sample (RT-DETR/DefDETR/DINO) through get_dataloaders
-    (WiSARDDataset + HF AutoProcessor pipeline)."""
+def load_hf_datasets(dataset_params, dataloader_params):
+    """Build the HF datasets once so multi-sample diagnostics remain cheap."""
     (_train_l, _val_l, _test_l), (train_set, val_set, test_set), _collate, denormalize = get_dataloaders(
         dict(dataset_params), dict(dataloader_params), return_datasets=True
     )
-    dataset = {"train": train_set, "val": val_set, "test": test_set}[split]
+    return {"train": train_set, "val": val_set, "test": test_set}, denormalize
+
+
+def load_sample(dataset_params, dataloader_params, sample_idx, split, device):
+    """Load an HF-model sample through the production preprocessing pipeline."""
+    datasets, denormalize = load_hf_datasets(dataset_params, dataloader_params)
+    dataset = datasets[split]
     sample = dataset[sample_idx]
     pixel_values = sample.pixel_values.unsqueeze(0).to(device)  # (1, 4, H, W) RGB+IR
     return pixel_values, denormalize
@@ -446,6 +648,21 @@ def load_yolo_sample(data_yaml, run_config, sample_idx, split, device):
     sarfusion/experiment/yolo.py) to avoid preprocessing discrepancies from
     actual training/evaluation.
     """
+    from ultralytics.cfg import IterableSimpleNamespace, cfg2dict
+    from ultralytics.data.utils import check_det_dataset
+    from ultralytics.utils import colorstr
+
+    from sarfusion.data.wisard import WiSARDYOLODataset
+    from sarfusion.experiment.yolo import WISARD_DEFAULT_CFG
+
+    # Keep Ultralytics optional for the much more common HF diagnostic path.
+    from ultralytics.data.utils import check_det_dataset
+    from ultralytics.cfg import cfg2dict, IterableSimpleNamespace
+    from ultralytics.utils import colorstr
+
+    from sarfusion.data.wisard import WiSARDYOLODataset
+    from sarfusion.experiment.yolo import WISARD_DEFAULT_CFG
+
     data_dict = check_det_dataset(data_yaml)
     img_path = data_dict[split]
 
@@ -494,6 +711,41 @@ def main():
                          help="hf: RT-DETR/DefDETR/DINO (.safetensors); yolo: YOLOv10FusionFAM (Ultralytics .pt)")
     parser.add_argument("--config", required=True, help="run YAML configuration to inspect")
     parser.add_argument("--run-index", type=int, default=0, help="combination index when the config produces multiple grid-search runs")
+    parser.add_argument(
+        "--use-fam",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="[hf only] override model.params.use_fam from the YAML",
+    )
+    parser.add_argument(
+        "--freeze-fam",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="[hf only] override model.params.freeze_fam from the YAML",
+    )
+    parser.add_argument(
+        "--fam-variant",
+        choices=[
+            "current_dcnv2",
+            "bounded_dcnv2_4",
+            "identity_dcnv2",
+            "grid_sample",
+        ],
+        default=None,
+        help="[hf only] override model.params.fam_variant from the YAML",
+    )
+    parser.add_argument(
+        "--ir-dropout-rate",
+        type=float,
+        default=None,
+        help="[hf only] override model.params.ir_dropout_rate from the YAML",
+    )
+    parser.add_argument(
+        "--spatial-jitter-std",
+        type=float,
+        default=None,
+        help="[hf only] override model.params.spatial_jitter_std from the YAML",
+    )
     parser.add_argument("--checkpoint", required=True, help="[hf] path to best/model.safetensors | [yolo] path to weights/best.pt")
     parser.add_argument("--dataset-root", default=None, help="[hf only] absolute WiSARD dataset-root override (the YAML root field is relative)")
     parser.add_argument("--data-yaml", default=None, help="[yolo only] path to the dataset YAML (e.g. wisards_vis_ir.yaml)")
@@ -502,6 +754,18 @@ def main():
     parser.add_argument("--levels", type=int, nargs="+", default=None, help="feature-pyramid levels to visualize (default: all)")
     parser.add_argument("--out-dir", default="./fam_alignment_vis")
     parser.add_argument("--no-fg-isolation", action="store_true", help="disable foreground isolation in PCA")
+    parser.add_argument("--no-figures", action="store_true", help="collect metrics without producing PCA figures")
+    parser.add_argument(
+        "--figure-sample-idx",
+        type=int,
+        nargs="+",
+        default=None,
+        help="when figures are enabled, render only these predeclared sample indices",
+    )
+    parser.add_argument("--output-json", default=None, help="optional path for per-sample/per-level metrics")
+    parser.add_argument("--configuration-label", default=None, help="label stored in --output-json")
+    parser.add_argument("--seed", type=int, default=None, help="checkpoint seed stored in --output-json")
+    parser.add_argument("--session", default=None, help="sample-session label stored in --output-json")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -516,6 +780,16 @@ def main():
     else:
         run_config = load_run_config(args.config, run_index=args.run_index)
         model_params = run_config["model"]
+        model_overrides = {
+            "use_fam": args.use_fam,
+            "freeze_fam": args.freeze_fam,
+            "fam_variant": args.fam_variant,
+            "ir_dropout_rate": args.ir_dropout_rate,
+            "spatial_jitter_std": args.spatial_jitter_std,
+        }
+        for key, value in model_overrides.items():
+            if value is not None:
+                model_params["params"][key] = value
         dataset_params = run_config["dataset"]
         dataloader_params = run_config["dataloader"]
         if args.dataset_root:
@@ -523,11 +797,16 @@ def main():
         print(f"Model: {model_params['name']} | params: {model_params['params']}")
         print(f"Dataset root: {dataset_params['root']} | folders: {dataset_params['folders']}")
         model = load_fusion_model(model_params, args.checkpoint, device)
+        hf_datasets, _denormalize = load_hf_datasets(
+            dataset_params,
+            dataloader_params,
+        )
 
     capture = FAMCapture(model)
 
     isolate_fg = not args.no_fg_isolation
     offset_px_by_level = {}  # level -> flat np.array list, one per sample, in image pixels
+    json_rows = []
 
     for sample_idx in args.sample_idx:
         capture.records.clear()
@@ -535,7 +814,8 @@ def main():
         if args.model_type == "yolo":
             pixel_values, _ = load_yolo_sample(args.data_yaml, run_config, sample_idx, args.split, device)
         else:
-            pixel_values, _ = load_sample(dataset_params, dataloader_params, sample_idx, args.split, device)
+            sample = hf_datasets[args.split][sample_idx]
+            pixel_values = sample.pixel_values.unsqueeze(0).to(device)
 
         with torch.no_grad():
             if args.model_type == "yolo":
@@ -556,6 +836,21 @@ def main():
             rgb_feat = rec["rgb"][0]
             ir_feat = rec["ir"][0]
             ir_aligned_feat = rec["ir_aligned"][0]
+            level_metrics = diagnostic_level_record(
+                rec,
+                input_hw=tuple(pixel_values.shape[-2:]),
+            )
+            json_rows.append(
+                {
+                    "configuration": args.configuration_label,
+                    "seed": args.seed,
+                    "session": args.session or args.split,
+                    "split": args.split,
+                    "sample_index": sample_idx,
+                    "level": level,
+                    "metrics": level_metrics,
+                }
+            )
 
             def _stats(name, t):
                 global_std = t.std()
@@ -574,7 +869,7 @@ def main():
                     f"  [sample {sample_idx}, level {level} stats] offset  : mean_abs={off.abs().mean():.4f} max_abs={off.abs().max():.4f} "
                     f"(feature-map px) | stride~{stride:.0f} -> mean~{off_px.mean():.2f}px max~{off_px.max():.2f}px (original-image pixels)"
                 )
-                pos_var = offset_spatial_uniformity(off)
+                pos_var = offset_spatial_uniformity(off, rec["offset_kind"])
                 print(
                     f"  [sample {sample_idx}, level {level} stats] uniformity: "
                     f"offset_spatial_std={pos_var['offset_spatial_std']:.4f} "
@@ -582,6 +877,12 @@ def main():
                     f"uniformity_ratio={pos_var['uniformity_ratio']:.3f} "
                     "[ratio~0 = nearly constant uniform shift, ratio~1 = genuinely varies with position]"
                 )
+
+            if args.no_figures or (
+                args.figure_sample_idx is not None
+                and sample_idx not in args.figure_sample_idx
+            ):
+                continue
 
             rgb_n = standardize(rgb_feat)
             ir_n = standardize(ir_feat)
@@ -614,7 +915,12 @@ def main():
                 ax.axis("off")
 
             if has_offset:
-                plot_offset_field(axes[-1], rec["offset"][0], rec["mask"][0])
+                plot_offset_field(
+                    axes[-1],
+                    rec["offset"][0],
+                    mask=rec["mask"][0] if "mask" in rec else None,
+                    offset_kind=rec["offset_kind"],
+                )
 
             fig.suptitle(f"FAM alignment check [{args.model_type}] - sample {sample_idx} - level {level} - {rec.get('module_name', '')}")
             fig.tight_layout()
@@ -638,6 +944,32 @@ def main():
                 f"p90={p90_v:.2f}px max={max_v:.2f}px (n_samples={len(args.sample_idx)}, "
                 f"n_total_offsets={pooled.size})"
             )
+
+    if args.output_json:
+        output_path = Path(args.output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        grouped = {}
+        for row in json_rows:
+            grouped.setdefault(str(row["level"]), []).append(row["metrics"])
+        payload = {
+            "schema_version": 1,
+            "model_type": args.model_type,
+            "configuration": args.configuration_label,
+            "seed": args.seed,
+            "checkpoint": str(Path(args.checkpoint).resolve()),
+            "session": args.session or args.split,
+            "split": args.split,
+            "sample_indices": args.sample_idx,
+            "rows": json_rows,
+            "checkpoint_session_aggregate_by_level": {
+                level: aggregate_numeric_records(records)
+                for level, records in sorted(grouped.items(), key=lambda item: int(item[0]))
+            },
+        }
+        with output_path.open("w", encoding="utf-8") as output_file:
+            json.dump(payload, output_file, indent=2, sort_keys=True)
+            output_file.write("\n")
+        print(f"Saved JSON: {output_path}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,265 @@
+\chapter{Discussion and Conclusions}
+\label{chap:discussion}
+
+\section{Answers to the research questions}
+
+\subsection{RQ1: experimental reliability}
+
+The observed RT-DETR variability is large enough to change single-run model
+rankings. Nominally identical native-CUDA executions diverge after the first
+backward pass even when initialization, input, and initial loss agree. The
+transferred COCO person head reduces amplification of those perturbations but
+does not remove them, and DCNv2 prevents strict deterministic FAM training in
+the studied environment.
+
+Reliable comparison consequently requires more than recording a seed. The
+final protocol combines paired seed values, isolated processes, a fixed
+training horizon, final checkpoints, identical pretrained-head transfer,
+training-only Modal Dropout, and distributional reporting. The validation
+audit is equally important: a small shifted validation set can be informative
+about domain mismatch while remaining unsuitable for selecting a checkpoint
+representative of MtErie.
+
+The methodological answer to RQ1 is therefore that experimental design changes
+the scientific conclusion. The move from historical single runs to paired
+replication replaces the claim that SSJ is the best variant with a more limited
+and repeatable selection of standard FAM.
+
+\subsection{RQ2: RT-DETR effectiveness and missing modalities}
+
+On the locked MtErie benchmark, standard FAM improves Additive fusion in every
+paired seed and raises mean \mapfifty{} by 0.0700. The improvement is supported
+by COCO mAP, mAP@75, mAR, and the later recall analysis. IR Dropout and SSJ do
+not provide a reliable mean gain over standard FAM; Identity DCNv2 is highly
+variable, and Grid Sample is close but not consistently superior.
+
+VIS+IR is better than the strongest single modality for all thirty final
+RT-DETR checkpoints. Modal Dropout therefore supports a usable response when a
+modality is removed without making the detector indifferent to the availability
+of both signals. On the internal benchmark, multimodal information remains
+valuable.
+
+The answer is scoped to the internal development benchmark. It establishes a
+consistent paired advantage for FAM over Additive under the selected protocol,
+not a universal expected gain for all seeds, datasets, sensor geometries, or
+implementations.
+
+\subsection{RQ3: mechanism, levels, and bounded offsets}
+
+The FAM predicts nonzero transformations at P3 and P4 across all five standard
+checkpoints. Its offset scale and transformed features vary with seed, level,
+and acquisition session. SSJ changes P3 behavior consistently, increasing
+offset magnitude and smoothing, even though detection does not improve. Grid
+Sample is internally more stable but does not establish that a pure warp is
+equivalent to DCNv2.
+
+The diagnostics do not demonstrate physical RGB--IR registration. DCNv2 mixes
+geometric sampling, filtering, mask modulation, and channel interaction. Its
+output becomes less similar to RGB at the same cell under the selected feature
+proxies, while still improving detection. The supported interpretation is a
+task-oriented geometric-functional transformation.
+
+The P5 seed-41 collapse is an important counterexample to reasoning from output
+accuracy alone. An internally constant branch coexists with the best FAM
+checkpoint because the rest of the detector compensates for it. Factorial
+ablation identifies P3 as the most stable contributor and P5 as positive but
+variable; removing P5 after training is especially damaging in the collapsed
+checkpoint.
+
+Smoothly bounding offsets at four feature cells eliminates the observed
+out-of-map collapse in five new runs, but lowers mean accuracy and increases
+dispersion. The answer to the RQ3 sub-question is therefore asymmetric: the
+intervention is mechanistically effective but is not a better detector.
+
+\subsection{RQ4: operational relevance}
+
+FAM primarily changes the recall side of the precision--recall trade-off. At
+confidence 0.25, it improves mean recall by 0.0990 in all five paired seeds and
+reduces the frequency of non-empty frames with at least one missed target. This
+is relevant to SAR, where a missed person can have high cost. False positives
+do not decrease consistently, however, and the 0.01 threshold used for AP
+collection is not operational because it produces roughly fifty false
+positives per image.
+
+Carnation exposes a geometric boundary. FAM is more tolerant than Additive
+fusion under the severe scale mismatch, but adding IR remains worse than using
+VIS alone in every FAM checkpoint. FAM mitigates the damage of that mismatch;
+it does not solve arbitrary scale differences between sensors.
+
+The performance gain also has a material computational cost: 77.5\% more
+parameters, 46.2\% more proxy GFLOPs, 17.9\% more detector latency, and higher
+CUDA memory on the measured GPU. These values prevent describing FAM as a free
+or generically real-time improvement.
+
+\subsection{RQ5: architectural transferability}
+
+Positive transfer is not established. Deformable DETR provides a promising
+exploratory median trend, but its uncertainty intervals overlap and its
+protocol is not aligned with the final campaign. Complete DINO base is too weak
+under the studied configuration to justify FAM variants. Under the controlled
+YOLOv10 protocol, FAM decreases mean VIS+IR performance and wins in only two of
+five seeds.
+
+The negative YOLOv10 result is scientifically useful. It shows that the RT-DETR
+gain depends on the surrounding representation, fusion interface, optimization
+trajectory, or checkpoint regime and cannot be assumed from the local FAM
+operation alone. It does not show that YOLOv10 or DINO are intrinsically
+unsuitable for RGB--thermal detection.
+
+\section{Overall interpretation}
+
+The most defensible conclusion is narrower than the historical narrative but
+better supported. Standard FAM is the strongest studied RT-DETR configuration
+because it improves Additive consistently on the internal benchmark, not
+because it achieves the largest single score or because its offsets reproduce a
+known camera transform. Its main observed detection benefit is higher recall.
+
+At the same time, the module is internally variable and computationally
+expensive. One feature level can collapse without visible degradation in the
+headline metric, and a correction that makes the mechanism safer can make the
+detector worse. Architecture transfer and external scale mismatch further show
+that an alignment-inspired inductive bias is not sufficient on its own.
+
+These results support a broader methodological point: evaluating multimodal
+fusion should combine output metrics, missing-modality tests, paired
+replication, internal diagnostics, out-of-distribution stress, and cost. Any one
+of these views alone would have produced an incomplete model selection.
+
+\section{Threats to validity}
+
+\subsection{Internal validity}
+
+Native CUDA execution is nondeterministic, particularly for deformable
+operators. Pairing seeds controls intended stochastic sources but cannot pair
+the microscopic CUDA perturbations of two architectures. Five independent
+checkpoints estimate the resulting distribution but do not exhaust it.
+
+The level ablations are interventions on already trained networks. Bypassed
+representations are outside the training path and cannot be interpreted as the
+performance of a newly trained P3-only or P3+P5 architecture. The P5 audit and
+the choice of a bounded correction followed observation of the MtErie
+checkpoint. Freezing one hypothesis before five new trainings reduces further
+adaptation, but the correction remains post-hoc with respect to the internal
+benchmark.
+
+The standalone YOLOv10 evaluator differs slightly from the automatic
+Ultralytics validator. The predefined tolerance is recorded as missed rather
+than changed after inference. Comparisons among modalities use the same
+standalone evaluator, while automatic VIS+IR results remain primary for the
+training protocol.
+
+\subsection{Construct validity}
+
+\mapfifty{} emphasizes detection at IoU 0.50 and is not a complete measure of
+localization quality or SAR utility. Secondary COCO mAP, mAP@75, mAR, and error
+metrics reduce dependence on one score but do not measure response time,
+operator workload, alarm calibration, energy consumption, or consequences of
+false alarms.
+
+Offset magnitude, feature cosine similarity, RMSE, smoothing, and PCA are
+internal proxies. Without camera calibration or ground-truth correspondences,
+they do not validate physical registration. PCA figures also depend on a
+low-dimensional projection and are used illustratively.
+
+\subsection{Statistical conclusion validity}
+
+Five paired runs permit estimation of effect direction and variability but
+produce wide intervals. Exact Wilcoxon tests have coarse resolution, and the
+smallest attainable two-sided value for five nonzero signed pairs is 0.0625.
+The reported tests are exploratory and are not corrected for the number of
+contrasts. Checkpoints, rather than frames, boxes, diagnostic samples, or
+feature cells, are the experimental units.
+
+\subsection{External validity}
+
+MtErie was repeatedly consulted during project development and is not a blind
+holdout. Its final locked comparisons are internally useful but may overstate
+performance on a new acquisition. The FHL validation split is too small and
+shifted to support ordinary checkpoint selection for MtErie.
+
+Carnation is one deliberately severe scale-mismatch case. It reveals a
+specific boundary but cannot estimate performance across SAR domains. The
+study uses one dataset, one main RT-DETR size, one YOLOv10 size, and one GPU for
+latency. Different cameras, calibration, target scales, thermal conditions,
+hardware, or training budgets may change the conclusions.
+
+Deformable DETR and DINO results use the previous protocol. They cannot form a
+quantitatively homogeneous architecture leaderboard with final RT-DETR and
+YOLOv10.
+
+\section{Future work}
+
+\subsection{A representative model-selection protocol}
+
+The first priority is not another grid on MtErie. A future study should build a
+validation split exclusively from training data, separated by acquisition
+session or temporal block to reduce leakage. The checkpoint rule, primary
+metric, training horizon, and allowed hyperparameter search should be fixed
+before the internal test or a new holdout is observed. A genuinely independent
+paired acquisition would then be reserved for final confirmation.
+
+This protocol is necessary before deciding whether the late YOLOv10
+degradation is caused by overfitting, an unsuitable schedule, or validation
+mismatch. It would also allow early stopping to be compared fairly across
+architectures.
+
+\subsection{Improving the alignment architecture}
+
+The diagnostics suggest several targeted directions for a future improved
+model:
+
+\begin{enumerate}[label=\arabic*.]
+  \item normalize or condition the offset predictor on feature scale so that a
+        backbone activation anomaly is less likely to generate extreme
+        offsets;
+  \item add a residual identity path or a learned per-level gate so that raw IR
+        information remains available if the transformed branch becomes
+        unreliable;
+  \item regularize offset magnitude smoothly rather than applying a hard
+        performance-independent bound;
+  \item train level-specific variants, particularly P3-focused or gated-P5
+        models, instead of inferring their behavior from post-hoc bypasses;
+  \item use cross-modal consistency or modality-specific auxiliary losses to
+        improve the weak branch without requiring the fusion output to dominate
+        every training step;
+  \item exploit calibration metadata or synthetic known transformations to
+        introduce geometric supervision and distinguish registration from
+        task-oriented feature transformation.
+\end{enumerate}
+
+These candidates should not all be searched on MtErie. A small number of
+mechanistically justified variants should be frozen using the new validation
+protocol, followed by paired replication and the same internal audit used in
+this thesis.
+
+\subsection{Broader evaluation and deployment}
+
+Further work should include multiple independent RGB--thermal acquisitions,
+controlled scale and translation perturbations, additional missing-sensor
+patterns, confidence calibration, and end-to-end latency including image
+loading, preprocessing, transfer, postprocessing, and visualization. Deployment
+experiments should report power and memory limits of the target UAV hardware
+rather than extrapolating from a laptop GPU.
+
+\section{Conclusions}
+
+This thesis evaluated RGB--thermal fusion for UAV Search and Rescue from a
+reliability-first perspective. It began with an inherited RT-DETR Feature
+Alignment Module and replaced a single-run architectural narrative with a
+paired multi-seed comparison, direct inspection of learned transformations,
+level interventions, external stress testing, and transfer analysis.
+
+Standard FAM improves Additive RT-DETR on the internal MtErie benchmark in all
+five paired seeds and consistently increases recall at practical sensitivity
+thresholds. It remains the selected RT-DETR model. The internal evidence,
+however, supports a learned geometric-functional transformation rather than
+verified physical registration. The P5 collapse, the negative bounded-offset
+result, the Carnation VIS-only advantage, the computational overhead, and the
+negative YOLOv10 transfer collectively define where the improvement stops.
+
+The principal outcome is therefore both architectural and methodological: FAM
+is promising within RT-DETR, but a multimodal detector should not be judged by
+its best checkpoint or its fusion score alone. Repeated runs, explicit
+missing-modality evaluation, internal diagnostics, external stress cases, and
+computational cost are necessary to determine whether an apparent fusion gain
+is reliable, understandable, and transferable.

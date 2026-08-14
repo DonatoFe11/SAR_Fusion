@@ -1,0 +1,44 @@
+# Frozen post-training evaluation of the final YOLOv10 last.pt checkpoints.
+# Commit this file, the runner, its tests, and the protocol note before running
+# the complete inference campaign.
+
+protocol:
+  id: yolov10_final_modality_evaluation_v1
+  checkpoint: last
+  split: test
+  seeds: [40, 41, 42, 43, 44]
+  batch_size: 8
+  workers: 4
+  max_det: 300
+  vis_ir_sanity_tolerance: 0.002
+  data_yaml: parameters/YOLO_datasets/wisards_vis_ir.yaml
+  output_dir: out/yolo_final_modality_evaluation
+
+  # All conditions use the same paired test frames. The explicit feature mask
+  # determines which sensor branch is available to the detector.
+  modalities:
+    vis_ir: fusion
+    vis: rgb
+    ir: ir
+
+  configurations:
+    additive:
+      training_config: parameters/YOLO/yolov10_additive_protocol.yaml
+      run_root: SarYOLOAdditiveProtocol
+      expected_use_fam: false
+      reference_vis_ir_map50:
+        40: 0.2304
+        41: 0.2740
+        42: 0.2494
+        43: 0.2159
+        44: 0.2728
+    fam:
+      training_config: parameters/YOLO/yolov10_fam_protocol.yaml
+      run_root: SarYOLOFAMProtocol
+      expected_use_fam: true
+      reference_vis_ir_map50:
+        40: 0.1883
+        41: 0.2749
+        42: 0.1947
+        43: 0.2603
+        44: 0.1802

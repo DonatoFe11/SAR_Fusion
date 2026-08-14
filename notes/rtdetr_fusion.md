@@ -2,6 +2,11 @@
 
 > **Versione descritta.** La nota fa riferimento all'implementazione corrente in [`sarfusion/models/rtdetr_fusion.py`](../sarfusion/models/rtdetr_fusion.py). SSJ è già disponibile in questa versione, ma è opzionale (`spatial_jitter_std=0.0` di default): la descrizione del FAM qui sotto riguarda il percorso senza jitter; quando il parametro è maggiore di zero, il rumore viene sommato agli offset solo durante il training. Per la motivazione e i risultati delle varianti SSJ, vedi [fam_lazy_init_behavior.md](fam_lazy_init_behavior.md).
 
+> **Risultati aggiornati.** La scelta finale è FAM standard senza SSJ. Le
+> singole run storiche sono state sostituite dal confronto a cinque seed in
+> [rtdetr_reproducibility.md](rtdetr_reproducibility.md); SSJ non ha mostrato un
+> miglioramento medio rispetto al FAM standard.
+
 ## Feature Alignment Module (FAM)
 Il modulo FAM è progettato per allineare le feature map IR con quelle RGB prima di fonderle. Questo è cruciale perché le due modalità (RGB e IR) possono essere disallineate a causa di differenze nella geometria, prospettiva o distorsioni ottiche.
 

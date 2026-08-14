@@ -1,0 +1,47 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Unmanned Aerial Vehicles equipped with visible and thermal cameras can support
+wilderness Search and Rescue by combining complementary appearance and heat
+information. Their use, however, raises three coupled problems: either modality
+may become unavailable or uninformative, the two sensors are not perfectly
+registered, and the small size of the available data makes architectural
+comparisons sensitive to training variability and model-selection choices.
+
+This thesis studies RGB--thermal person detection on the WiSARD dataset. It
+starts from an RT-DETR dual-backbone detector and a Feature Alignment Module
+(FAM) developed in preceding coursework. The contribution is not the original
+introduction of FAM, but its reliability-aware evaluation, mechanistic
+characterization, failure-mode analysis, and transfer to other detector
+families. An experimental audit revealed that preliminary single-run rankings
+were not reliable. A locked protocol was therefore defined using five paired
+training seeds, isolated processes, a fixed ten-epoch horizon, final
+checkpoints, transferred COCO person heads, and Modal Dropout restricted to
+training.
+
+On the internal MtErie benchmark, FAM improves additive RT-DETR fusion in all
+five paired seeds, increasing mean \mapfifty{} from
+\(0.3080\pm0.0677\) to \(0.3780\pm0.0440\). The main behavioral effect is a
+higher recall: at confidence 0.25, the mean increase is 0.0990 and is observed
+in every seed. Direct inspection of offsets, masks, and feature maps confirms
+that the geometric path is active at P3 and P4, but does not establish physical
+RGB--IR registration. One checkpoint exhibits a compensated P5 collapse with
+offsets of approximately 5,030 input pixels and a spatially constant output,
+despite attaining the highest FAM detection score. A bounded-offset variant
+removes the observed collapse but reduces mean detection performance, showing
+that a mechanistically effective correction is not necessarily a better
+detector.
+
+Further experiments delimit the result. Under the severe scale mismatch of the
+predefined Carnation stress test, FAM is more tolerant than additive fusion,
+yet visible-only inference remains better than fusion in all five FAM
+checkpoints. FAM also increases model size and measured detector latency. A
+five-seed transfer study on a dual-backbone YOLOv10 does not reproduce the
+RT-DETR gain. The thesis therefore supports FAM as the strongest studied
+RT-DETR configuration on the internal benchmark, while showing that its
+benefit, internal behavior, and transferability must be reported with explicit
+experimental and validity boundaries.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} RGB--thermal fusion; Search and Rescue; UAV;
+RT-DETR; YOLOv10; missing modalities; feature alignment; reproducibility.

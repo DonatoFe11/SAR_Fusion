@@ -1,0 +1,3 @@
+configuration,total_parameters,fam_parameters,state_bytes,supported_operator_gflops,unprofiled_dcnv2_equivalent_gflops,adjusted_supported_operator_gflops,latency_mean_ms,latency_trial_std_ms,latency_median_ms,latency_p95_ms,throughput_images_per_second,baseline_allocated_mib,peak_allocated_mib,incremental_peak_allocated_mib
+additive,66202467,0,265748188,208.367329426,0.0,208.367329426,66.905770,0.298647,66.290127,73.183746,14.946394,297.126953,436.262695,139.135742
+fam,117493172,51290705,470911008,213.946900626,90.596966400,304.543867026,78.869441,0.372467,78.817696,83.453135,12.679182,491.536621,712.183105,220.646484

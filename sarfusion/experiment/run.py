@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from sarfusion.data.wisard import TEST_FOLDERS, TRAIN_FOLDERS, VAL_FOLDERS, generate_wisard_filelist, get_wisard_folders
 from sarfusion.data.tile_aggregation import aggregate_tile_predictions
-from sarfusion.experiment.yolo import WisardTrainer
+from sarfusion.experiment.yolo import WisardTrainer, install_wandb_empty_curve_guard
 from sarfusion.models.yolov10 import YOLOv10WiSARD
 from sarfusion.utils.structures import LossOutput, WrapperModelOutput
 from sarfusion.utils.logger import get_logger
@@ -26,6 +26,14 @@ from sarfusion.experiment.utils import WrapperModule
 from sarfusion.models.loss import build_loss
 from sarfusion.models import build_model
 from sarfusion.utils.metrics import DetectionEvaluator, Evaluator, build_evaluator
+from sarfusion.utils.reproducibility import (
+    ReproducibilityTrace,
+    configure_reproducibility,
+    model_digests,
+    prepare_rtdetr_model_for_determinism,
+    runtime_fingerprint,
+    tensor_digest,
+)
 from sarfusion.utils.utils import (
     RunningAverage,
     load_yaml,
@@ -58,6 +66,7 @@ class Run:
         self.dataset_params = None
         self.train_params = None
         self.model = None
+        self.optimizer = None
         self.scheduler = None
         self.criterion = None
         self.best_metric = None
@@ -70,6 +79,10 @@ class Run:
         self.global_train_step = 0
         self.global_val_step = 0
         self.validation_json = None
+        self.accelerator = None
+        self._ended = False
+        self.reproducibility = {}
+        self.repro_trace = ReproducibilityTrace(None)
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -82,7 +95,12 @@ class Run:
         ) = parse_params(self.params)
 
     def init(self, params: dict):
-        set_seed(params["seed"])
+        self.reproducibility = deepcopy(params.get("reproducibility", {}))
+        configure_reproducibility(
+            params["seed"],
+            deterministic=self.reproducibility.get("deterministic", False),
+            warn_only=self.reproducibility.get("warn_only", False),
+        )
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -103,15 +121,54 @@ class Run:
         self.tracker = get_experiment_tracker(self.accelerator, self.params)
         self.url = self.tracker.url
         self.name = self.tracker.name
+        trace_enabled = bool(self.reproducibility.get("trace", False))
+        trace_path = (
+            os.path.join(self.tracker.local_dir, "reproducibility_trace.jsonl")
+            if trace_enabled and self.tracker.local_dir
+            else None
+        )
+        self.repro_trace = ReproducibilityTrace(trace_path)
+        self.repro_trace.write(
+            "runtime",
+            seed=int(params["seed"]),
+            data_seed=int(
+                self.reproducibility.get("data_seed", params["seed"])
+            ),
+            model_seed=self.reproducibility.get("model_seed"),
+            training_seed=int(
+                self.reproducibility.get("training_seed", params["seed"])
+            ),
+            repetition=params.get("repetition"),
+            **runtime_fingerprint(),
+        )
         (self.train_loader, self.val_loader, self.test_loader), self.denormalize = (
             get_dataloaders(
                 self.dataset_params,
                 self.dataloader_params,
+                seed=self.reproducibility.get("data_seed", params["seed"]),
             )
         )
         model_name = self.model_params.get("name")
         logger.info(f"Creating model {model_name}")
+        model_seed = self.reproducibility.get("model_seed")
+        if model_seed is not None:
+            set_seed(int(model_seed))
         self.model = build_model(params=self.model_params)
+        if model_seed is not None or "training_seed" in self.reproducibility:
+            # Decouple model initialization from stochastic training operators.
+            set_seed(
+                int(self.reproducibility.get("training_seed", params["seed"]))
+            )
+        if self.reproducibility.get("deterministic", False):
+            attention_modules = prepare_rtdetr_model_for_determinism(self.model)
+            logger.info(
+                "Deterministic RT-DETR attention enabled for %s modules",
+                attention_modules,
+            )
+        if self.repro_trace.enabled:
+            self.repro_trace.write(
+                "model_initialized", **model_digests(self.model)
+            )
         logger.info("Creating criterion")
         self.model = WrapperModule(self.model, self.criterion)
         self.task = self.params.get("task", None)
@@ -140,12 +197,16 @@ class Run:
         logger.info("Creating optimizer")
         
         backbone_lr = self.train_params.get("backbone_lr", self.train_params["initial_lr"])
-        dino_lr = self.train_params.get("dino_lr", self.train_params["initial_lr"])
+        # Keep "dino_lr" as the public configuration key for compatibility.
+        # This group also contains detection heads shared by RT-DETR.
+        head_and_dino_lr = self.train_params.get(
+            "dino_lr", self.train_params["initial_lr"]
+        )
         new_module_params = []
-        dino_params = []
+        head_and_dino_params = []
         backbone_params = []
 
-        dino_parameter_names = (
+        head_and_dino_parameter_names = (
             "mixed_query_content",
             "dn_label_embeddings",
             "enc_output",
@@ -154,8 +215,8 @@ class Run:
             "class_embed",
         )
         for name, param in self.model.named_parameters():
-            if any(k in name for k in dino_parameter_names):
-                dino_params.append(param)
+            if any(k in name for k in head_and_dino_parameter_names):
+                head_and_dino_params.append(param)
             elif any(k in name for k in ["ir_backbone", "channel_fusion"]):
                 new_module_params.append(param)
             else:
@@ -181,19 +242,19 @@ class Run:
 
         logger.info(
             f"New module params: {len(new_module_params)}, "
-            f"DINO params: {len(dino_params)}, "
+            f"Detection-head/DINO-specific params: {len(head_and_dino_params)}, "
             f"Backbone params: {len(backbone_params)}"
         )
         logger.info(
             f"LR for new modules: {self.train_params['initial_lr']}, "
-            f"LR for DINO modules: {dino_lr}, "
+            f"LR for detection-head/DINO-specific modules: {head_and_dino_lr}, "
             f"LR for backbone: {backbone_lr}"
         )
 
         self.optimizer = AdamW([
             {"params": backbone_params, "lr": backbone_lr},
             {"params": new_module_params, "lr": self.train_params["initial_lr"]},
-            {"params": dino_params, "lr": dino_lr},
+            {"params": head_and_dino_params, "lr": head_and_dino_lr},
         ])
 
         scheduler_params = self.train_params.get("scheduler", None)
@@ -288,6 +349,8 @@ class Run:
 
                     metrics = None
                     if (
+                        self.train_params.get("run_validation", True)
+                        and
                         self.val_loader
                         and epoch % self.train_params.get("val_frequency", 1) == 0
                     ):
@@ -295,7 +358,16 @@ class Run:
                             logger.info(f"Running Model Validation")
                             metrics = self.validate_epoch(epoch)
                             self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                    improved = self.save_training_state(epoch, metrics)
+                    improved = False
+                    save_final_only = self.train_params.get(
+                        "save_final_checkpoint_only", False
+                    )
+                    is_final_epoch = epoch == self.train_params["max_epochs"] - 1
+                    if (
+                        self.train_params.get("save_checkpoints", True)
+                        and (not save_final_only or is_final_epoch)
+                    ):
+                        improved = self.save_training_state(epoch, metrics)
 
                     if patience is not None and metrics is not None:
                         if improved:
@@ -312,7 +384,7 @@ class Run:
         else:
             logger.info("No training params, no training")
 
-        if self.test_loader:
+        if self.test_loader and self.params.get("run_test", True):
             self.test()
         self.end()
 
@@ -485,8 +557,11 @@ class Run:
         epoch: int,
     ):
         if epoch > 0:
-            set_seed(self.params["seed"] + epoch)
-            logger.info(f"Setting seed to {self.params['seed'] + epoch}")
+            training_seed = int(
+                self.reproducibility.get("training_seed", self.params["seed"])
+            )
+            set_seed(training_seed + epoch)
+            logger.info(f"Setting seed to {training_seed + epoch}")
         self.tracker.log_metric("start_epoch", epoch)
         self.model.train()
         self.train_evaluator.reset()
@@ -507,13 +582,41 @@ class Run:
         probe_sync = bool(self.train_params.get("time_probe_sync", True))
         probe_enabled = probe_every > 0
         prev_iter_end = time.perf_counter()
+        max_steps = self.train_params.get("max_steps_per_epoch")
+        trace_batches = int(self.reproducibility.get("trace_batches", 0) or 0)
+        trace_tensor_batches = int(
+            self.reproducibility.get("trace_tensor_batches", 0) or 0
+        )
+        trace_model_steps = int(
+            self.reproducibility.get("trace_model_steps", 0) or 0
+        )
 
         for batch_idx, batch_dict in bar:
+            if max_steps is not None and batch_idx >= int(max_steps):
+                break
             iter_start = time.perf_counter()
             data_time = iter_start - prev_iter_end
             # if batch_idx == 1000:
             #     break
             batch_dict = DataDict(**batch_dict)
+            if batch_idx < trace_batches:
+                trace_values = {
+                    "epoch": epoch,
+                    "batch": batch_idx,
+                    "global_step": self.global_train_step,
+                    "sample_indices": batch_dict.sample_idx.detach().cpu().tolist(),
+                    "modality_modes": list(batch_dict.modality_mode),
+                    "torch_rng_sha256": tensor_digest(torch.get_rng_state()),
+                }
+                if torch.cuda.is_available():
+                    trace_values["cuda_rng_sha256"] = tensor_digest(
+                        torch.cuda.get_rng_state()
+                    )
+                if batch_idx < trace_tensor_batches:
+                    trace_values["input_sha256"] = tensor_digest(
+                        batch_dict.pixel_values
+                    )
+                self.repro_trace.write("batch", **trace_values)
             with self.accelerator.accumulate(self.model):
                 if probe_enabled and (batch_idx % probe_every == 0):
                     if probe_sync and torch.cuda.is_available():
@@ -529,6 +632,26 @@ class Run:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
                 self.optimizer.step()
                 self._scheduler_step(SchedulerStepMoment.BATCH)
+
+            if batch_idx < trace_batches:
+                loss_components = {}
+                if hasattr(result_dict.loss, "components"):
+                    loss_components = {
+                        name: float(value.detach().cpu().item())
+                        if isinstance(value, torch.Tensor) and value.numel() == 1
+                        else str(value)
+                        for name, value in result_dict.loss.components.items()
+                    }
+                trace_values = {
+                    "epoch": epoch,
+                    "batch": batch_idx,
+                    "global_step": self.global_train_step,
+                    "loss": float(loss.detach().cpu().item()),
+                    "loss_components": loss_components,
+                }
+                if batch_idx < trace_model_steps:
+                    trace_values.update(model_digests(self.model))
+                self.repro_trace.write("optimizer_step", **trace_values)
 
             if probe_enabled and (batch_idx % probe_every == 0):
                 if probe_sync and torch.cuda.is_available():
@@ -828,31 +951,89 @@ class Run:
                 sequence_name=sequence_name,
             )
 
-    def restore_best_model(self):
+    def restore_model(self, checkpoint_type="best"):
+        if checkpoint_type in (None, "current"):
+            logger.info("Testing the model currently in memory")
+            return
+        if checkpoint_type not in {"best", "latest"}:
+            raise ValueError(
+                "test_checkpoint must be 'best', 'latest', or 'current', got "
+                f"{checkpoint_type!r}"
+            )
         try:
-            filename = self.tracker.local_dir + "/best/model.safetensors"
+            filename = os.path.join(
+                self.tracker.local_dir, checkpoint_type, "model.safetensors"
+            )
             with safe_open(filename, framework="pt") as f:
                 weights = {k: f.get_tensor(k) for k in f.keys()}
             self.model.load_state_dict(weights, strict=False)
-            logger.info(f"✅ Best model restored from {filename}")
+            logger.info(f"Checkpoint '{checkpoint_type}' restored from {filename}")
 
         except FileNotFoundError:
-            logger.warning(f"No best model found in {filename}, ensure you are using a pretrained model")
+            raise FileNotFoundError(
+                f"No '{checkpoint_type}' checkpoint found at {filename}"
+            )
+
+    def restore_best_model(self):
+        """Backward-compatible alias used by older callers."""
+        return self.restore_model("best")
 
     def test(self):
         self.test_loader = self.accelerator.prepare(self.test_loader)
-        # Restore best model
-        self.restore_best_model()
+        self.restore_model(self.params.get("test_checkpoint", "best"))
         with self.tracker.test():
             self.evaluate(self.test_loader, phase="test")
 
     def end(self):
+        if self._ended:
+            return
+        self._ended = True
         logger.info("Ending run")
-        self.tracker.end()
+
+        try:
+            if self.tracker is not None:
+                self.tracker.end()
+        finally:
+            # Break the self-referencing lambda before collecting the run.
+            self.compute_val_metrics = None
+
+            if self.accelerator is not None:
+                (
+                    self.model,
+                    self.optimizer,
+                    self.scheduler,
+                    self.train_loader,
+                    self.val_loader,
+                    self.test_loader,
+                ) = self.accelerator.free_memory(
+                    self.model,
+                    self.optimizer,
+                    self.scheduler,
+                    self.train_loader,
+                    self.val_loader,
+                    self.test_loader,
+                )
+            else:
+                self.model = None
+                self.optimizer = None
+                self.scheduler = None
+                self.train_loader = None
+                self.val_loader = None
+                self.test_loader = None
+
+            self.criterion = None
+            self.train_evaluator = None
+            self.val_evaluator = None
+            self.denormalize = None
+            self.validation_json = None
+            self.tracker = None
+            self.accelerator = None
+
         logger.info("Run ended")
 
 
 def yolo_train(parameters):
+    install_wandb_empty_curve_guard()
     if isinstance(parameters, str):
         args = load_yaml(parameters)
     else:

@@ -62,10 +62,19 @@ def get_train_val_test_params(name, dataset_params):
             **dataset_params,
             "folders": train_folders,
         }
-        val_dataset_params = {**dataset_params, "folders": val_folders}
+        # Modal dropout is a training augmentation. Validation and test must
+        # always evaluate the complete modality input selected by their
+        # folders, otherwise checkpoint selection and final metrics depend on
+        # randomly masked samples.
+        val_dataset_params = {
+            **dataset_params,
+            "folders": val_folders,
+            "modal_dropout": False,
+        }
         test_dataset_params = {
-            **dataset_params, 
+            **dataset_params,
             "folders": test_folders,
+            "modal_dropout": False,
             "test_all_tiles": True if dataset_params.get("use_tiling", False) else False,
         }
     else:
@@ -73,7 +82,12 @@ def get_train_val_test_params(name, dataset_params):
     return train_dataset_params, val_dataset_params, test_dataset_params
 
 
-def get_dataloaders(dataset_params, dataloader_params, return_datasets=False):
+def get_dataloaders(
+    dataset_params,
+    dataloader_params,
+    return_datasets=False,
+    seed=None,
+):
     dataset_params = dataset_params.copy()
 
     transforms, denormalize = build_preprocessor(dataset_params)
@@ -92,8 +106,13 @@ def get_dataloaders(dataset_params, dataloader_params, return_datasets=False):
         transform=transforms,
         **train_dataset_params,
     )
-    generator_train = torch.Generator()
-    generator_train.manual_seed(torch.initial_seed())
+    # Keep sampler/worker RNGs separate from the model RNG.  Using the
+    # experiment seed explicitly also makes the data stream independent of
+    # random numbers consumed while constructing other objects.
+    seed = int(torch.initial_seed() if seed is None else seed)
+    generator_train = torch.Generator().manual_seed(seed)
+    generator_val = torch.Generator().manual_seed(seed + 1)
+    generator_test = torch.Generator().manual_seed(seed + 2)
     train_loader = torch.utils.data.DataLoader(
         train_set,
         collate_fn=get_collate_fn(train_set),
@@ -110,6 +129,7 @@ def get_dataloaders(dataset_params, dataloader_params, return_datasets=False):
         val_set,
         collate_fn=get_collate_fn(val_set),
         worker_init_fn=seed_worker,
+        generator=generator_val,
         **dataloader_params,
     )
     test_set = dataclass(
@@ -120,6 +140,7 @@ def get_dataloaders(dataset_params, dataloader_params, return_datasets=False):
         test_set,
         collate_fn=get_collate_fn(test_set),
         worker_init_fn=seed_worker,
+        generator=generator_test,
         **dataloader_params,
     )
     if return_datasets:

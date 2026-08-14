@@ -1,0 +1,151 @@
+{
+  "figure_confidence_thresholds": [
+    0.01,
+    0.25
+  ],
+  "dataset_summary": {
+    "n_empty_frames": 19,
+    "n_frames": 708,
+    "n_objects": 1770,
+    "sessions": {
+      "210417_MtErie_Enterprise_VIS_0003": {
+        "n_empty_frames": 3,
+        "n_frames": 264,
+        "n_objects": 1022
+      },
+      "210417_MtErie_Enterprise_VIS_0005": {
+        "n_empty_frames": 8,
+        "n_frames": 272,
+        "n_objects": 454
+      },
+      "210417_MtErie_Enterprise_VIS_0007": {
+        "n_empty_frames": 8,
+        "n_frames": 172,
+        "n_objects": 294
+      }
+    },
+    "size_counts": {
+      "large": 18,
+      "medium": 301,
+      "small": 1451
+    }
+  },
+  "figure_seed": 43,
+  "primary_confidence_threshold": 0.01,
+  "iou_threshold": 0.5,
+  "max_figure_predictions": 20,
+  "protocol_id": "rtdetr_additive_fam_error_analysis_v1",
+  "schema_version": 1,
+  "selected_samples": [
+    {
+      "ir_path": "210417_MtErie_Enterprise_IR_0004/images/210417_MtErie_Enterprise_IR_0004_00000089.jpeg",
+      "label_path": "210417_MtErie_Enterprise_VIS_0003/labels/210417_MtErie_Enterprise_VIS_0003_00000088.txt",
+      "label_sha256": "4182a6f226276ce7361129762bc7d3724b8e461e483f5c379524a203ec6dab8f",
+      "n_gt": 4,
+      "sample_index": 88,
+      "selection_category": "small_target",
+      "session": "210417_MtErie_Enterprise_VIS_0003",
+      "session_position": 88,
+      "size_counts": {
+        "large": 0,
+        "medium": 0,
+        "small": 4
+      },
+      "target_session_position": 87.66666666666667,
+      "vis_path": "210417_MtErie_Enterprise_VIS_0003/images/210417_MtErie_Enterprise_VIS_0003_00000088.jpeg"
+    },
+    {
+      "ir_path": "210417_MtErie_Enterprise_IR_0004/images/210417_MtErie_Enterprise_IR_0004_00000203.jpeg",
+      "label_path": "210417_MtErie_Enterprise_VIS_0003/labels/210417_MtErie_Enterprise_VIS_0003_00000202.txt",
+      "label_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "n_gt": 0,
+      "sample_index": 202,
+      "selection_category": "empty",
+      "session": "210417_MtErie_Enterprise_VIS_0003",
+      "session_position": 202,
+      "size_counts": {
+        "large": 0,
+        "medium": 0,
+        "small": 0
+      },
+      "target_session_position": 175.33333333333334,
+      "vis_path": "210417_MtErie_Enterprise_VIS_0003/images/210417_MtErie_Enterprise_VIS_0003_00000202.jpeg"
+    },
+    {
+      "ir_path": "210417_MtErie_Enterprise_IR_0006/images/210417_MtErie_Enterprise_IR_0006_00090.jpeg",
+      "label_path": "210417_MtErie_Enterprise_VIS_0005/labels/210417_MtErie_Enterprise_VIS_0005_00000090.txt",
+      "label_sha256": "c60323e34b29c0281043d2b8afc0e674fd7edfab0b5578dba0544ab30afa4920",
+      "n_gt": 1,
+      "sample_index": 354,
+      "selection_category": "small_target",
+      "session": "210417_MtErie_Enterprise_VIS_0005",
+      "session_position": 90,
+      "size_counts": {
+        "large": 0,
+        "medium": 0,
+        "small": 1
+      },
+      "target_session_position": 90.33333333333333,
+      "vis_path": "210417_MtErie_Enterprise_VIS_0005/images/210417_MtErie_Enterprise_VIS_0005_00000090.jpeg"
+    },
+    {
+      "ir_path": "210417_MtErie_Enterprise_IR_0006/images/210417_MtErie_Enterprise_IR_0006_00088.jpeg",
+      "label_path": "210417_MtErie_Enterprise_VIS_0005/labels/210417_MtErie_Enterprise_VIS_0005_00000088.txt",
+      "label_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "n_gt": 0,
+      "sample_index": 352,
+      "selection_category": "empty",
+      "session": "210417_MtErie_Enterprise_VIS_0005",
+      "session_position": 88,
+      "size_counts": {
+        "large": 0,
+        "medium": 0,
+        "small": 0
+      },
+      "target_session_position": 180.66666666666666,
+      "vis_path": "210417_MtErie_Enterprise_VIS_0005/images/210417_MtErie_Enterprise_VIS_0005_00000088.jpeg"
+    },
+    {
+      "ir_path": "210417_MtErie_Enterprise_IR_0008/images/210417_MtErie_Enterprise_IR_0008_out_frame_00058.jpeg",
+      "label_path": "210417_MtErie_Enterprise_VIS_0007/labels/210417_MtErie_Enterprise_VIS_0007_00000058.txt",
+      "label_sha256": "f33a1ec3482f783c815c6bb486d4002611198ace4a46227d4f967bb50fdfc6c2",
+      "n_gt": 1,
+      "sample_index": 593,
+      "selection_category": "small_target",
+      "session": "210417_MtErie_Enterprise_VIS_0007",
+      "session_position": 57,
+      "size_counts": {
+        "large": 0,
+        "medium": 0,
+        "small": 1
+      },
+      "target_session_position": 57.0,
+      "vis_path": "210417_MtErie_Enterprise_VIS_0007/images/210417_MtErie_Enterprise_VIS_0007_00000058.jpeg"
+    },
+    {
+      "ir_path": "210417_MtErie_Enterprise_IR_0008/images/210417_MtErie_Enterprise_IR_0008_out_frame_00108.jpeg",
+      "label_path": "210417_MtErie_Enterprise_VIS_0007/labels/210417_MtErie_Enterprise_VIS_0007_00000108.txt",
+      "label_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "n_gt": 0,
+      "sample_index": 641,
+      "selection_category": "empty",
+      "session": "210417_MtErie_Enterprise_VIS_0007",
+      "session_position": 105,
+      "size_counts": {
+        "large": 0,
+        "medium": 0,
+        "small": 0
+      },
+      "target_session_position": 114.0,
+      "vis_path": "210417_MtErie_Enterprise_VIS_0007/images/210417_MtErie_Enterprise_VIS_0007_00000108.jpeg"
+    }
+  ],
+  "selection_rule": "for each session, closest eligible frame to one-third position for small targets and two-thirds position for empty frames",
+  "selection_uses_predictions": false,
+  "size_definition": {
+    "evaluation_size": 640,
+    "large": "area >= 96^2 pixels",
+    "medium": "32^2 <= area < 96^2 pixels",
+    "small": "area < 32^2 pixels"
+  }
+}

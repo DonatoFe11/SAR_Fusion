@@ -1,5 +1,10 @@
 # Deformable DETR Fusion per RGB-IR
 
+> **Stato.** Le tre configurazioni sono già state replicate cinque volte, ma
+> precedono il protocollo RT-DETR finale basato su testa `person`, checkpoint
+> finale e validation disaccoppiata. Sono evidenza esplorativa utile, non una
+> classifica quantitativa direttamente omogenea con la campagna RT-DETR 2026.
+
 Questa nota documenta l'implementazione finale di Deformable DETR per la rilevazione RGB-IR su WiSARD. L'architettura usa due backbone indipendenti, una fusione per concatenazione dei canali non lineare e, nelle varianti dedicate, il Feature Alignment Module (FAM) e lo Stochastic Spatial Jitter (SSJ).
 
 I risultati della famiglia Deformable DETR vanno interpretati come **mediana e intervallo su cinque run**, non come il risultato di una singola esecuzione perchè l'attenzione deformabile multi-scala introduce non determinismo run-to-run anche a seed fissato.
@@ -67,7 +72,11 @@ I pesi di `offset_conv` sono inizializzati a zero: il campo di offset parte null
 
 Lo SSJ è attivo solo nel training e aggiunge rumore gaussiano agli offset predetti, prima della DCNv2. L'intento è evitare che il FAM converga verso un singolo pattern di allineamento, regolarizzandolo rispetto a piccole perturbazioni geometriche.
 
-Su questa famiglia, tuttavia, SSJ non ha riprodotto il beneficio osservato su RT-DETR: la sorgente di rumore aggiunta si combina con il non determinismo dell'attenzione deformabile e aumenta la variabilità dei risultati.
+Su questa famiglia, SSJ non ha riprodotto il beneficio che era apparso nella
+singola run RT-DETR preliminare: la sorgente di rumore aggiunta si associa a
+una maggiore variabilità osservata. La successiva campagna RT-DETR a cinque
+seed non ha a sua volta mostrato un miglioramento medio di SSJ, quindi non è
+corretto descrivere oggi SSJ come regolarizzatore generalmente vantaggioso.
 
 ## Stabilità sperimentale e risultati
 
@@ -81,4 +90,15 @@ Il backward della Multi-Scale Deformable Attention esegue accumuli su posizioni 
 
 FAM mostra la tendenza più promettente, con mediana RGB-IR da 0.249 a 0.294. Gli intervalli si sovrappongono però ampiamente: con cinque run non è possibile considerare le differenze statisticamente consolidate. FAM+SSJ ha la variabilità più elevata e una mediana inferiore a FAM.
 
-Nessuna variante raggiunge il riferimento RT-DETR base (0.357 mAP@50, singola run); su WiSARD il costo e l'instabilità della Deformable Attention non sono quindi giustificati rispetto alla soluzione RT-DETR più semplice e deterministica.
+Nessuna variante raggiungeva il riferimento RT-DETR storico (`0.357`, singola
+run). Il confronto aggiornato non deve però usare quel numero come stima
+deterministica: RT-DETR Additive finale ha media `0.3080 ± 0.0677`, mentre FAM
+ha `0.3780 ± 0.0440` su cinque seed. Il percorso CUDA nativo di RT-DETR non è
+pienamente deterministico; la differenza rispetto a Deformable DETR riguarda
+l'architettura, il costo e la distribuzione dei risultati osservati, non
+l'assenza assoluta di non-determinismo.
+
+Non è necessario ripetere questa campagna se Deformable DETR resta una linea
+esplorativa. Per dichiarare invece una superiorità cross-architettura definitiva
+andrebbero riallenate almeno baseline e FAM con testa, checkpoint, split e
+protocollo statistico uniformati a RT-DETR.

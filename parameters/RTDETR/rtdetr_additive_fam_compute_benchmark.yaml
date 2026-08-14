@@ -1,0 +1,57 @@
+# Frozen before running the GPU benchmark.  This measures implementation cost,
+# not detection quality, and cannot be used for checkpoint/model selection.
+
+protocol:
+  id: rtdetr_additive_fam_compute_benchmark_v1
+  frozen_on: "2026-08-12"
+  status: frozen_before_measurement
+
+  training_config: parameters/RTDETR/rtdetr_protocol.yaml
+  checkpoint: latest
+  checkpoint_seed: 43
+  fam_variant: current_dcnv2
+
+  input:
+    batch_size: 1
+    channels: 4
+    height: 640
+    width: 640
+    pixel_mask: all_valid
+    generator_seed: 42
+    source: fixed_synthetic_shape_probe
+
+  execution:
+    device: cuda
+    tensor_dtype: float32
+    autocast: false
+    tf32: false
+    inference_mode: true
+    torch_compile: false
+    cudnn_benchmark: true
+    scope: detector_network_forward_only
+    preprocessing_included: false
+    postprocessing_included: false
+    warmup_iterations: 30
+    measured_iterations_per_trial: 100
+    trials: 3
+    trial_order:
+      - [additive, fam]
+      - [fam, additive]
+      - [additive, fam]
+
+  configurations:
+    additive:
+      project: RTDETR_Protocol
+      expected_use_fam: false
+    fam:
+      project: RTDETR_FAM_Protocol
+      expected_use_fam: true
+
+  complexity:
+    multiply_add_convention: two_flops_per_mac
+    profiler_scope: supported_conv_and_matrix_multiplication_operators
+    add_unprofiled_dcnv2_convolution_equivalent: true
+    include_dcnv2_bilinear_sampling_overhead: false
+    include_elementwise_and_postprocessing_flops: false
+
+  output: out/rtdetr_additive_fam_compute_benchmark.json

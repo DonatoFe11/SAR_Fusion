@@ -1,5 +1,11 @@
 # Evoluzione del Feature Alignment Module (FAM): Da Bug Architetturale a Regolarizzazione Stocastica
 
+> **Stato storico.** I Modelli A–E riportati qui sono singole run della fase di
+> sviluppo. Servono a ricostruire l'origine delle ipotesi, ma non stabiliscono
+> quale configurazione sia migliore. La campagna finale a cinque seed ha
+> selezionato il FAM standard senza SSJ; vedi la sezione conclusiva e
+> [`rtdetr_reproducibility.md`](rtdetr_reproducibility.md).
+
 ## Introduzione
 Durante gli esperimenti con l'architettura RT-DETR per la fusione RGB-IR (dataset `vis_ir`), è emerso un comportamento anomalo. Un'implementazione del Feature Alignment Module (FAM) contenente un "bug" architetturale ha superato ampiamente le prestazioni della sua controparte formalmente corretta, raggiungendo un eccezionale `0.4286` di mAP@50. 
 
@@ -71,8 +77,9 @@ Una lettura qualitativa è che `Dropout2d` rimuova interi canali e quindi anche 
 
 ---
 
-## Fase 5: La Soluzione Teorica (Eager Stochastic Spatial Jitter - SSJ)
-Al fine di superare i limiti implementativi l'architettura finale ha formalizzato un metodo apposito di Regolarizzazione Infrarossa: lo **Stochastic Spatial Jitter (SSJ)**.
+## Fase 5: L'ipotesi Stochastic Spatial Jitter (SSJ)
+Per verificare se una perturbazione geometrica potesse regolarizzare il FAM è
+stato introdotto lo **Stochastic Spatial Jitter (SSJ)**.
 
 **Cos'è lo Spatial Jitter?**
 Il termine *Jitter* indica un "tremolio" o un'instabilità fluttuante. Qui consiste nell'iniettare rumore stocastico negli offset, cioè nelle coordinate di campionamento della `DeformConv2d`. A differenza di `Dropout2d`, non azzera direttamente canali della feature IR; cambia però indirettamente i valori in uscita perché la convoluzione campiona posizioni diverse. Durante il training rende quindi meno affidabile la geometria con cui l'informazione IR arriva alla fusione.
@@ -95,13 +102,46 @@ $$
 
 Per esempio, se il FAM ha appreso uno spostamento di $-3$ celle di feature per correggere una parallasse di $+3$, SSJ espone il modello a campionamenti vicini a $-3$, non al disallineamento originario di $+3$. In inferenza $\varepsilon$ viene rimosso e rimane il solo offset appreso.
 
-In questa maniera viene introdotta un'incertezza **spaziale** e mutevole (wobbling) alle feature IR, senza azzerarne direttamente i canali. L'interpretazione perseguita è che il modello non possa affidarsi in modo rigido a una corrispondenza RGB--IR perfetta durante l'addestramento e sviluppi una fusione più robusta. Il risultato positivo osservato su RT-DETR non rende però SSJ universalmente vantaggioso: nelle esperienze Deformable DETR e DINO ha invece peggiorato mediana e variabilità.
+In questa maniera viene introdotta un'incertezza **spaziale** e mutevole
+(wobbling) alle feature IR, senza azzerarne direttamente i canali.
+L'interpretazione perseguita è che il modello non possa affidarsi in modo
+rigido a una corrispondenza RGB--IR perfetta durante l'addestramento. Il
+vantaggio apparso nella singola run preliminare non si è però ripetuto nella
+media RT-DETR a cinque seed; anche nelle esperienze Deformable DETR e DINO SSJ
+non ha mostrato un beneficio affidabile.
 
-**I Risultati Finali (Modello E)**
+### Risultato preliminare del Modello E
 
-Tra le cinque configurazioni RT-DETR riportate, il Modello E ha ottenuto la migliore mAP@50 di fusione. L'addestramento della configurazione ha generato le seguenti prestazioni:
+Nella singola campagna storica, il Modello E ha ottenuto la migliore mAP@50 di
+fusione fra le cinque run confrontate:
 - **VIS**: `0.2697`
 - **IR**: `0.1818`
 - **VIS_IR**: `0.4381`
 
 Il Modello E supera il Modello A in fusione (`0.4381` vs `0.4286`) e migliora nettamente rispetto alla mAP IR-only del Modello A (`0.1818` vs `0.0054`).
+
+## Rivalutazione finale a cinque seed
+
+La stessa conclusione non si conserva nel protocollo finale. Con seed appaiati
+`40–44`, checkpoint finale a dieci epoche, testa `person` pretrained e Modal
+Dropout soltanto nel training, i risultati VIS+IR sono:
+
+| Configurazione | Media | Mediana | Dev. std. | Min–max |
+|---|---:|---:|---:|---:|
+| FAM standard | 0.3780 | 0.3783 | 0.0440 | 0.3129–0.4335 |
+| FAM + IR Dropout | 0.3871 | 0.3986 | 0.0469 | 0.3234–0.4452 |
+| FAM + SSJ | 0.3749 | 0.3734 | 0.0185 | 0.3528–0.4030 |
+
+SSJ − FAM ha un delta medio appaiato di `−0.0031`, cambia segno tra seed e ha
+un IC 95% pari a `[−0.0488, +0.0427]`. SSJ mostra una deviazione standard
+descrittiva più bassa, ma con cinque run non è possibile concludere che riduca
+la varianza della popolazione; soprattutto, non produce un miglioramento medio
+di accuratezza.
+
+Anche IR Dropout non mostra un guadagno affidabile: la media è leggermente più
+alta, ma il delta appaiato su FAM è `+0.0091`, con segno non consistente.
+
+La configurazione principale della tesi è quindi **FAM standard, senza SSJ e
+senza IR Dropout**. Lazy, Frozen e Spatial Dropout restano passaggi esplorativi
+che hanno motivato controlli più puliti; non vanno presentati come una classifica
+finale né ripetuti soltanto per inseguire i valori delle singole run.

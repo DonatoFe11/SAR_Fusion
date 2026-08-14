@@ -1,12 +1,20 @@
 # DINO Fusion per RGB-IR
 
-Questa nota documenta l'implementazione **DINO completa** in [dino_fusion.py](../sarfusion/models/dino_fusion.py), da usare per i prossimi training. Essa mantiene backbone, FAM opzionale e channel fusion di [Deformable DETR Fusion](deformable_detr_fusion.md), ma sostituisce l'inizializzazione delle query e il decoder con le tre componenti proprie di DINO:
+> **Stato.** Il DINO completo base è stato addestrato su cinque seed dopo la
+> stesura iniziale di questa nota. I risultati sono aggiunti in fondo. Le
+> varianti FAM/SSJ complete non sono state eseguite, perché la base è rimasta
+> nettamente sotto Deformable DETR e RT-DETR. Questa famiglia resta una linea
+> esplorativa e non va confrontata come se usasse il protocollo finale RT-DETR.
+
+Questa nota documenta l'implementazione **DINO completa** in [dino_fusion.py](../sarfusion/models/dino_fusion.py). Essa mantiene backbone, FAM opzionale e channel fusion di [Deformable DETR Fusion](deformable_detr_fusion.md), ma sostituisce l'inizializzazione delle query e il decoder con le tre componenti proprie di DINO:
 
 - **Contrastive DeNoising (CDN)** durante il training;
 - **Mixed Query Selection (MQS)**;
 - **Look-Forward-Twice (LFT)** con box refinement attivo.
 
-I risultati riportati in fondo sono invece **storici**: sono stati prodotti dalla precedente variante CDN-only e non misurano questa nuova implementazione.
+La prima tabella dei risultati in fondo è **storica**: è stata prodotta dalla
+precedente variante CDN-only e non misura questa implementazione. La sezione
+successiva riporta invece il DINO completo base.
 
 ## Base RGB-IR e livelli di feature
 
@@ -118,4 +126,25 @@ Le seguenti run erano etichettate nei report come “DINO (CDN + LFT)”, ma usa
 | CDN legacy + FAM | 0.141 [0.117--0.175] | 0.113 [0.096--0.154] | 0.265 [0.209--0.299] |
 | CDN legacy + FAM + SSJ | 0.149 [0.075--0.193] | 0.071 [0.062--0.132] | 0.243 [0.105--0.277] |
 
-Non si devono confrontare questi valori come ablation di LFT o MQS: entrambe le componenti mancavano o erano inattive. Le prossime run con `DINO_Full_*` costituiranno il primo risultato sperimentale del DINO completo nel progetto.
+Non si devono confrontare questi valori come ablation di LFT o MQS: entrambe le
+componenti mancavano o erano inattive.
+
+## Risultati del DINO completo base
+
+Il modello completo base è stato eseguito su cinque seed. I valori sono mediana
+e intervallo min–max di mAP@50:
+
+| Configurazione | VIS-only | IR-only | VIS+IR |
+|---|---:|---:|---:|
+| DINO completo base | 0.0565 [0.0232–0.1091] | 0.0881 [0.0671–0.1473] | 0.1088 [0.0669–0.1635] |
+
+Anche il massimo VIS+IR (`0.1635`) resta sotto la mediana del Deformable DETR
+base storico (`0.249`) e molto sotto le medie del protocollo finale RT-DETR.
+Per questo non sono state avviate DINO completo + FAM e DINO completo + SSJ.
+La decisione vale per questa configurazione e questo budget; non dimostra che
+DINO sia intrinsecamente inadatto a WiSARD.
+
+Poiché queste run precedono il protocollo finale basato su checkpoint finale e
+validation disaccoppiata, nella tesi vanno riportate come studio negativo
+esplorativo. Non è necessario ripeterle a meno che DINO diventi una delle
+architetture principali della domanda di ricerca.
