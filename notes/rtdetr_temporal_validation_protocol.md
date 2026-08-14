@@ -90,13 +90,23 @@ compared with it:
 7. Keep `best` and `latest` as separate checkpoint directories.
 8. All final evaluation uses `best`; `latest` is diagnostic only.
 
+Validation does not compute RT-DETR loss. In Hugging Face RT-DETR evaluation
+mode, labels are consumed only after logits and boxes have been produced, to
+run bipartite matching and auxiliary loss calculations. Ground truth remains
+available to the evaluator, so skipping this unused loss leaves predictions
+and `map_50` unchanged while reducing checkpoint-selection overhead. The full
+COCO metric collection is computed once at the end of each validation epoch;
+the loop runs under `torch.inference_mode()`.
+
 The code now computes improvement independently from whether `latest` is due to
 be saved. This prevents the earlier `save_final_checkpoint_only` interaction
 from triggering early stopping without a valid best checkpoint. The selected
 best epoch and metric are also written to the W&B summary. To avoid repeated
 full-state writes, `best` is saved whenever it improves, whereas `latest` is
 saved only at the natural final epoch or at the epoch that triggers early
-stopping.
+stopping. Final selection metadata is written through the concrete W&B run and
+reasserted immediately before tracker shutdown, preventing a final-epoch
+improvement from leaving a stale local summary.
 
 ## Protection of the development benchmark
 

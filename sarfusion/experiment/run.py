@@ -38,7 +38,6 @@ from sarfusion.utils.reproducibility import (
 from sarfusion.utils.utils import (
     RunningAverage,
     load_yaml,
-    make_showable,
     write_yaml,
 )
 
@@ -447,13 +446,15 @@ class Run:
 
     def save_training_state(self, epoch, improved=False, save_latest=True):
         if improved:
-            self.tracker.log_training_state(epoch=epoch, subfolder="best")
             self.tracker.add_summary(
                 {
                     "best_epoch": self.best_epoch + 1,
                     f"best_{self.watch_metric}": self.best_metric,
                 }
             )
+            # Queue metadata before the comparatively slow state write, giving
+            # asynchronous trackers time to persist it even on the final epoch.
+            self.tracker.log_training_state(epoch=epoch, subfolder="best")
         if save_latest:
             self.tracker.log_training_state(epoch=epoch, subfolder="latest")
 
@@ -767,6 +768,20 @@ class Run:
     def validate_epoch(self, epoch):
         return self.evaluate(self.val_loader, epoch=epoch, phase="val")
 
+    def _evaluation_model_input(self, batch_dict, phase):
+        compute_validation_loss = (
+            self.train_params or {}
+        ).get("compute_validation_loss", True)
+        if phase != "val" or compute_validation_loss:
+            return batch_dict
+
+        # Ground truth remains in batch_dict for mAP. RT-DETR receives no
+        # labels, so in eval mode it skips Hungarian matching and auxiliary
+        # losses while producing identical logits and boxes.
+        model_input = DataDict(**dict(batch_dict))
+        model_input.labels = None
+        return model_input
+
     def evaluate(self, dataloader, epoch=None, phase="val"):
         self.model.eval()
         self.val_evaluator.reset()
@@ -789,7 +804,8 @@ class Run:
         )
         self.tracker.create_image_sequence("predictions", columns=['epoch'])
         
-        with torch.no_grad():
+        has_loss = False
+        with torch.inference_mode():
             for batch_idx, batch_dict in bar:
                 # if batch_idx == 100:
                 #     break
@@ -807,7 +823,8 @@ class Run:
                     #     logger.info("DEBUG - use_tiling is FALSE - no original_idx/quadrant found")
                     #     logger.info(f"DEBUG - batch_dict keys: {batch_dict.keys() if hasattr(batch_dict, 'keys') else dir(batch_dict)}")
                 
-                result_dict: WrapperModelOutput = self.model(batch_dict)
+                model_input = self._evaluation_model_input(batch_dict, phase)
+                result_dict: WrapperModelOutput = self.model(model_input)
                 
                 if use_tiling:
                     # Modalità con tile aggregation
@@ -823,15 +840,19 @@ class Run:
                     self._update_val_metrics(batch_dict, result_dict, tot_steps)
                     self.log_predictions(batch_idx, batch_dict, result_dict, epoch)
                 
-                loss = result_dict.loss if result_dict.loss is not None else 0
-                loss_value = loss.value if isinstance(result_dict.loss, dict) else result_dict.loss
-                avg_loss.update(loss_value)
+                loss_value = None
+                if result_dict.loss is not None:
+                    loss_value = (
+                        result_dict.loss.value
+                        if isinstance(result_dict.loss, dict)
+                        else result_dict.loss
+                    )
+                    avg_loss.update(loss_value)
+                    has_loss = True
                 if batch_idx % 100 == 0:
-                    metrics_value = self.val_evaluator.compute()
                     bar.set_postfix(
                         {
                             "loss": loss_value,
-                            **make_showable(metrics_value),
                         }
                     )
 
@@ -846,10 +867,10 @@ class Run:
                     epoch
                 )
 
-            metrics_dict = {
-                **self.val_evaluator.compute(),
-                "loss": avg_loss.compute(),
-            }
+            metrics_value = self.val_evaluator.compute()
+            metrics_dict = dict(metrics_value)
+            if has_loss:
+                metrics_dict["loss"] = avg_loss.compute()
             
             print(f"DEBUG: Metrics computed for {phase}: {metrics_dict}")
 
@@ -860,13 +881,13 @@ class Run:
         self.tracker.add_image_sequence("predictions")
         self.accelerator.wait_for_everyone()
 
-        metrics_value = self.val_evaluator.compute()
         for k, v in metrics_value.items():
             if epoch is not None:
                 logger.info(f"{phase} epoch {epoch+1} - {k}: {v}")
             else:
                 logger.info(f"{phase} - {k}: {v}")
-        logger.info(f"{phase} Loss: {avg_loss.compute()}")
+        if has_loss:
+            logger.info(f"{phase} Loss: {avg_loss.compute()}")
         return metrics_dict
     
     def _accumulate_tile_predictions(
@@ -1041,6 +1062,16 @@ class Run:
 
         try:
             if self.tracker is not None:
+                # Reassert final selection metadata immediately before tracker
+                # shutdown. This also covers a best checkpoint selected before
+                # the final epoch.
+                if self.best_epoch is not None:
+                    self.tracker.add_summary(
+                        {
+                            "best_epoch": self.best_epoch + 1,
+                            f"best_{self.watch_metric}": self.best_metric,
+                        }
+                    )
                 self.tracker.end()
         finally:
             # Break the self-referencing lambda before collecting the run.

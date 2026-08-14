@@ -47,6 +47,9 @@ parameters:
   train:
     max_epochs: [10]
     run_validation: [true]
+    # Checkpoint selection uses map_50 only. In eval mode RT-DETR labels affect
+    # only Hungarian/auxiliary loss computation, not logits or boxes.
+    compute_validation_loss: [false]
     val_frequency: [1]
     save_checkpoints: [true]
     # Best is saved on improvement; latest is saved only at the natural or

@@ -10,6 +10,9 @@ from sarfusion.data.temporal_split import (
 )
 from sarfusion.data.wisard import build_wisard_items
 from sarfusion.experiment.run import Run
+from sarfusion.models.wrapper import WrapperModelOutput
+from sarfusion.tracker.wandb_tracker import WandBLogger
+from sarfusion.utils.structures import DataDict
 from sarfusion.utils.utils import load_yaml
 
 
@@ -85,6 +88,7 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         self.assertEqual(train["checkpoint_min_delta"], [0.001])
         self.assertEqual(train["early_stopping_patience"], [5])
         self.assertEqual(train["val_frequency"], [1])
+        self.assertEqual(train["compute_validation_loss"], [False])
         self.assertEqual(train["save_final_checkpoint_only"], [True])
         self.assertEqual(protocol["run_test"], [False])
         self.assertEqual(protocol["test_checkpoint"], ["best"])
@@ -99,6 +103,7 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         self.assertEqual(params["seed"], [40])
         self.assertEqual(params["train"]["max_epochs"], [2])
         self.assertTrue(params["train"]["run_validation"][0])
+        self.assertFalse(params["train"]["compute_validation_loss"][0])
         self.assertFalse(params["run_test"][0])
         self.assertEqual(params["dataloader"]["batch_size"], [4])
         self.assertEqual(params["dataloader"]["evaluation_batch_size"], [12])
@@ -136,6 +141,81 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         run.tracker.add_summary.assert_called_once_with(
             {"best_epoch": 4, "best_map_50": 0.42}
         )
+
+    def test_final_best_metadata_is_reasserted_before_tracker_shutdown(self):
+        run = Run()
+        tracker = Mock()
+        run.tracker = tracker
+        run.accelerator = Mock()
+        run.accelerator.free_memory.return_value = (None,) * 6
+        run.best_epoch = 4
+        run.best_metric = 0.51
+        run.watch_metric = "map_50"
+
+        run.end()
+
+        tracker.add_summary.assert_called_once_with(
+            {"best_epoch": 5, "best_map_50": 0.51}
+        )
+        self.assertLess(
+            [call[0] for call in tracker.method_calls].index("add_summary"),
+            [call[0] for call in tracker.method_calls].index("end"),
+        )
+
+    def test_wandb_summary_updates_the_concrete_run(self):
+        tracker = object.__new__(WandBLogger)
+        tracker.accelerator = Mock(is_local_main_process=True)
+        tracker.experiment = Mock()
+
+        tracker.add_summary({"best_epoch": 2, "best_map_50": 0.83})
+
+        tracker.experiment.summary.update.assert_called_once_with(
+            {"best_epoch": 2, "best_map_50": 0.83}
+        )
+
+    def test_validation_skips_loss_labels_without_removing_metric_targets(self):
+        run = Run()
+        run.train_params = {"compute_validation_loss": False}
+        labels = [{"boxes": "kept-for-metrics"}]
+        batch = DataDict(pixel_values="pixels", labels=labels, pixel_mask="mask")
+        metric_labels = batch.labels
+
+        model_input = run._evaluation_model_input(batch, "val")
+
+        self.assertIsNone(model_input.labels)
+        self.assertIs(batch.labels, metric_labels)
+        self.assertEqual(batch.labels[0].boxes, "kept-for-metrics")
+        self.assertIs(run._evaluation_model_input(batch, "test"), batch)
+
+    def test_loss_free_validation_computes_metrics_once(self):
+        run = Run()
+        run.train_params = {"compute_validation_loss": False}
+        run.model = Mock()
+        model_output = WrapperModelOutput(loss=None)
+        model_output.predictions = []
+        run.model.return_value = model_output
+        run.val_evaluator = Mock()
+        run.val_evaluator.compute.return_value = {"map_50": 0.5}
+        run.accelerator = Mock()
+        run.accelerator.no_sync.return_value = nullcontext()
+        run.tracker = Mock()
+        run.task = "detection"
+        run.val_loader = Mock()
+        run.val_loader.dataset.id2class = {0: "person"}
+        run.denormalize = Mock()
+        batch = DataDict(
+            pixel_values="pixels",
+            labels=[{"boxes": "targets"}],
+            pixel_mask="mask",
+        )
+
+        metrics = run.evaluate([batch], epoch=0, phase="val")
+
+        self.assertEqual(metrics, {"map_50": 0.5})
+        run.val_evaluator.compute.assert_called_once_with()
+        model_input = run.model.call_args.args[0]
+        self.assertIsNone(model_input.labels)
+        self.assertEqual(batch.labels[0].boxes, "targets")
 
     def test_early_stopping_counts_only_qualifying_improvements(self):
         run = Run()
