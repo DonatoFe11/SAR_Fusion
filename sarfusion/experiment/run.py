@@ -841,11 +841,12 @@ class Run:
                     self.log_predictions(batch_idx, batch_dict, result_dict, epoch)
                 
                 loss_value = None
-                if result_dict.loss is not None:
+                result_loss = getattr(result_dict, "loss", None)
+                if result_loss is not None:
                     loss_value = (
-                        result_dict.loss.value
-                        if isinstance(result_dict.loss, dict)
-                        else result_dict.loss
+                        result_loss.value
+                        if isinstance(result_loss, dict)
+                        else result_loss
                     )
                     avg_loss.update(loss_value)
                     has_loss = True

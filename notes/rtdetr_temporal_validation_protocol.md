@@ -62,6 +62,13 @@ was separated into a two-epoch smoke run and a scientific campaign capped at
 the historical budget of ten epochs. This procedural correction was motivated
 only by runtime and launch scope; the frozen data split was not changed.
 
+The first attempted scientific seed-40 run (`x4qnrpw2`) is also excluded. It
+completed training epoch 1 but failed on the first validation batch because an
+optional loss-free Hugging Face output was accessed as if it always exposed a
+`loss` attribute. It produced no validation metric and no `best` or `latest`
+checkpoint. The guard was corrected and covered by a regression test before
+restarting seed 40 from scratch.
+
 ### Leakage controls
 
 - MtErie never appears in train or validation.

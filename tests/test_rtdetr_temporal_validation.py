@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
@@ -10,7 +11,6 @@ from sarfusion.data.temporal_split import (
 )
 from sarfusion.data.wisard import build_wisard_items
 from sarfusion.experiment.run import Run
-from sarfusion.models.wrapper import WrapperModelOutput
 from sarfusion.tracker.wandb_tracker import WandBLogger
 from sarfusion.utils.structures import DataDict
 from sarfusion.utils.utils import load_yaml
@@ -191,8 +191,9 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         run = Run()
         run.train_params = {"compute_validation_loss": False}
         run.model = Mock()
-        model_output = WrapperModelOutput(loss=None)
-        model_output.predictions = []
+        # Hugging Face ModelOutput omits optional keys entirely when their
+        # value is None, so this deliberately has no `loss` attribute.
+        model_output = SimpleNamespace(predictions=[], logits="logits")
         run.model.return_value = model_output
         run.val_evaluator = Mock()
         run.val_evaluator.compute.return_value = {"map_50": 0.5}
