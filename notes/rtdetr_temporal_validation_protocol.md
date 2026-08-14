@@ -1,8 +1,13 @@
 # RT-DETR train-derived temporal validation protocol
 
-Date frozen: 2026-08-14  
-Split ID: `rtdetr_train_temporal_validation_v1`  
-Baseline project: `RTDETR_FAM_TemporalVal_Protocol`
+Split frozen: 2026-08-14, before training
+
+Protocol finalized: 2026-08-14, before any run was accepted or scored
+
+Split ID: `rtdetr_train_temporal_validation_v1`
+Campaign project: `RTDETR_FAM_TemporalVal_Protocol`
+
+Technical smoke project: `RTDETR_FAM_TemporalVal_Smoke`
 
 ## Purpose
 
@@ -50,6 +55,13 @@ local source inventory causes loading to fail rather than silently changing the
 split. No model prediction or validation metric was inspected before freezing
 these ranges; only annotation and inventory statistics were used.
 
+An initial command accidentally launched the complete five-seed grid with a
+20-epoch cap. Those processes were manually stopped and are excluded from all
+analysis. Before inspecting or accepting any validation result, the protocol
+was separated into a two-epoch smoke run and a scientific campaign capped at
+the historical budget of ten epochs. This procedural correction was motivated
+only by runtime and launch scope; the frozen data split was not changed.
+
 ### Leakage controls
 
 - MtErie never appears in train or validation.
@@ -66,7 +78,7 @@ these ranges; only annotation and inventory statistics were used.
 The following rule applies unchanged to the new FAM baseline and to every model
 compared with it:
 
-1. Train for at most 20 epochs.
+1. Train for at most 10 epochs, matching the historical RT-DETR budget.
 2. Evaluate the full 804-frame temporal validation set after every epoch.
 3. Use validation `map_50` as the sole checkpoint-selection metric.
 4. Save a new `best` only when `map_50` is strictly more than `0.001` above the
@@ -81,7 +93,10 @@ compared with it:
 The code now computes improvement independently from whether `latest` is due to
 be saved. This prevents the earlier `save_final_checkpoint_only` interaction
 from triggering early stopping without a valid best checkpoint. The selected
-best epoch and metric are also written to the W&B summary.
+best epoch and metric are also written to the W&B summary. To avoid repeated
+full-state writes, `best` is saved whenever it improves, whereas `latest` is
+saved only at the natural final epoch or at the epoch that triggers early
+stopping.
 
 ## Protection of the development benchmark
 
@@ -99,9 +114,26 @@ cross-site generalization.
 ## Comparability with the previous campaign
 
 The old five-seed FAM results remain the estimate for the historical protocol:
-ten fixed epochs and `latest`. The new campaign changes both the effective
-training set and checkpoint rule, so a new architecture may only be compared
-against the newly trained FAM baseline.
+ten fixed epochs and `latest`. The model architecture itself is unchanged:
+both use `fusion_rtdetr`, FAM `current_dcnv2`, 640-pixel preprocessing, AdamW
+with learning rate `2e-5`, training batch size 4 and the same modal-dropout
+probabilities. The new protocol changes the data available to optimization and
+the checkpoint rule:
+
+| Component | Historical RT-DETR + FAM | New temporal-validation baseline |
+|---|---|---|
+| Optimization frames | all 4,019 paired train frames | 3,125 temporal-head frames |
+| Validation | disabled | 804 frozen temporal-tail frames every epoch |
+| Temporal embargo | none | 90 frames excluded |
+| Maximum epochs | 10 | 10 |
+| Selected checkpoint | `latest` | validation `map_50` `best` |
+| Early stopping | disabled | patience 5, minimum delta 0.001 |
+| MtErie during training run | evaluated after training | disabled |
+
+Consequently, the historical mean `0.3780` and the result of the new baseline
+are not a controlled before/after comparison: the new run optimizes on fewer
+frames and selects a checkpoint with a new signal. A new architecture may only
+be compared against the newly trained FAM baseline.
 
 A useful diagnostic, after the new FAM runs are complete, is to report both
 `best` and `latest` for those same runs. This quantifies the effect of checkpoint
@@ -111,30 +143,43 @@ campaigns directly exchangeable.
 ## Execution order
 
 1. Commit this frozen split and checkpoint rule.
-2. Run one technical FAM pilot, seed 40, to verify a complete train/validation
-   cycle, checkpoint restoration and early stopping metadata. Do not modify the
-   split or rule in response to its score; only implementation failures may be
-   fixed.
-3. If the pilot is technically valid, resume seeds 41--44 unchanged.
+2. Run the separate two-epoch technical smoke configuration. It verifies real
+   train/validation execution, distinct `best`/`latest` writes and W&B metadata.
+   Its metric is discarded and the run is never included in campaign tables.
+   Early-stopping decision logic is covered by the regression test; a two-epoch
+   run is not expected to exhaust patience 5.
+3. If the smoke is technically valid, launch the complete frozen campaign:
+   five fresh runs for seeds 40--44. All five, including a newly trained seed
+   40, belong to the scientific campaign.
 4. Aggregate validation curves, selected epochs and run durations.
 5. Freeze the candidate architecture set.
 6. Train candidates with the same split, seed set, maximum epochs, patience,
    minimum delta and checkpoint selector.
 7. Only then run the predefined MtErie and paired-modality final evaluations.
 
-To launch only the technical pilot from the repository root:
+To launch the non-scientific technical smoke from the repository root:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 python main.py experiment \
-  --parameters parameters/RTDETR/rtdetr_fam_temporal_validation_protocol.yaml \
-  --start-from-run 0 \
-  --max-runs 1
+  --parameters parameters/RTDETR/rtdetr_fam_temporal_validation_smoke.yaml
 ```
 
-The command above executes seed 40 only. After the pilot is accepted as
-technically valid, launch the remaining frozen seeds with `--start-from-run 1`
-and no `--max-runs` override.
+The command above executes seed 40 for two epochs but does not count it as seed
+40 of the campaign. After checking that both checkpoint directories and the
+summary metadata exist, launch the complete five-seed campaign from scratch:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_temporal_validation_protocol.yaml
+```
+
+The campaign uses evaluation batch size 12 while preserving training batch
+size 4. This only groups more validation samples into each forward pass; it
+does not change model optimization or the computed metrics. If batch 12 causes
+an out-of-memory error on the 8 GB GPU during the smoke, reduce only
+`evaluation_batch_size` before freezing and launching the campaign.
 
 ## Thesis changes to apply later
 
@@ -158,6 +203,8 @@ revision:
 - Split manifest: `parameters/RTDETR/rtdetr_temporal_validation_split.json`
 - Baseline configuration:
   `parameters/RTDETR/rtdetr_fam_temporal_validation_protocol.yaml`
+- Technical smoke configuration:
+  `parameters/RTDETR/rtdetr_fam_temporal_validation_smoke.yaml`
 - Split implementation: `sarfusion/data/temporal_split.py`
 - Loader integration: `sarfusion/data/__init__.py`
 - Checkpoint implementation: `sarfusion/experiment/run.py`

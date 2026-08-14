@@ -112,6 +112,18 @@ def get_dataloaders(
     seed=None,
 ):
     dataset_params = dataset_params.copy()
+    dataloader_params = dataloader_params.copy()
+
+    # Training and evaluation have different memory profiles: validation and
+    # test do not retain gradients, so they can normally use a larger batch.
+    # Keep the historical behaviour when no dedicated size is configured.
+    evaluation_batch_size = dataloader_params.pop(
+        "evaluation_batch_size", dataloader_params["batch_size"]
+    )
+    evaluation_dataloader_params = {
+        **dataloader_params,
+        "batch_size": evaluation_batch_size,
+    }
 
     transforms, denormalize = build_preprocessor(dataset_params)
 
@@ -175,7 +187,7 @@ def get_dataloaders(
         collate_fn=get_collate_fn(val_set),
         worker_init_fn=seed_worker,
         generator=generator_val,
-        **dataloader_params,
+        **evaluation_dataloader_params,
     )
     test_dataset_params.pop("temporal_split_phase", None)
     test_dataset_params.pop("temporal_split_inventory", None)
@@ -189,7 +201,7 @@ def get_dataloaders(
         collate_fn=get_collate_fn(test_set),
         worker_init_fn=seed_worker,
         generator=generator_test,
-        **dataloader_params,
+        **evaluation_dataloader_params,
     )
     if return_datasets:
         return (

@@ -27,6 +27,12 @@ PROTOCOL_PATH = (
     / "RTDETR"
     / "rtdetr_fam_temporal_validation_protocol.yaml"
 )
+SMOKE_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_temporal_validation_smoke.yaml"
+)
 
 
 class TestRTDETRTemporalValidation(unittest.TestCase):
@@ -74,14 +80,28 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
     def test_protocol_freezes_checkpoint_and_early_stopping_rule(self):
         protocol = load_yaml(PROTOCOL_PATH)["parameters"]
         train = protocol["train"]
-        self.assertEqual(train["max_epochs"], [20])
+        self.assertEqual(train["max_epochs"], [10])
         self.assertEqual(train["watch_metric"], ["map_50"])
         self.assertEqual(train["checkpoint_min_delta"], [0.001])
         self.assertEqual(train["early_stopping_patience"], [5])
         self.assertEqual(train["val_frequency"], [1])
+        self.assertEqual(train["save_final_checkpoint_only"], [True])
         self.assertEqual(protocol["run_test"], [False])
         self.assertEqual(protocol["test_checkpoint"], ["best"])
         self.assertEqual(protocol["seed"], [40, 41, 42, 43, 44])
+        self.assertEqual(protocol["dataloader"]["batch_size"], [4])
+        self.assertEqual(protocol["dataloader"]["evaluation_batch_size"], [12])
+
+    def test_smoke_is_one_seed_two_epochs_and_not_a_campaign_run(self):
+        smoke = load_yaml(SMOKE_PATH)
+        params = smoke["parameters"]
+        self.assertEqual(smoke["experiment"]["name"], "RTDETR_FAM_TemporalVal_Smoke")
+        self.assertEqual(params["seed"], [40])
+        self.assertEqual(params["train"]["max_epochs"], [2])
+        self.assertTrue(params["train"]["run_validation"][0])
+        self.assertFalse(params["run_test"][0])
+        self.assertEqual(params["dataloader"]["batch_size"], [4])
+        self.assertEqual(params["dataloader"]["evaluation_batch_size"], [12])
 
     def test_checkpoint_min_delta_keeps_earliest_near_tie(self):
         run = Run()
@@ -124,7 +144,7 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
             "run_validation": True,
             "val_frequency": 1,
             "save_checkpoints": True,
-            "save_final_checkpoint_only": False,
+            "save_final_checkpoint_only": True,
             "early_stopping_patience": 2,
             "checkpoint_min_delta": 0.001,
         }
@@ -154,6 +174,11 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         self.assertEqual(run.validate_epoch.call_count, 3)
         self.assertEqual(run.best_epoch, 0)
         self.assertAlmostEqual(run.best_metric, 0.3)
+        saved_subfolders = [
+            call.kwargs["subfolder"]
+            for call in run.tracker.log_training_state.call_args_list
+        ]
+        self.assertEqual(saved_subfolders, ["best", "latest"])
         run.end.assert_called_once()
 
 

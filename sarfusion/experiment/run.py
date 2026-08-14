@@ -372,17 +372,8 @@ class Run:
                             metrics = self.validate_epoch(epoch)
                             self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
                     improved = self._update_best_metric(epoch, metrics)
-                    save_final_only = self.train_params.get(
-                        "save_final_checkpoint_only", False
-                    )
-                    is_final_epoch = epoch == self.train_params["max_epochs"] - 1
-                    if self.train_params.get("save_checkpoints", True):
-                        self.save_training_state(
-                            epoch,
-                            improved=improved,
-                            save_latest=not save_final_only or is_final_epoch,
-                        )
 
+                    should_stop = False
                     if patience is not None and metrics is not None:
                         if improved:
                             epochs_without_improvement = 0
@@ -391,10 +382,25 @@ class Run:
                             logger.info(
                                 f"No improvement for {epochs_without_improvement}/{patience} epochs"
                             )
-                        if epochs_without_improvement >= patience:
-                            logger.info(
-                                f"Early stopping triggered after {epoch + 1} epochs")
-                            break
+                        should_stop = epochs_without_improvement >= patience
+
+                    save_final_only = self.train_params.get(
+                        "save_final_checkpoint_only", False
+                    )
+                    is_final_epoch = epoch == self.train_params["max_epochs"] - 1
+                    if self.train_params.get("save_checkpoints", True):
+                        self.save_training_state(
+                            epoch,
+                            improved=improved,
+                            save_latest=(
+                                not save_final_only or is_final_epoch or should_stop
+                            ),
+                        )
+
+                    if should_stop:
+                        logger.info(
+                            f"Early stopping triggered after {epoch + 1} epochs")
+                        break
         else:
             logger.info("No training params, no training")
 

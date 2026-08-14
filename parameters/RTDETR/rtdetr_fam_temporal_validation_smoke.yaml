@@ -1,31 +1,20 @@
-# Final baseline protocol for the train-derived temporal validation campaign.
-# Finalized: 2026-08-14, after an accidental full-grid launch was aborted and
-# before any run was accepted or any validation score was used. The reduction
-# from 20 to 10 maximum epochs was based only on runtime and historical budget.
+# Technical smoke test for the train-derived temporal validation protocol.
 #
-# Checkpoint rule:
-# - validate every epoch on the frozen temporal VIS+IR validation set;
-# - primary metric: validation mAP@50 (`map_50`);
-# - replace best only for an improvement strictly greater than 0.001;
-# - values within 0.001 keep the earlier checkpoint;
-# - stop after 5 consecutive validation epochs without such an improvement;
-# - maximum 10 epochs, matching the historical RT-DETR campaign budget;
-# - preserve both best and latest; final test selection is always best.
-#
-# `run_test` is deliberately false. MtErie must not be inspected while choosing
-# architectures. Final tests are launched separately after candidates are frozen.
+# This run is deliberately NOT part of the scientific five-seed campaign. It
+# verifies one complete train/validation cycle, best/latest checkpoint writes
+# and W&B metadata before the frozen campaign configuration is launched.
 
 experiment:
-  name: RTDETR_FAM_TemporalVal_Protocol
-  group: RTDETR_temporal_validation_v1
-  continue_with_errors: true
+  name: RTDETR_FAM_TemporalVal_Smoke
+  group: RTDETR_temporal_validation_smoke
+  continue_with_errors: false
   start_from_grid: 0
   start_from_run: 0
   search: grid
   isolate_runs: true
 
 parameters:
-  seed: [40, 41, 42, 43, 44]
+  seed: [40]
   repetition: [0]
   task: [detection]
   run_test: [false]
@@ -42,15 +31,13 @@ parameters:
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[RTDETR, FAM, TemporalValidation, BestCheckpoint, Baseline]]
+    tags: [[RTDETR, FAM, TemporalValidation, SmokeTest]]
 
   train:
-    max_epochs: [10]
+    max_epochs: [2]
     run_validation: [true]
     val_frequency: [1]
     save_checkpoints: [true]
-    # Best is saved on improvement; latest is saved only at the natural or
-    # early-stopped end, avoiding a duplicate full state write every epoch.
     save_final_checkpoint_only: [true]
     early_stopping_patience: [5]
     checkpoint_min_delta: [0.001]
