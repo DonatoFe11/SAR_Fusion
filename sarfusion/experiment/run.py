@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import time
+import math
 from copy import deepcopy
 from safetensors import safe_open
 from collections import defaultdict
@@ -70,6 +71,7 @@ class Run:
         self.scheduler = None
         self.criterion = None
         self.best_metric = None
+        self.best_epoch = None
         self.scheduler_step_moment = None
         self.watch_metric = None
         self.train_evaluator: Evaluator = None
@@ -194,6 +196,17 @@ class Run:
         self.criterion = build_loss(self.params["loss"], model=self.model)
         self.watch_metric = self.train_params["watch_metric"]
         self.greater_is_better = self.train_params.get("greater_is_better", True)
+        checkpoint_min_delta = float(
+            self.train_params.get("checkpoint_min_delta", 0.0)
+        )
+        if checkpoint_min_delta < 0:
+            raise ValueError("checkpoint_min_delta must be non-negative")
+        patience = self.train_params.get("early_stopping_patience")
+        if patience is not None:
+            if int(patience) < 1:
+                raise ValueError("early_stopping_patience must be positive")
+            if not self.train_params.get("run_validation", True):
+                raise ValueError("Early stopping requires run_validation=true")
         logger.info("Creating optimizer")
         
         backbone_lr = self.train_params.get("backbone_lr", self.train_params["initial_lr"])
@@ -358,16 +371,17 @@ class Run:
                             logger.info(f"Running Model Validation")
                             metrics = self.validate_epoch(epoch)
                             self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                    improved = False
+                    improved = self._update_best_metric(epoch, metrics)
                     save_final_only = self.train_params.get(
                         "save_final_checkpoint_only", False
                     )
                     is_final_epoch = epoch == self.train_params["max_epochs"] - 1
-                    if (
-                        self.train_params.get("save_checkpoints", True)
-                        and (not save_final_only or is_final_epoch)
-                    ):
-                        improved = self.save_training_state(epoch, metrics)
+                    if self.train_params.get("save_checkpoints", True):
+                        self.save_training_state(
+                            epoch,
+                            improved=improved,
+                            save_latest=not save_final_only or is_final_epoch,
+                        )
 
                     if patience is not None and metrics is not None:
                         if improved:
@@ -389,24 +403,53 @@ class Run:
         self.end()
 
     def _metric_is_better(self, metric):
+        metric = float(metric)
+        if not math.isfinite(metric):
+            raise ValueError(
+                f"Checkpoint metric {self.watch_metric!r} must be finite, got {metric}"
+            )
         if self.best_metric is None:
             return True
+        min_delta = float(self.train_params.get("checkpoint_min_delta", 0.0))
         if self.greater_is_better:
-            return metric > self.best_metric
-        return metric < self.best_metric
+            return metric > self.best_metric + min_delta
+        return metric < self.best_metric - min_delta
 
-    def save_training_state(self, epoch, metrics=None):
-        improved = False
-        if metrics:
-            if self._metric_is_better(metrics[self.watch_metric]):
-                logger.info(
-                    f"Saving best model with metric {metrics[self.watch_metric]} as given that metric is greater than {self.best_metric}"
-                )
-                self.best_metric = metrics[self.watch_metric]
-                self.tracker.log_training_state(epoch=epoch, subfolder="best")
-                improved = True
-        self.tracker.log_training_state(epoch=epoch, subfolder="latest")
-        return improved
+    def _update_best_metric(self, epoch, metrics=None):
+        if metrics is None:
+            return False
+        if self.watch_metric not in metrics:
+            raise KeyError(
+                f"watch_metric={self.watch_metric!r} is absent from validation "
+                f"metrics {sorted(metrics)}"
+            )
+        metric = float(metrics[self.watch_metric])
+        if not self._metric_is_better(metric):
+            return False
+        previous = self.best_metric
+        self.best_metric = metric
+        self.best_epoch = int(epoch)
+        logger.info(
+            "New best checkpoint at epoch %s: %s=%s (previous=%s, min_delta=%s)",
+            epoch + 1,
+            self.watch_metric,
+            metric,
+            previous,
+            float(self.train_params.get("checkpoint_min_delta", 0.0)),
+        )
+        return True
+
+    def save_training_state(self, epoch, improved=False, save_latest=True):
+        if improved:
+            self.tracker.log_training_state(epoch=epoch, subfolder="best")
+            self.tracker.add_summary(
+                {
+                    "best_epoch": self.best_epoch + 1,
+                    f"best_{self.watch_metric}": self.best_metric,
+                }
+            )
+        if save_latest:
+            self.tracker.log_training_state(epoch=epoch, subfolder="latest")
 
     def _get_lr(self):
         if self.scheduler is None:

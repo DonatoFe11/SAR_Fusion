@@ -14,6 +14,11 @@ from sarfusion.data.wisard import (
     TEST_FOLDERS,
     get_wisard_folders,
 )
+from sarfusion.data.temporal_split import (
+    load_temporal_split_manifest,
+    manifest_folder_pairs,
+    select_temporal_split_items,
+)
 
 
 DATASET_REGISTRY = {"sard_pose": PoseClassificationDataset, "wisard": WiSARDDataset}
@@ -46,12 +51,24 @@ def get_train_val_test_params(name, dataset_params):
             "root": os.path.join(dataset_params["root"], "test"),
         }
     elif name == "wisard":
-        train_folders = dataset_params.get("train_folders", dataset_params["folders"])
-        train_folders = get_wisard_phase_folders(train_folders, "train")
+        temporal_manifest_path = dataset_params.get("temporal_split_manifest")
+        temporal_inventory = None
+        if temporal_manifest_path:
+            temporal_manifest, temporal_inventory = load_temporal_split_manifest(
+                temporal_manifest_path,
+                dataset_params["root"],
+                verify=True,
+            )
+            train_folders = manifest_folder_pairs(temporal_manifest)
+            val_folders = list(train_folders)
+        else:
+            train_folders = dataset_params.get(
+                "train_folders", dataset_params["folders"]
+            )
+            train_folders = get_wisard_phase_folders(train_folders, "train")
+            val_folders = dataset_params.get("val_folders", dataset_params["folders"])
+            val_folders = get_wisard_phase_folders(val_folders, "val")
         print(f"Using as train folders: \n {train_folders}")
-
-        val_folders = dataset_params.get("val_folders", dataset_params["folders"])
-        val_folders = get_wisard_phase_folders(val_folders, "val")
         print(f"Using as val folders: \n {val_folders}")
 
         test_folders = dataset_params.get("test_folders", dataset_params["folders"])
@@ -61,6 +78,8 @@ def get_train_val_test_params(name, dataset_params):
         train_dataset_params = {
             **dataset_params,
             "folders": train_folders,
+            "temporal_split_phase": "train" if temporal_inventory else None,
+            "temporal_split_inventory": temporal_inventory,
         }
         # Modal dropout is a training augmentation. Validation and test must
         # always evaluate the complete modality input selected by their
@@ -70,12 +89,16 @@ def get_train_val_test_params(name, dataset_params):
             **dataset_params,
             "folders": val_folders,
             "modal_dropout": False,
+            "temporal_split_phase": "val" if temporal_inventory else None,
+            "temporal_split_inventory": temporal_inventory,
         }
         test_dataset_params = {
             **dataset_params,
             "folders": test_folders,
             "modal_dropout": False,
             "test_all_tiles": True if dataset_params.get("use_tiling", False) else False,
+            "temporal_split_phase": None,
+            "temporal_split_inventory": None,
         }
     else:
         raise ValueError(f"Unknown dataset name: {name}")
@@ -102,10 +125,22 @@ def get_dataloaders(
     val_dataset_params.pop("preprocessor", None)
     test_dataset_params.pop("preprocessor", None)
 
+    train_temporal_phase = train_dataset_params.pop("temporal_split_phase", None)
+    train_temporal_inventory = train_dataset_params.pop(
+        "temporal_split_inventory", None
+    )
+    train_dataset_params.pop("temporal_split_manifest", None)
     train_set = dataclass(
         transform=transforms,
         **train_dataset_params,
     )
+    if train_temporal_phase:
+        train_set.items = select_temporal_split_items(
+            train_set.items,
+            train_dataset_params["root"],
+            train_temporal_inventory,
+            train_temporal_phase,
+        )
     # Keep sampler/worker RNGs separate from the model RNG.  Using the
     # experiment seed explicitly also makes the data stream independent of
     # random numbers consumed while constructing other objects.
@@ -121,10 +156,20 @@ def get_dataloaders(
         generator=generator_train,
         **dataloader_params,
     )
+    val_temporal_phase = val_dataset_params.pop("temporal_split_phase", None)
+    val_temporal_inventory = val_dataset_params.pop("temporal_split_inventory", None)
+    val_dataset_params.pop("temporal_split_manifest", None)
     val_set = dataclass(
         transform=transforms,
         **val_dataset_params,
     )
+    if val_temporal_phase:
+        val_set.items = select_temporal_split_items(
+            val_set.items,
+            val_dataset_params["root"],
+            val_temporal_inventory,
+            val_temporal_phase,
+        )
     val_loader = torch.utils.data.DataLoader(
         val_set,
         collate_fn=get_collate_fn(val_set),
@@ -132,6 +177,9 @@ def get_dataloaders(
         generator=generator_val,
         **dataloader_params,
     )
+    test_dataset_params.pop("temporal_split_phase", None)
+    test_dataset_params.pop("temporal_split_inventory", None)
+    test_dataset_params.pop("temporal_split_manifest", None)
     test_set = dataclass(
         transform=transforms,
         **test_dataset_params,

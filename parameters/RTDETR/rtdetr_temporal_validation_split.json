@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "id": "rtdetr_train_temporal_validation_v1",
+  "status": "frozen_before_training",
+  "frozen_on": "2026-08-14",
+  "purpose": "train_derived_temporal_checkpoint_selection",
+  "pairing": "existing_wisard_sorted_zip",
+  "ground_truth": "vis",
+  "selection_rule": {
+    "validation_tail_fraction": 0.2,
+    "rounding": "explicit_frozen_ranges",
+    "embargo_frames_per_sequence": 30,
+    "model_predictions_inspected_before_freeze": false
+  },
+  "sequences": [
+    {
+      "id": "fhl_0401_0402",
+      "vis_folder": "210924_FHL_Enterprise_VIS_0401",
+      "ir_folder": "210924_FHL_Enterprise_IR_0402",
+      "expected_frames": 896,
+      "expected_stream_counts": {
+        "vis_images": 897,
+        "vis_labels": 897,
+        "ir_images": 896,
+        "ir_labels": 896
+      },
+      "ranges": {
+        "train": [0, 687],
+        "embargo": [687, 717],
+        "val": [717, 896]
+      }
+    },
+    {
+      "id": "fhl_0405_0406",
+      "vis_folder": "210924_FHL_Enterprise_VIS_0405",
+      "ir_folder": "210924_FHL_Enterprise_IR_0406",
+      "expected_frames": 943,
+      "expected_stream_counts": {
+        "vis_images": 945,
+        "vis_labels": 945,
+        "ir_images": 943,
+        "ir_labels": 943
+      },
+      "ranges": {
+        "train": [0, 724],
+        "embargo": [724, 754],
+        "val": [754, 943]
+      }
+    },
+    {
+      "id": "baker_1",
+      "vis_folder": "220109_Baker_Enterprise_VIS_1",
+      "ir_folder": "220109_Baker_Enterprise_IR_1",
+      "expected_frames": 2180,
+      "expected_stream_counts": {
+        "vis_images": 2180,
+        "vis_labels": 2180,
+        "ir_images": 2180,
+        "ir_labels": 2180
+      },
+      "ranges": {
+        "train": [0, 1714],
+        "embargo": [1714, 1744],
+        "val": [1744, 2180]
+      }
+    }
+  ],
+  "expected": {
+    "n_source_frames": 4019,
+    "source_inventory_sha256": "5f684ff047c2fd41e5e6440daa4e5ca61a89b34d907f6f156638bb7f740ca8eb",
+    "phases": {
+      "train": {
+        "n_frames": 3125,
+        "n_vis_boxes": 7851,
+        "n_vis_empty_frames": 508,
+        "inventory_sha256": "935ec9006004d97c7ed2b8a6efa4f05fcaafe1c3392aed9472644f8357b09db1",
+        "median_normalized_box_area": 0.0016059483219999999
+      },
+      "embargo": {
+        "n_frames": 90,
+        "n_vis_boxes": 258,
+        "n_vis_empty_frames": 30,
+        "inventory_sha256": "524441fe7e1323b3a7fe80b8a7076f49294ebd055045926ceee80d41d5387edf",
+        "median_normalized_box_area": 0.00023147407400000002
+      },
+      "val": {
+        "n_frames": 804,
+        "n_vis_boxes": 1799,
+        "n_vis_empty_frames": 178,
+        "inventory_sha256": "e28341a416df4caf55d7e96741929eda8e72146c69482d545ca900ca89019cc0",
+        "median_normalized_box_area": 0.003629414892
+      }
+    },
+    "sequences": [
+      {
+        "id": "fhl_0401_0402",
+        "n_frames": 896,
+        "stream_counts": {
+          "vis_images": 897,
+          "vis_labels": 897,
+          "ir_images": 896,
+          "ir_labels": 896
+        },
+        "unpaired_vis_tail_frames": 1,
+        "unpaired_ir_tail_frames": 0,
+        "inventory_sha256": "15e97752c40b8a5a765b06b60588b3206e1556c567ba0a0e32941859b9cd1de8"
+      },
+      {
+        "id": "fhl_0405_0406",
+        "n_frames": 943,
+        "stream_counts": {
+          "vis_images": 945,
+          "vis_labels": 945,
+          "ir_images": 943,
+          "ir_labels": 943
+        },
+        "unpaired_vis_tail_frames": 2,
+        "unpaired_ir_tail_frames": 0,
+        "inventory_sha256": "24072ad02c61e698613c70b8ae3c7a0ceff25828a287909ceaee78478c6aa5d6"
+      },
+      {
+        "id": "baker_1",
+        "n_frames": 2180,
+        "stream_counts": {
+          "vis_images": 2180,
+          "vis_labels": 2180,
+          "ir_images": 2180,
+          "ir_labels": 2180
+        },
+        "unpaired_vis_tail_frames": 0,
+        "unpaired_ir_tail_frames": 0,
+        "inventory_sha256": "5a8cd68b8e9b6b6a6d514bdcfae50fdb2be4931265aa09ebc0de7e02b5f79117"
+      }
+    ]
+  }
+}
