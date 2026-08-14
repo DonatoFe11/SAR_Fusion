@@ -299,7 +299,10 @@ def get_wisard_folders(folders):
         folders = VIS_ONLY
     elif folders == "ir_only":
         folders = IR_ONLY
-    return folders
+    # YAML has no tuple type, so explicit paired-folder overrides arrive as
+    # two-element lists. Normalize them to the tuple representation used by
+    # VIS_IR and by build_wisard_items.
+    return [tuple(folder) if isinstance(folder, list) else folder for folder in folders]
 
 
 def build_wisard_items(root, folders):

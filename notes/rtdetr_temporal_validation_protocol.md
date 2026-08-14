@@ -1,4 +1,9 @@
-# RT-DETR train-derived temporal validation protocol
+# RT-DETR train-derived temporal validation pilot (retired)
+
+> **Status: retired after the seed-40 pilot. Do not launch seeds 41--44.**
+> The definitive replacement always trains for ten epochs and selects `best`
+> on a completely held-out video. See
+> `notes/rtdetr_sequence_validation_fixed10_protocol.md`.
 
 Split frozen: 2026-08-14, before training
 
@@ -128,6 +133,85 @@ Baker. It is appropriate for checkpoint selection and controlled model
 comparison, but its absolute score must not be presented as evidence of
 cross-site generalization.
 
+## Seed-40 sanity check before continuing the campaign
+
+The first successful scientific run is seed 40 (`4wkvp82g`). It completed all
+ten epochs. The final epoch obtained validation `map_50 = 0.8046`; the fixed
+rule correctly retained epoch 8 as `best`, with `map_50 = 0.8167`. The `best`
+and `latest` model files have different SHA-256 digests, confirming that the
+diagnostic evaluation must explicitly load `best` rather than the final state.
+
+The unusually high validation score triggered a pause before seeds 41--44.
+The following checks did not find a direct implementation or inventory leak:
+
+- the frozen manifest still resolves to 3,125 train, 90 embargo and 804
+  validation frames;
+- train and validation path inventories are disjoint;
+- hashing all 4,019 source VIS images found 4,019 distinct contents and no
+  byte-identical image shared by train and validation;
+- validation ground truth remains available to `MeanAveragePrecision` when
+  RT-DETR labels are omitted only from the model forward pass;
+- the checkpoint metadata identifies epoch 8 and the local resolver selects
+  `wandb/run-20260814_171716-4wkvp82g/files/best/model.safetensors`.
+
+The absolute value is nevertheless not surprising enough to be accepted as a
+generalization result. The validation set contains later frames from the same
+acquisition sequences used for optimization and is strongly imbalanced:
+
+| Validation sequence | Frames | VIS boxes | Empty frames | Median normalized box area |
+|---|---:|---:|---:|---:|
+| FHL 0401/0402 | 179 | 329 | 80 | 0.000217 |
+| FHL 0405/0406 | 189 | 134 | 84 | 0.000238 |
+| Baker 1 | 436 | 1,336 | 14 | 0.006836 |
+
+Baker supplies 54.2% of validation frames and 74.3% of its annotated persons;
+its median person area is roughly 29 times that of the two FHL tails. The
+aggregate `map_50` can therefore be dominated by large, temporally familiar
+Baker targets while hiding weaker tiny-person performance. Per-sequence AP is
+still desirable as a later diagnostic, but it must not replace the frozen
+aggregate checkpoint selector after observing seed 40.
+
+Before continuing the remaining seeds, one one-off evaluation is defined on
+the 708 paired MtErie frames. It loads the frozen seed-40 `best` checkpoint and
+runs no training. Because MtErie was already consulted in earlier campaigns,
+this is explicitly an internal diagnostic, not a fresh blind test; its result
+will be recorded but will not be used to alter the temporal split or selection
+rule. Test loss is skipped because it does not affect RT-DETR predictions or
+mAP, avoiding Hungarian matching and auxiliary-loss computation during this
+inference-only run.
+
+The diagnostic completed successfully as W&B run `7g4kmalf` (`lemon-frost-1`).
+The loader contained exactly 708 items in 59 batches, the source checkpoint
+matched all 1,099 model state keys, and the results were:
+
+| Checkpoint | Validation `map_50` | MtErie `map_50` | MtErie `map` | MtErie `map_75` | MtErie `mar_100` |
+|---|---:|---:|---:|---:|---:|
+| seed 40, epoch-8 `best` | 0.8167 | 0.3967 | 0.1391 | 0.0633 | 0.2644 |
+
+This result does not support a globally inflated evaluator: the same model,
+postprocessor, confidence threshold and metric implementation produce a much
+lower score on MtErie. Instead, the gap confirms that the train-derived
+temporal validation is an easy, in-domain checkpoint-selection set whose
+absolute score is not calibrated to cross-site performance. The MtErie result
+is also consistent in scale with the historical RT-DETR + FAM campaign, but a
+single new seed cannot be compared with a historical five-seed mean as evidence
+of improvement.
+
+A subsequent paired audit evaluated epoch-10 `latest` with the same MtErie
+pipeline. It obtained `map_50 = 0.4303`, `map = 0.1492`, `map_75 = 0.0697` and
+`mar_100 = 0.2950`, outperforming the temporal-validation `best` by `0.0336`
+`map_50`. The independent official FHL validation could not replace the
+selector: both checkpoints were effectively at the metric floor (`0.000030`
+for `best`, `0.000012` for `latest`). The temporal campaign was therefore
+stopped after seed 40 and reclassified as a pilot. Its split and executable
+configuration remain frozen for auditability, not for continuation.
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_temporal_validation_seed40_diagnostic_test.yaml
+```
+
 ## Comparability with the previous campaign
 
 The old five-seed FAM results remain the estimate for the historical protocol:
@@ -157,7 +241,12 @@ A useful diagnostic, after the new FAM runs are complete, is to report both
 selection without crossing protocols. It does not make the old and new
 campaigns directly exchangeable.
 
-## Execution order
+## Historical execution record
+
+The steps and commands below describe the retired pilot and must not be used to
+continue a campaign. They are retained only to make the completed work
+reproducible. The replacement execution commands are in
+`notes/rtdetr_sequence_validation_fixed10_protocol.md`.
 
 1. Commit this frozen split and checkpoint rule.
 2. Run the separate two-epoch technical smoke configuration. It verifies real
@@ -165,9 +254,8 @@ campaigns directly exchangeable.
    Its metric is discarded and the run is never included in campaign tables.
    Early-stopping decision logic is covered by the regression test; a two-epoch
    run is not expected to exhaust patience 5.
-3. If the smoke is technically valid, launch the complete frozen campaign:
-   five fresh runs for seeds 40--44. All five, including a newly trained seed
-   40, belong to the scientific campaign.
+3. The planned five-seed campaign was stopped after seed 40 following the
+   selector audit; seeds 41--44 are intentionally absent.
 4. Aggregate validation curves, selected epochs and run durations.
 5. Freeze the candidate architecture set.
 6. Train candidates with the same split, seed set, maximum epochs, patience,
@@ -182,9 +270,8 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_temporal_validation_smoke.yaml
 ```
 
-The command above executes seed 40 for two epochs but does not count it as seed
-40 of the campaign. After checking that both checkpoint directories and the
-summary metadata exist, launch the complete five-seed campaign from scratch:
+The command above executed seed 40 for two epochs and did not count it as a
+campaign run. The following command is recorded but must not be launched:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -203,15 +290,13 @@ an out-of-memory error on the 8 GB GPU during the smoke, reduce only
 The thesis `.tex` files are intentionally unchanged for now. In the final
 revision:
 
-- describe the old fixed-epoch campaign and the new validation-based campaign
-  as separate protocols;
+- describe the old fixed-epoch campaign, this retired pilot and the definitive
+  whole-sequence fixed-ten-epoch protocol separately;
 - state that the temporal validation is train-derived and not an external
   holdout;
 - report the exact temporal ranges, 30-frame embargo and frozen inventory;
-- explain that all new model comparisons use a retrained FAM baseline;
-- report selected epoch distributions rather than only the final test scores;
-- state that MtErie was not evaluated during checkpoint or architecture
-  selection in the new campaign;
+- explain why the same-video selector was rejected after its single seed;
+- report the `best`/`latest` reversal on the MtErie diagnostic;
 - retain the limitation that MtErie remains a previously consulted internal
   development benchmark, not a newly blinded test set.
 
@@ -222,6 +307,12 @@ revision:
   `parameters/RTDETR/rtdetr_fam_temporal_validation_protocol.yaml`
 - Technical smoke configuration:
   `parameters/RTDETR/rtdetr_fam_temporal_validation_smoke.yaml`
+- Seed-40 MtErie diagnostic configuration:
+  `parameters/RTDETR/rtdetr_fam_temporal_validation_seed40_diagnostic_test.yaml`
+- Definitive replacement report:
+  `notes/rtdetr_sequence_validation_fixed10_protocol.md`
+- Definitive replacement configuration:
+  `parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml`
 - Split implementation: `sarfusion/data/temporal_split.py`
 - Loader integration: `sarfusion/data/__init__.py`
 - Checkpoint implementation: `sarfusion/experiment/run.py`

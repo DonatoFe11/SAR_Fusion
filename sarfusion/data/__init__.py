@@ -62,21 +62,39 @@ def get_train_val_test_params(name, dataset_params):
             train_folders = manifest_folder_pairs(temporal_manifest)
             val_folders = list(train_folders)
         else:
-            train_folders = dataset_params.get(
-                "train_folders", dataset_params["folders"]
-            )
-            train_folders = get_wisard_phase_folders(train_folders, "train")
-            val_folders = dataset_params.get("val_folders", dataset_params["folders"])
-            val_folders = get_wisard_phase_folders(val_folders, "val")
+            if "train_folders" in dataset_params:
+                train_folders = get_wisard_folders(dataset_params["train_folders"])
+            else:
+                train_folders = get_wisard_phase_folders(
+                    dataset_params["folders"], "train"
+                )
+            if "val_folders" in dataset_params:
+                val_folders = get_wisard_folders(dataset_params["val_folders"])
+            else:
+                val_folders = get_wisard_phase_folders(
+                    dataset_params["folders"], "val"
+                )
         print(f"Using as train folders: \n {train_folders}")
         print(f"Using as val folders: \n {val_folders}")
 
-        test_folders = dataset_params.get("test_folders", dataset_params["folders"])
-        test_folders = get_wisard_phase_folders(test_folders, "test")
+        if "test_folders" in dataset_params:
+            test_folders = get_wisard_folders(dataset_params["test_folders"])
+        else:
+            test_folders = get_wisard_phase_folders(
+                dataset_params["folders"], "test"
+            )
         print(f"Using as test folders: \n {test_folders}")
 
+        # Phase-specific selectors configure the split; they are not
+        # WiSARDDataset constructor arguments.
+        shared_dataset_params = {
+            key: value
+            for key, value in dataset_params.items()
+            if key not in {"train_folders", "val_folders", "test_folders"}
+        }
+
         train_dataset_params = {
-            **dataset_params,
+            **shared_dataset_params,
             "folders": train_folders,
             "temporal_split_phase": "train" if temporal_inventory else None,
             "temporal_split_inventory": temporal_inventory,
@@ -86,14 +104,14 @@ def get_train_val_test_params(name, dataset_params):
         # folders, otherwise checkpoint selection and final metrics depend on
         # randomly masked samples.
         val_dataset_params = {
-            **dataset_params,
+            **shared_dataset_params,
             "folders": val_folders,
             "modal_dropout": False,
             "temporal_split_phase": "val" if temporal_inventory else None,
             "temporal_split_inventory": temporal_inventory,
         }
         test_dataset_params = {
-            **dataset_params,
+            **shared_dataset_params,
             "folders": test_folders,
             "modal_dropout": False,
             "test_all_tiles": True if dataset_params.get("use_tiling", False) else False,

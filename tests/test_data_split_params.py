@@ -1,6 +1,7 @@
 import unittest
 
 from sarfusion.data import get_train_val_test_params
+from sarfusion.data.wisard import build_wisard_items
 
 
 class TestWiSARDPhaseParameters(unittest.TestCase):
@@ -27,6 +28,45 @@ class TestWiSARDPhaseParameters(unittest.TestCase):
 
         # Splitting phase parameters must not mutate the shared YAML values.
         self.assertTrue(dataset_params["modal_dropout"])
+
+    def test_explicit_whole_sequence_overrides_bypass_default_phase_filter(self):
+        train_folders = [
+            ["210924_FHL_Enterprise_VIS_0405", "210924_FHL_Enterprise_IR_0406"],
+            ["220109_Baker_Enterprise_VIS_1", "220109_Baker_Enterprise_IR_1"],
+        ]
+        val_folders = [
+            ["210924_FHL_Enterprise_VIS_0401", "210924_FHL_Enterprise_IR_0402"]
+        ]
+        dataset_params = {
+            "root": "dataset/WiSARD",
+            "folders": "vis_ir",
+            "train_folders": train_folders,
+            "val_folders": val_folders,
+            "single_class": True,
+            "modal_dropout": True,
+            "use_tiling": False,
+        }
+
+        train, val, test = get_train_val_test_params("wisard", dataset_params)
+
+        expected_train = [tuple(pair) for pair in train_folders]
+        expected_val = [tuple(pair) for pair in val_folders]
+        self.assertEqual(train["folders"], expected_train)
+        self.assertEqual(val["folders"], expected_val)
+        self.assertNotIn("train_folders", train)
+        self.assertNotIn("val_folders", val)
+        self.assertEqual(
+            len(build_wisard_items(dataset_params["root"], train["folders"])),
+            3123,
+        )
+        self.assertEqual(
+            len(build_wisard_items(dataset_params["root"], val["folders"])),
+            896,
+        )
+        self.assertEqual(
+            len(build_wisard_items(dataset_params["root"], test["folders"])),
+            708,
+        )
 
 
 if __name__ == "__main__":

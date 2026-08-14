@@ -1,4 +1,10 @@
-# Final baseline protocol for the train-derived temporal validation campaign.
+# RETIRED PILOT — DO NOT CONTINUE SEEDS 41--44.
+# Preserved verbatim as the executable record of seed-40 run 4wkvp82g. The
+# same-video temporal validation selected an epoch that underperformed latest
+# on the already-consulted MtErie diagnostic. The replacement is:
+# parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml
+#
+# Original baseline protocol for the train-derived temporal validation pilot.
 # Finalized: 2026-08-14, after an accidental full-grid launch was aborted and
 # before any run was accepted or any validation score was used. The reduction
 # from 20 to 10 maximum epochs was based only on runtime and historical budget.

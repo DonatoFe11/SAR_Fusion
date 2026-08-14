@@ -769,10 +769,16 @@ class Run:
         return self.evaluate(self.val_loader, epoch=epoch, phase="val")
 
     def _evaluation_model_input(self, batch_dict, phase):
-        compute_validation_loss = (
-            self.train_params or {}
-        ).get("compute_validation_loss", True)
-        if phase != "val" or compute_validation_loss:
+        if phase == "val":
+            compute_loss = (self.train_params or {}).get(
+                "compute_validation_loss", True
+            )
+        elif phase == "test":
+            compute_loss = (self.params or {}).get("compute_test_loss", True)
+        else:
+            compute_loss = True
+
+        if compute_loss:
             return batch_dict
 
         # Ground truth remains in batch_dict for mAP. RT-DETR receives no
