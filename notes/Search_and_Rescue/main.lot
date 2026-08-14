@@ -1,0 +1,25 @@
+\babel@toc {english}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {2.1}{\ignorespaces Effective dataset composition after the project filters. Median box area is expressed as a percentage of the evaluation image area.}}{10}{table.caption.12}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{\ignorespaces Historical single-run FAM development results. These values belong to the exploratory phase and do not determine the final model selection.}}{13}{table.caption.14}%
+\contentsline {table}{\numberline {3.2}{\ignorespaces Exploratory Deformable DETR results, reported as median [minimum--maximum] mAP@50{} over five runs.}}{15}{table.caption.16}%
+\contentsline {table}{\numberline {3.3}{\ignorespaces Complete DINO base result under the previous protocol, reported as median [minimum--maximum] mAP@50{} over five runs.}}{15}{table.caption.17}%
+\contentsline {table}{\numberline {3.4}{\ignorespaces Locked RT-DETR protocol used by all six final configurations.}}{18}{table.caption.18}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Final RT-DETR VIS+IR mAP@50{} by paired training seed.}}{19}{table.caption.19}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Aggregate final RT-DETR VIS+IR mAP@50{}. Standard deviations are sample standard deviations across five checkpoints.}}{19}{table.caption.20}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Paired VIS+IR mAP@50{} contrasts. A win means that the first configuration exceeds its reference for the same training seed.}}{20}{table.caption.22}%
+\contentsline {table}{\numberline {4.4}{\ignorespaces Final RT-DETR mAP@50{} by input condition, mean \(\pm \) sample standard deviation across five checkpoints.}}{22}{table.caption.23}%
+\contentsline {table}{\numberline {4.5}{\ignorespaces Mean absolute offset components in input-image pixels. Values are aggregated over thirty frozen samples per checkpoint.}}{23}{table.caption.24}%
+\contentsline {table}{\numberline {4.6}{\ignorespaces Post-hoc factorial level ablation. Delta is the paired mean difference from the full trained FAM.}}{25}{table.caption.26}%
+\contentsline {table}{\numberline {4.7}{\ignorespaces Automatic VIS+IR mAP@50{} for the five bounded-offset runs and the corresponding frozen standard-FAM reference.}}{26}{table.caption.27}%
+\contentsline {table}{\numberline {4.8}{\ignorespaces Paired RT-DETR error behavior across confidence thresholds. Values are mean \(\pm \) sample standard deviation over five checkpoints.}}{27}{table.caption.28}%
+\contentsline {table}{\numberline {4.9}{\ignorespaces Carnation mAP@50{} across five frozen checkpoints.}}{30}{table.caption.31}%
+\contentsline {table}{\numberline {4.10}{\ignorespaces Detector-only computational benchmark. The operation count is a proxy and the latency uncertainty is the sample standard deviation across three trial means.}}{31}{table.caption.33}%
+\contentsline {table}{\numberline {4.11}{\ignorespaces Final automatic YOLOv10 VIS+IR mAP@50{} at \texttt {last.pt}.}}{33}{table.caption.35}%
+\contentsline {table}{\numberline {4.12}{\ignorespaces Final standalone YOLOv10 mAP@50{} by modality, mean \(\pm \) SD over five checkpoints.}}{33}{table.caption.36}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {A.1}{\ignorespaces Final VIS+IR secondary metrics, mean \(\pm \) sample standard deviation over five training checkpoints. COCO mAP averages IoU thresholds from 0.50 to 0.95.}}{41}{table.caption.38}%

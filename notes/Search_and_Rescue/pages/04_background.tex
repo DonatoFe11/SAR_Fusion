@@ -1,0 +1,287 @@
+\chapter{Background and Research Starting Point}
+\label{chap:background}
+
+\section{UAV-based RGB--thermal detection for Search and Rescue}
+
+Person detection in aerial wilderness imagery differs from conventional
+street-level pedestrian detection. Subjects are frequently small, partially
+occluded, and observed from changing altitudes and viewing angles. Natural
+backgrounds provide repeated textures, warm rocks may resemble thermal human
+signatures, and targets may exhibit weak visible or thermal contrast. The
+WiSARD dataset addresses this setting with labeled visual and thermal imagery
+collected from UAV flights over diverse terrains and acquisition
+conditions~\cite{broyles2022wisard}.
+
+RGB--thermal sensing seeks to reduce dependence on a single observation
+channel. Multispectral pedestrian benchmarks have long shown the potential of
+combining visible and thermal cues~\cite{hwang2015multispectral}, while the
+broader multimodal-learning literature emphasizes both complementarity and the
+difficulty of learning balanced representations~\cite{baltrusaitis2019multimodal,wang2020multimodal}.
+In this thesis, robustness is evaluated explicitly in three input conditions:
+full fusion (VIS+IR), visible-only (VIS), and infrared-only (IR).
+
+\section{Object detection and evaluation}
+
+An object detector maps an image to a set of class scores and bounding boxes.
+For a predicted box \(B_p\) and a ground-truth box \(B_g\), Intersection over
+Union is
+
+\begin{equation}
+  \operatorname{IoU}(B_p,B_g)=
+  \frac{|B_p\cap B_g|}{|B_p\cup B_g|}.
+\end{equation}
+
+Average Precision (AP) integrates precision as a function of recall after
+ranking detections by confidence. The primary metric in the final experiments
+is \mapfifty{}, for which a match requires IoU at least 0.50. COCO mAP averages
+AP over IoU thresholds from 0.50 to 0.95 and provides a stricter localization
+summary~\cite{lin2014coco}. mAP@75 and mean Average Recall (mAR) are retained as
+secondary metrics.
+
+The confidence value used to collect detections is not itself the IoU match
+criterion. A low confidence threshold preserves candidates for AP computation,
+but may be unusable as an operational alarm threshold. This distinction is
+important in \Cref{sec:error-analysis}, where threshold 0.01 produces high
+recall and tens of false positives per image.
+
+\section{Detection Transformer families}
+
+\subsection{DETR}
+
+DETR formulates detection as direct set prediction~\cite{carion2020detr}. A
+convolutional backbone produces image features, a Transformer encoder--decoder
+processes them together with a fixed number of object queries, and a bipartite
+matching loss assigns predictions to ground-truth objects. This removes the
+need for anchor design and non-maximum suppression in the original model, but
+training converges slowly and small-object performance is challenging.
+
+The Deep Learning project that precedes this thesis used DETR to establish the
+value of stochastic missing-modality training. DETR is not rerun in the final
+campaign: its role is to motivate the training regime inherited by later
+architectures.
+
+\subsection{Deformable DETR}
+
+Deformable DETR replaces dense attention over all spatial locations with
+multi-scale deformable attention around learned reference
+points~\cite{zhu2021deformable}. Each query attends to a small set of sampled
+locations across multiple feature levels, improving convergence and making
+multi-scale processing tractable. In this project, however, its CUDA backward
+path also exposed substantial run-to-run variability. The Deformable DETR
+experiments are therefore treated as exploratory because they predate the
+locked RT-DETR checkpoint and initialization protocol.
+
+\subsection{DINO}
+
+DINO extends DETR-like detectors through three principal mechanisms:
+Contrastive DeNoising (CDN), Mixed Query Selection (MQS), and
+Look-Forward-Twice (LFT) box refinement~\cite{zhang2023dino}. The project
+initially contained a legacy CDN variant that was historically labeled DINO,
+although MQS and effective LFT were absent. A complete implementation was
+developed after the course projects and is documented separately in
+\Cref{sec:dino-exploration}. Its low base performance under the studied budget
+prevented an informative follow-up with FAM; this is a configuration-specific
+negative result, not a general assessment of DINO.
+
+\subsection{RT-DETR}
+
+RT-DETR targets end-to-end real-time detection with an efficient hybrid encoder
+and uncertainty-minimal query selection~\cite{zhao2024rtdetr}. Its encoder
+separates within-scale interaction from cross-scale fusion, reducing the cost
+of processing multi-scale features. The implementation used here starts from
+the pretrained RT-DETR R50vd checkpoint and exposes three backbone outputs,
+denoted P3, P4, and P5 with strides 8, 16, and 32.
+
+The term ``real-time'' is not inferred from the architecture name. This thesis
+reports latency for the detector forward pass on one specified GPU and excludes
+preprocessing and postprocessing. Any broader real-time claim would require an
+end-to-end deployment measurement.
+
+\subsection{YOLOv10}
+
+YOLOv10 is an end-to-end member of the YOLO family that combines consistent
+dual assignments with an efficiency-oriented architecture~\cite{wang2024yolov10}.
+It provides a structurally different transfer target from RT-DETR: the feature
+extractor and FPN/PAN neck are convolutional, while detection uses the YOLOv10
+one-to-many and one-to-one training branches. The thesis adapts YOLOv10-s to
+two modality-specific backbones and fuses their P3, P4, and P5 outputs before
+the shared neck.
+
+\section{Multimodal fusion}
+
+Fusion methods can be grouped by where the modalities interact. Early fusion
+combines inputs or low-level representations, late fusion combines independent
+predictions, and intermediate fusion combines learned features. This work uses
+intermediate fusion because each sensor receives a dedicated backbone while
+the detector still operates on a joint multi-scale representation.
+
+The inherited RT-DETR baseline uses element-wise addition:
+
+\begin{equation}
+  F_{\mathrm{fused}}^{(i)} = F_{\mathrm{RGB}}^{(i)} + F_{\mathrm{IR}}^{(i)},
+  \qquad i\in\{P3,P4,P5\}.
+  \label{eq:additive-fusion}
+\end{equation}
+
+Addition introduces no trainable fusion parameters and preserves feature-map
+shape, but assumes that corresponding cells are meaningfully compatible. A
+sensor displacement or scale difference violates this assumption. More complex
+interaction does not automatically solve the problem: multimodal networks can
+overfit or optimize their modalities at different rates~\cite{wang2020multimodal}.
+
+The preceding projects also examined CMX, a cross-modal rectification and
+fusion framework originally proposed for RGB-X semantic
+segmentation~\cite{zhang2023cmx}. The specific RT-DETR integration was not
+competitive on WiSARD. This finding is retained as an exploratory result of
+that implementation, not as a general rejection of attention-based fusion.
+
+\section{Missing modalities and Modal Dropout}
+
+ModDrop was proposed to preserve modality-specific representations by randomly
+dropping input channels during multimodal training~\cite{neverova2016moddrop}.
+The project applies the same principle at the modality level. For a paired
+sample \((x_{\mathrm{RGB}},x_{\mathrm{IR}})\), training draws one of three
+conditions:
+
+\begin{equation}
+  \widetilde{x}=
+  \begin{cases}
+    (x_{\mathrm{RGB}},0), & \text{with probability }p_{\mathrm{VIS}},\\
+    (0,x_{\mathrm{IR}}), & \text{with probability }p_{\mathrm{IR}},\\
+    (x_{\mathrm{RGB}},x_{\mathrm{IR}}), & \text{with probability }p_{\mathrm{fusion}}.
+  \end{cases}
+  \label{eq:modal-dropout}
+\end{equation}
+
+The inherited schedule uses
+\(p_{\mathrm{VIS}}=0.2\), \(p_{\mathrm{IR}}=0.2\), and
+\(p_{\mathrm{fusion}}=0.6\). It is a motivated exploratory choice from the
+preceding DETR study, not a statistically demonstrated optimum. A software
+audit conducted for this thesis found that modality dropout was also being
+applied during validation and test. The pipeline was corrected so that the
+sampling in \Cref{eq:modal-dropout} is active only during training.
+
+\section{Feature-level geometric transformation}
+
+\subsection{Deformable convolution}
+
+Standard convolution samples a fixed grid \(\mathcal{R}\) around each spatial
+position \(p\). Modulated deformable convolution augments every kernel point
+\(p_k\) with an input-dependent offset \(\Delta p_k\) and a modulation value
+\(m_k\)~\cite{zhu2019dcnv2}:
+
+\begin{equation}
+  y(p)=\sum_{k\in\mathcal{R}}
+  w_k\,x(p+p_k+\Delta p_k)\,\sigma(m_k).
+  \label{eq:dcnv2}
+\end{equation}
+
+Sampling at non-integer positions uses bilinear interpolation. The operation
+therefore combines a geometric sampling change with learned filtering and
+channel mixing. Its output cannot be interpreted as a pure warp unless those
+additional effects are controlled.
+
+\subsection{Inherited Feature Alignment Module}
+
+For every pyramid level, the FAM concatenates RGB and IR features and predicts
+18 offset channels and 9 mask logits for a \(3\times3\) DCNv2 kernel:
+
+\begin{align}
+  [\Delta,m] &=
+  \operatorname{Conv}_{3\times3}
+  \left([F_{\mathrm{RGB}},F_{\mathrm{IR}}]\right),\\
+  \widetilde{F}_{\mathrm{IR}} &=
+  \operatorname{DCNv2}(F_{\mathrm{IR}},\Delta,\sigma(m)),\\
+  F_{\mathrm{fused}} &= F_{\mathrm{RGB}}+
+  \widetilde{F}_{\mathrm{IR}}.
+  \label{eq:fam-fusion}
+\end{align}
+
+The offset/mask predictor is initialized to zero, so initial offsets are null
+and masks are approximately 0.5. The DCNv2 filter weights retain their own
+initialization. Consequently, the standard FAM does \emph{not} start as a
+mathematical identity: null offsets preserve the initial sampling geometry but
+do not make the filtered output equal to the input.
+
+\begin{figure}[p]
+  \centering
+  \thesisimage[0.92\textwidth]{images/rtdetr_fam_architecture.pdf}{Diagram of the dual-backbone RT-DETR pipeline and the inherited FAM at P3, P4, and P5.}
+  \caption{Dual-backbone RT-DETR and the inherited Feature Alignment Module.
+  At each pyramid level, RGB and IR features jointly predict 18 offset
+  components and nine modulation masks; DCNv2 then transforms the IR feature
+  before additive fusion. In the final data path, training-only Modal Dropout
+  zero-pads the missing input channels while preserving the four-channel
+  interface. The FAM is the starting point inherited from the preceding
+  Computer Vision project, not a new architecture introduced by this thesis.}
+  \label{fig:fam-architecture}
+\end{figure}
+
+Because there is no ground-truth displacement field, the thesis uses the term
+\emph{geometric-functional transformation}. Nonzero offsets show that the
+geometric path is active; they do not prove recovery of the physical mapping
+between the cameras. This distinction motivates the internal diagnostics in
+\Cref{sec:fam-diagnostics}.
+
+\section{Dataset organization and evaluation conditions}
+
+All final comparisons use synchronized WiSARD RGB--IR pairs. The effective
+split audit is summarized in \Cref{tab:dataset-splits}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Effective dataset composition after the project filters. Median box
+  area is expressed as a percentage of the evaluation image area.}
+  \label{tab:dataset-splits}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Split & Sessions & Frames & Empty frames & Boxes/frame & Median box area \\
+    \midrule
+    Train & 3 & 4,022 & 17.85\% & 2.464 & 0.1641\% \\
+    Validation & 1 & 273 & 67.40\% & 0.542 & 0.0133\% \\
+    Internal test & 3 & 708 & 2.68\% & 2.500 & 0.0764\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The validation set contains one FHL session, 184 empty frames, and 148 boxes.
+Its median target area is approximately twelve times smaller than in training.
+It is informative as evidence of a strong distribution shift, but it is not a
+representative selector for performance on the three MtErie sequences.
+
+MtErie is called the \emph{internal development benchmark}. It was consulted
+during architectural development and is not an untouched holdout. Final paired
+comparisons remain useful, particularly after the protocol was frozen, but may
+be optimistic with respect to a new acquisition. Carnation is evaluated once
+as a predefined external stress case and is not substituted for a general
+domain-generalization benchmark.
+
+At evaluation time, the three modality conditions retain a common dataset and
+annotation set:
+
+\begin{description}[style=nextline]
+  \item[VIS+IR] both synchronized streams are provided;
+  \item[VIS] the infrared input or branch contribution is disabled according
+        to the architecture's modality contract;
+  \item[IR] the visible input or branch contribution is disabled.
+\end{description}
+
+The exact missing-modality path differs between RT-DETR and YOLOv10 and is
+reported with their results rather than assumed to be architecturally
+equivalent.
+
+\section{Inherited experimental starting point}
+
+The Deep Learning project established DETR with Modal Dropout, the RT-DETR
+Additive baseline, a fixed \(2\times2\) tiling experiment related to
+slicing-aided small-object detection~\cite{akyon2022sahi}, and the initial CMX
+comparison. The Computer Vision project introduced FAM on RT-DETR, Hybrid CMX,
+and Deformable DETR with nonlinear channel fusion and FAM. Their historical
+scores were based primarily on the earlier checkpoint policy and, for several
+RT-DETR variants, on individual executions.
+
+Those results generated the central hypothesis that transforming IR features
+before fusion could be preferable to direct addition. They did not yet answer
+whether the advantage was consistent across runs, whether the learned offsets
+were geometrically meaningful, whether all feature levels behaved correctly,
+or whether the result transferred to another detector. These questions define
+the point at which the present thesis begins.
