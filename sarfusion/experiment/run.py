@@ -788,7 +788,27 @@ class Run:
         model_input.labels = None
         return model_input
 
+    def _prepare_evaluation_memory(self):
+        """Release training-only CUDA storage before a large eval batch."""
+        optimizer = getattr(self, "optimizer", None)
+        if optimizer is not None:
+            # The final backward pass leaves gradient tensors resident after
+            # optimizer.step(). They are not needed by validation and can push
+            # an 8 GB GPU into WSL unified-memory paging.
+            optimizer.zero_grad(set_to_none=True)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def _release_evaluation_memory(self):
+        """Drop metric state and cached eval allocations before training."""
+        evaluator = getattr(self, "val_evaluator", None)
+        if evaluator is not None:
+            evaluator.reset()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def evaluate(self, dataloader, epoch=None, phase="val"):
+        self._prepare_evaluation_memory()
         self.model.eval()
         self.val_evaluator.reset()
 
@@ -800,6 +820,13 @@ class Run:
         tile_gt_buffer = {}  # Salva le GT per ogni immagine originale
         
         tot_steps = 0
+        eval_cuda_cache_interval = int(
+            (self.train_params or {}).get("eval_cuda_cache_interval", 0) or 0
+        )
+        if eval_cuda_cache_interval < 0:
+            raise ValueError(
+                "eval_cuda_cache_interval must be non-negative"
+            )
         desc = f"{phase} Epoch {epoch+1}" if epoch is not None else f"{phase}"
         bar = tqdm(
             enumerate(dataloader),
@@ -810,6 +837,9 @@ class Run:
         )
         self.tracker.create_image_sequence("predictions", columns=['epoch'])
         
+        batch_dict = None
+        model_input = None
+        result_dict = None
         has_loss = False
         with torch.inference_mode():
             for batch_idx, batch_dict in bar:
@@ -864,6 +894,15 @@ class Run:
                     )
 
                 self.global_val_step += 1
+                if (
+                    eval_cuda_cache_interval > 0
+                    and (batch_idx + 1) % eval_cuda_cache_interval == 0
+                ):
+                    # Drop only inactive CUDA workspaces. Predictions already
+                    # retained by the evaluator remain live and unchanged.
+                    batch_dict = model_input = result_dict = None
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
             
             # Se usiamo tiling, processa eventuali predizioni rimanenti nel buffer
             if use_tiling:
@@ -895,6 +934,10 @@ class Run:
                 logger.info(f"{phase} - {k}: {v}")
         if has_loss:
             logger.info(f"{phase} Loss: {avg_loss.compute()}")
+        # Remove the final batch/output references before returning cached
+        # blocks to CUDA. Metrics are already materialized as Python values.
+        batch_dict = model_input = result_dict = None
+        self._release_evaluation_memory()
         return metrics_dict
     
     def _accumulate_tile_predictions(

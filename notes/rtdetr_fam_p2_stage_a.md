@@ -1,6 +1,7 @@
 # RT-DETR + FAM + P2: Stage-A ablation
 
-Status: implemented and locally verified; seed-40 training not yet launched
+Status: corrected and verified by real runtime probe; initial seed-40 launch
+aborted and excluded, replacement launch pending
 
 Defined: 2026-08-15
 
@@ -63,7 +64,12 @@ The seed-40 run is a complete Stage-A experiment, not a shortened smoke test:
 - seed 40 only;
 - batch size 2 and two-step gradient accumulation, preserving the baseline's
   effective batch size of 4 and approximately the same optimizer-step count;
-- validation batch size 12, as in the baseline.
+- validation batch size 12, exactly as in the baseline;
+- gradients and inactive training cache released before validation;
+- inactive CUDA workspace cache released after every validation batch with
+  `eval_cuda_cache_interval: 1`, while predictions retained by the evaluator
+  remain live and unchanged;
+- evaluator state and inactive cache released before returning to training.
 
 All remaining optimizer, augmentation, modal-dropout, preprocessing and class
 head settings are copied from the baseline configuration.
@@ -80,25 +86,94 @@ This rule controls compute allocation, not the final scientific claim. Any
 performance claim requires the same five seeds for P2 and the baseline. MtErie
 must not be consulted to choose whether P2 advances.
 
-## Local verification
+## Initial launch, failure and correction
 
-The following checks completed successfully before launch:
+The first pre-launch memory check measured an isolated validation forward. It
+did not retain AdamW state, gradients or repeated CUDA workspaces and was
+therefore insufficient. The initial run `vhusi1io` exposed the error:
 
-- unit forward through a four-level miniature detector;
-- feature shapes at strides 4, 8, 16 and 32;
-- pretrained level-remapping and deformable-attention expansion;
-- regression check that the default P3--P5 path is unchanged;
-- offline construction of the real `PekingU/rtdetr_r50vd` graph;
-- one 640-px CUDA training step including backward and AdamW update;
-- 640-px CUDA evaluation including post-processing.
+| Phase | Elapsed | Throughput |
+|---|---:|---:|
+| Epoch-1 train | 18:53 | 1.38 batch/s |
+| Epoch-1 validation | 35:54 | 28.73 s/batch |
+| Epoch-2 train | 42:14 | 1.62 s/batch |
 
-The real P2 graph contains 123,608,847 parameters. On the local RTX 4070 8 GB,
-the synthetic batch-2 training step peaked at about 5.26 GiB allocated and
-6.63 GiB reserved. Batch-12 evaluation peaked at about 5.84 GiB allocated and
-6.34 GiB reserved. These are smoke-test measurements, not guarantees for every
-dataset batch, but they leave enough measured margin for the frozen settings.
+The run was interrupted during epoch-2 validation. It is an operational probe,
+not a campaign result: it is incomplete, its epoch-1 validation mAP@50 of
+`0.0841` must not enter any comparison, and its checkpoints remain only as
+diagnostic evidence.
 
-## Launch
+A realistic CUDA lifecycle probe then kept the trained model and AdamW state
+resident. The relevant measurements were:
+
+- one batch-2 train step: 5.26 GiB peak allocated and 6.63 GiB reserved;
+- after clearing completed-step gradients: 1.47 GiB allocated and 2.42 GiB
+  reserved before validation;
+- one batch-12 validation forward: 1.32 s, 6.81 GiB peak allocated and 7.11
+  GiB reserved;
+- repeated batch-12 validation without per-batch cleanup: severe slowdown and
+  9.75 GiB reserved after ten batches, beyond physical VRAM under WSL;
+- 25 consecutive batch-12 validations with per-batch inactive-cache cleanup:
+  300 images in 28.00 s, 2.42 GiB reserved after cleanup and no growth;
+- mAP state computation after those batches: 0.16 s;
+- a subsequent batch-2 train step after validation: 0.79 s, with 1.47 GiB
+  allocated and 2.42 GiB reserved before it.
+
+A `nvidia-smi` reading near 7.8 GiB is not, by itself, proof of a problem:
+other workloads may use that amount normally. Here the diagnosis rests on the
+paired evidence of throughput collapse and PyTorch's reserved-memory counter
+growing to 9.75 GiB. Releasing only inactive cached workspaces after each batch
+removes that growth without modifying model state, predictions or evaluator
+state.
+
+Batch 4 was also tested and was faster, but not adopted. RT-DETR's marginal
+top-k query set showed small numerical batch-shape sensitivity; retaining batch
+12 preserves the exact validation setting used by the baseline.
+
+## Verification status
+
+The corrected implementation now covers:
+
+- four-level feature shapes and full detector forward;
+- explicit pretrained level remapping;
+- unchanged default P3--P5 path;
+- real R50-vd model construction;
+- train-to-validation-to-train CUDA lifecycle;
+- repeated batch-12 inference with the real mAP evaluator;
+- unit checks for gradient, evaluator-state and CUDA-cache cleanup.
+
+The real P2 graph contains 123,608,847 parameters. The replacement seed-40 run
+must start from scratch; resuming `vhusi1io` is forbidden.
+
+## Launch order
+
+The operational probe is reproducible with:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_p2_runtime_probe.yaml
+```
+
+It performs 20 training micro-batches and the complete 75-batch validation,
+saves no checkpoint and is tagged `ExcludeFromCampaign`. Its predeclared
+acceptance conditions were:
+
+- exactly 20 training iterations and 75 validation iterations;
+- validation wall time below ten minutes;
+- no progressive multi-second-to-tens-of-seconds slowdown across validation;
+- clean process termination and release of the CUDA context.
+
+The real probe `4d6r2p0f` passed all four conditions on 2026-08-15:
+
+- training: 20/20 micro-batches in 19 s;
+- validation: 75/75 batches in 3:18, 2.65 s/batch overall;
+- late batches remained near 2.44--2.6 s, excluding progressive degradation;
+- exit code 0, no `best/` or `latest/` checkpoint, no orphan worker, and 0 MiB
+  VRAM after exit.
+
+The probe's mAP is not a performance result because it trained for only 20
+micro-batches. The replacement seed-40 campaign may now start from scratch:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -106,13 +181,16 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_p2_sequence_validation_seed40.yaml
 ```
 
-The YAML contains only seed 40, so this command launches exactly one run. Do
-not add `--max-runs 1`, and do not run a separate MtErie evaluation yet.
+The campaign YAML contains only seed 40, so this launches exactly one complete
+run. Do not resume `vhusi1io`, do not add `--max-runs 1`, and do not run a
+separate MtErie evaluation yet.
 
 ## Artifacts and thesis changes to apply later
 
 - Training configuration:
   `parameters/RTDETR/rtdetr_fam_p2_sequence_validation_seed40.yaml`
+- Operational probe configuration:
+  `parameters/RTDETR/rtdetr_fam_p2_runtime_probe.yaml`
 - Implementation: `sarfusion/models/rtdetr_fusion.py`,
   `sarfusion/models/detr.py` and `sarfusion/models/__init__.py`
 - Regression tests: `tests/test_rtdetr_p2.py`

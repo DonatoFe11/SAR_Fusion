@@ -1,13 +1,9 @@
-# Stage-A RT-DETR + FAM + P2 ablation. This file intentionally contains one
-# complete seed only. It uses the same whole-video development split and the
-# same fixed ten-epoch checkpoint rule as the RT-DETR + FAM baseline.
-#
-# The only architectural change is P2/stride 4. Batch 2 with two-step gradient
-# accumulation preserves the baseline's effective optimization batch of 4.
+# Operational-only probe for the corrected P2 CUDA lifecycle.
+# This is not a campaign run and its metrics/checkpoints must never be reported.
 
 experiment:
-  name: RTDETR_FAM_P2_SequenceVal_Seed40
-  group: RTDETR_FAM_P2_sequence_validation_v1
+  name: RTDETR_FAM_P2_RuntimeProbe
+  group: RTDETR_FAM_P2_runtime_probe_v2
   continue_with_errors: false
   start_from_grid: 0
   start_from_run: 0
@@ -25,21 +21,22 @@ parameters:
     deterministic: [false]
     warn_only: [false]
     trace: [true]
-    trace_batches: [20]
-    trace_tensor_batches: [5]
-    trace_model_steps: [3]
+    trace_batches: [5]
+    trace_tensor_batches: [2]
+    trace_model_steps: [2]
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
     val_image_log_frequency: [50]
-    tags: [[RTDETR, FAM, P2, SequenceValidation, Fixed10, BestCheckpoint, StageA]]
+    tags: [[RTDETR, FAM, P2, RuntimeProbe, ExcludeFromCampaign]]
 
   train:
-    max_epochs: [10]
+    max_epochs: [1]
+    max_steps_per_epoch: [20]
     run_validation: [true]
     compute_validation_loss: [false]
     val_frequency: [1]
-    save_checkpoints: [true]
+    save_checkpoints: [false]
     save_final_checkpoint_only: [true]
     checkpoint_min_delta: [0.001]
     compile: [false]

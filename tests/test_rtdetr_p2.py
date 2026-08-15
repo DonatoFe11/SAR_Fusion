@@ -25,6 +25,12 @@ P2_PROTOCOL_PATH = (
     / "RTDETR"
     / "rtdetr_fam_p2_sequence_validation_seed40.yaml"
 )
+P2_RUNTIME_PROBE_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_p2_runtime_probe.yaml"
+)
 
 
 def tiny_rtdetr_config():
@@ -238,6 +244,7 @@ class TestRTDetrP2(unittest.TestCase):
         self.assertNotIn("early_stopping_patience", train)
         self.assertEqual(train["watch_metric"], ["map_50"])
         self.assertEqual(train["gradient_accumulation_steps"], [2])
+        self.assertEqual(train["eval_cuda_cache_interval"], [1])
         self.assertEqual(params["dataloader"]["batch_size"], [2])
         self.assertEqual(params["dataloader"]["evaluation_batch_size"], [12])
         self.assertEqual(params["run_test"], [False])
@@ -247,6 +254,35 @@ class TestRTDetrP2(unittest.TestCase):
         self.assertEqual(model["use_p2"], [True])
         self.assertEqual(len(params["dataset"]["train_folders"][0]), 2)
         self.assertEqual(len(params["dataset"]["val_folders"][0]), 1)
+
+    def test_runtime_probe_is_short_checkpoint_free_and_not_a_campaign_run(self):
+        probe = load_yaml(P2_RUNTIME_PROBE_PATH)
+        full = load_yaml(P2_PROTOCOL_PATH)
+        params = probe["parameters"]
+        train = params["train"]
+
+        self.assertEqual(
+            probe["experiment"]["name"],
+            "RTDETR_FAM_P2_RuntimeProbe",
+        )
+        self.assertEqual(params["seed"], [40])
+        self.assertEqual(train["max_epochs"], [1])
+        self.assertEqual(train["max_steps_per_epoch"], [20])
+        self.assertEqual(train["save_checkpoints"], [False])
+        self.assertEqual(train["eval_cuda_cache_interval"], [1])
+        self.assertEqual(params["dataloader"]["batch_size"], [2])
+        self.assertEqual(params["dataloader"]["evaluation_batch_size"], [12])
+        self.assertEqual(params["run_test"], [False])
+        self.assertEqual(params["model"]["params"]["use_p2"], [True])
+        self.assertIn("ExcludeFromCampaign", params["tracker"]["tags"][0])
+        self.assertEqual(
+            params["dataset"]["train_folders"],
+            full["parameters"]["dataset"]["train_folders"],
+        )
+        self.assertEqual(
+            params["dataset"]["val_folders"],
+            full["parameters"]["dataset"]["val_folders"],
+        )
 
 
 if __name__ == "__main__":

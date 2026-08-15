@@ -2,7 +2,7 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from sarfusion.data.temporal_split import (
     load_temporal_split_manifest,
@@ -261,9 +261,33 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         self.assertIs(batch.labels, metric_labels)
         self.assertEqual(batch.labels[0].boxes, "kept-for-metrics")
 
+    def test_evaluation_memory_helpers_clear_gradients_state_and_cuda_cache(self):
+        run = Run()
+        run.optimizer = Mock()
+        run.val_evaluator = Mock()
+
+        with (
+            patch(
+                "sarfusion.experiment.run.torch.cuda.is_available",
+                return_value=True,
+            ),
+            patch(
+                "sarfusion.experiment.run.torch.cuda.empty_cache"
+            ) as empty_cache,
+        ):
+            run._prepare_evaluation_memory()
+            run._release_evaluation_memory()
+
+        run.optimizer.zero_grad.assert_called_once_with(set_to_none=True)
+        run.val_evaluator.reset.assert_called_once_with()
+        self.assertEqual(empty_cache.call_count, 2)
+
     def test_loss_free_validation_computes_metrics_once(self):
         run = Run()
-        run.train_params = {"compute_validation_loss": False}
+        run.train_params = {
+            "compute_validation_loss": False,
+            "eval_cuda_cache_interval": 1,
+        }
         run.model = Mock()
         # Hugging Face ModelOutput omits optional keys entirely when their
         # value is None, so this deliberately has no `loss` attribute.
@@ -284,9 +308,19 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
             pixel_mask="mask",
         )
 
-        metrics = run.evaluate([batch], epoch=0, phase="val")
+        with (
+            patch(
+                "sarfusion.experiment.run.torch.cuda.is_available",
+                return_value=True,
+            ),
+            patch(
+                "sarfusion.experiment.run.torch.cuda.empty_cache"
+            ) as empty_cache,
+        ):
+            metrics = run.evaluate([batch], epoch=0, phase="val")
 
         self.assertEqual(metrics, {"map_50": 0.5})
+        self.assertEqual(empty_cache.call_count, 3)
         run.val_evaluator.compute.assert_called_once_with()
         model_input = run.model.call_args.args[0]
         self.assertIsNone(model_input.labels)

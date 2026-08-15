@@ -79,11 +79,14 @@ The corrected paired-modality evaluation, the train-derived validation, the
 fixed checkpoint rule and the RT-DETR + FAM development baseline are complete.
 RT-DETR + FAM + P2 at the existing input resolution is now implemented and
 documented in `notes/rtdetr_fam_p2_stage_a.md`. Its frozen configuration
-contains one complete seed-40 run under this exact split and selector. Local
-shape, pretrained-transfer and CUDA memory checks passed before launch. Its
-validation result, not MtErie, determines whether it is expanded to additional
-seeds according to the predeclared engineering triage. Higher input resolution
-and reliability-gated alignment remain
+contains one complete replacement seed-40 run under this exact split and
+selector. The initial launch was aborted and excluded after exposing repeated
+batch-12 CUDA-cache growth; the corrected lifecycle preserves validation batch
+12 and is documented in the P2 report. The real runtime probe completed
+all 75 validation batches in 3:18 without progressive degradation. The
+replacement validation result, not MtErie, determines whether P2 is expanded
+to additional seeds according to the predeclared engineering triage. Higher input
+resolution and reliability-gated alignment remain
 later, separate ablations so their effects are not confounded with P2.
 
 ## Two-stage policy for future models
