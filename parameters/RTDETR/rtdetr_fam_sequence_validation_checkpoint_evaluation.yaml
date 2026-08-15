@@ -1,0 +1,43 @@
+# Frozen after all five fixed-10 training runs completed and before evaluating
+# seeds 41--44 on MtErie. Seed 40 had already been used as a pipeline diagnostic;
+# it is nevertheless evaluated again by the same runner as the other seeds.
+
+protocol:
+  id: rtdetr_fam_sequence_validation_checkpoint_evaluation_v1
+  frozen_on: "2026-08-15"
+  status: frozen_before_inference
+  purpose: paired_best_vs_latest_checkpoint_selection_audit
+
+  training_config: parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml
+  training_project: RTDETR_FAM_SequenceVal_Fixed10_Protocol
+  seeds: [40, 41, 42, 43, 44]
+  checkpoints: [best, latest]
+  primary_checkpoint: best
+  diagnostic_checkpoint: latest
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+
+  dataset_root: dataset/WiSARD
+  source:
+    paired_folders:
+      - [210417_MtErie_Enterprise_VIS_0003, 210417_MtErie_Enterprise_IR_0004]
+      - [210417_MtErie_Enterprise_VIS_0005, 210417_MtErie_Enterprise_IR_0006]
+      - [210417_MtErie_Enterprise_VIS_0007, 210417_MtErie_Enterprise_IR_0008]
+    pairing: existing_wisard_sorted_zip
+    ground_truth: vis
+    expected_frames: 708
+    expected_vis_boxes: 1770
+    expected_vis_empty_frames: 19
+    expected_inventory_sha256: d6ceca387baaa22b63c31d762c2cb636b52e78acdaa9d8c33e668948a0718900
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_fam_sequence_validation_checkpoint_evaluation
+
+  interpretation:
+    best_is_predeclared_primary: true
+    latest_is_paired_diagnostic: true
+    model_selection_from_mterie_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+

@@ -4,6 +4,28 @@ Questa directory contiene risultati compatti destinati alla tesi. Gli output
 grezzi completi restano in `out/`, che è ignorata da Git, per evitare di
 versionare decine di megabyte di predizioni frame-level.
 
+## RT-DETR + FAM: selezione `best` contro `latest`
+
+Il file
+[`rtdetr_fam_sequence_checkpoint_evaluation.csv`](rtdetr_fam_sequence_checkpoint_evaluation.csv)
+contiene 10 righe: cinque seed e i due checkpoint `best` e `latest`. Tutti i
+checkpoint sono valutati sui medesimi 708 frame VIS+IR MtErie con ground truth
+VIS. `best` è selezionato esclusivamente dalla validation FHL 0401/0402; MtErie
+è usato solo a posteriori e non modifica la selezione.
+
+Il risultato primario `best` è `0.3590 +/- 0.0416` mAP@50, contro
+`0.2689 +/- 0.0317` per `latest`. Il delta appaiato è `+0.0901 +/- 0.0466`,
+positivo in 5/5 seed, IC95% `[+0.0323, +0.1479]`. Protocollo, limiti e
+confrontabilità con la campagna storica sono documentati in
+[`../../rtdetr_sequence_validation_fixed10_protocol.md`](../../rtdetr_sequence_validation_fixed10_protocol.md).
+
+L'aggregato JSON locale completo è marcato `protocol_complete: true` e ha
+SHA-256:
+
+```text
+1402142280d299d94bffc8628a756e6d15d42867c260425bcce6c27bfd80357e
+```
+
 ## RT-DETR Additive--FAM error analysis
 
 Il file

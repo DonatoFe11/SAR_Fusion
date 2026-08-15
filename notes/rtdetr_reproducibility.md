@@ -1,5 +1,15 @@
 # RT-DETR base: protocollo di riproducibilità
 
+> Aggiornamento 2026-08-15: le sezioni che raccomandano `latest` descrivono il
+> protocollo storico basato sulla validation ufficiale FHL 0134/0135, quasi
+> priva di segnale per questo detector. Per i nuovi confronti architetturali è
+> stato adottato e completato il protocollo a video intero FHL 0401/0402,
+> dieci epoche fisse senza early stopping e selezione `best` su validation.
+> Su cinque seed `best` supera `latest` su MtErie in 5/5 casi; risultati e
+> limiti sono in `rtdetr_sequence_validation_fixed10_protocol.md`. Anche la
+> successiva valutazione delle modalità è stata corretta su 708 frame comuni ed
+> è documentata in `rtdetr_paired_modality_evaluation.md`.
+
 ## Evidenze già disponibili
 
 La validation e il test non provengono dalla stessa distribuzione:

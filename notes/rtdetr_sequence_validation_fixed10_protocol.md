@@ -1,10 +1,87 @@
 # RT-DETR whole-sequence validation, fixed 10-epoch protocol
 
-Status: frozen replacement protocol, not yet launched
+Status: completed for RT-DETR + FAM, five seeds and paired checkpoint audit
 
 Defined: 2026-08-14, after retiring the temporal-tail seed-40 pilot
+Completed: 2026-08-15
 
 Campaign project: `RTDETR_FAM_SequenceVal_Fixed10_Protocol`
+
+## Campaign completion and results
+
+All five runs completed ten epochs. Validation never stopped training; it only
+retained `best`, while `latest` is always epoch 10. The selected epochs were
+1, 4, 6, 1 and 1 for seeds 40--44. Thus the decline seen after early epochs
+was repeatable across seeds rather than a logging anomaly: decreasing training
+loss did not consistently preserve performance on the held-out FHL sequence.
+
+After all runs completed, both checkpoints were evaluated on the frozen paired
+MtErie inventory: 708 VIS+IR frames, 1,770 VIS ground-truth boxes, confidence
+threshold `0.01` and the same evaluator for every checkpoint.
+
+| Seed | `best` epoch | Val mAP@50 `best` | Val mAP@50 epoch 10 | MtErie `best` | MtErie `latest` | `best - latest` |
+|---:|---:|---:|---:|---:|---:|---:|
+| 40 | 1 | 0.1521 | 0.0397 | 0.3490 | 0.2132 | +0.1357 |
+| 41 | 4 | 0.1424 | 0.1030 | 0.3354 | 0.2887 | +0.0466 |
+| 42 | 6 | 0.1655 | 0.0946 | 0.3077 | 0.2740 | +0.0337 |
+| 43 | 1 | 0.1939 | 0.0790 | 0.3994 | 0.2876 | +0.1118 |
+| 44 | 1 | 0.1689 | 0.1037 | 0.4036 | 0.2811 | +0.1225 |
+
+Across seeds, `best` obtains `0.3590 +/- 0.0416` MtErie mAP@50, while
+`latest` obtains `0.2689 +/- 0.0317`. The paired improvement is
+`+0.0901 +/- 0.0466`, positive in 5/5 seeds, with a two-sided Student-t 95%
+confidence interval of `[+0.0323, +0.1479]`. Mean COCO-style mAP is `0.1295`
+for `best` and `0.0990` for `latest`.
+
+This supports the predefined checkpoint selector within the replacement
+protocol: the validation-ranked checkpoint also beats epoch 10 on MtErie for
+every seed. It does not make MtErie a blind test, nor does it prove that the
+new setup improves absolute accuracy over the historical campaign. Historical
+FAM `latest` was approximately `0.3780 +/- 0.0439` mAP@50; its nominal value
+is above the new `best` mean, but the comparison is not controlled because the
+old run optimized all 4,019 paired frames whereas this protocol optimizes
+3,123 and reserves an entire 896-frame video for validation. New architectures
+must be compared against `0.3590 +/- 0.0416` under this same split and selector.
+The older result remains a separately labelled historical reference.
+
+The five W&B runtimes range from 2 h 38 min 59 s to 2 h 47 min 34 s, with a
+mean of about 2 h 42 min per run and about 13 h 30 min in total. Ten training
+epochs plus ten full 896-frame validations explain the duration; there is no
+evidence that transitions between experiments consumed a material fraction.
+
+## Frozen checkpoint audit and artifacts
+
+The checkpoint comparison is reproduced with:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python scripts/run_rtdetr_sequence_checkpoint_evaluation.py
+```
+
+The runner validates the MtErie inventory, resolves exactly one local run per
+seed, hashes `best` and `latest`, caches each evaluation and writes a paired
+aggregate. Its frozen protocol is
+`parameters/RTDETR/rtdetr_fam_sequence_validation_checkpoint_evaluation.yaml`.
+The versioned compact table is
+`notes/Search_and_Rescue/results/rtdetr_fam_sequence_checkpoint_evaluation.csv`.
+The complete local JSON is marked `protocol_complete: true` and has SHA-256
+`1402142280d299d94bffc8628a756e6d15d42867c260425bcce6c27bfd80357e`.
+
+The thesis source is intentionally unchanged. Its later revision must report
+the 5/5 paired wins and confidence interval without calling MtErie a fresh
+blind test, and must keep the historical `0.3780` result separate because the
+training split and checkpoint rule differ.
+
+## Current position in the experimental plan
+
+The corrected paired-modality evaluation, the train-derived validation, the
+fixed checkpoint rule and the replacement RT-DETR + FAM baseline are complete.
+The next controlled architecture experiment is RT-DETR + FAM + P2 at the
+existing input resolution. It should first run as one complete seed-40
+technical campaign under this exact split and selector. Only after checking
+memory, tensor shapes and its paired `best` result should it be expanded to
+five seeds. Higher input resolution and reliability-gated alignment remain
+later, separate ablations so their effects are not confounded with P2.
 
 ## Decision
 
