@@ -249,6 +249,153 @@ FAM_VARIANTS = {
 }
 
 
+P2_BACKBONE_OUT_INDICES = [1, 2, 3, 4]
+P2_FEATURE_STRIDES = [4, 8, 16, 32]
+
+
+def configure_rtdetr_p2(config):
+    """Extend an RT-DETR ResNet configuration from P3--P5 to P2--P5."""
+    backbone_config = getattr(config, "backbone_config", None)
+    hidden_sizes = list(getattr(backbone_config, "hidden_sizes", ()))
+    if len(hidden_sizes) != 4:
+        raise ValueError(
+            "RT-DETR P2 requires a four-stage backbone with hidden_sizes, got "
+            f"{hidden_sizes!r}"
+        )
+
+    backbone_config.out_indices = list(P2_BACKBONE_OUT_INDICES)
+    config.encoder_in_channels = hidden_sizes
+    config.feat_strides = list(P2_FEATURE_STRIDES)
+    config.encode_proj_layers = [len(hidden_sizes) - 1]
+    config.decoder_in_channels = [config.encoder_hidden_dim] * len(hidden_sizes)
+    config.num_feature_levels = len(hidden_sizes)
+    config.use_p2 = True
+    return config
+
+
+def _copy_indexed_group(source, target, output, prefix, index_offset):
+    for key, value in source.items():
+        if not key.startswith(prefix):
+            continue
+        remainder = key[len(prefix):]
+        index_text, separator, suffix = remainder.partition(".")
+        if not separator or not index_text.isdigit():
+            continue
+        mapped_key = f"{prefix}{int(index_text) + index_offset}.{suffix}"
+        if mapped_key in target and target[mapped_key].shape == value.shape:
+            output[mapped_key] = value
+
+
+def _copy_group_index(source, target, output, prefix, source_index, target_index):
+    source_prefix = f"{prefix}{source_index}."
+    target_prefix = f"{prefix}{target_index}."
+    for key, value in source.items():
+        if not key.startswith(source_prefix):
+            continue
+        mapped_key = target_prefix + key[len(source_prefix):]
+        if mapped_key in target and target[mapped_key].shape == value.shape:
+            output[mapped_key] = value
+
+
+def _expand_deformable_attention_levels(source, target, output, config):
+    old_levels = 3
+    new_levels = int(config.num_feature_levels)
+    heads = int(config.decoder_attention_heads)
+    points = int(config.decoder_n_points)
+    for key, source_tensor in source.items():
+        if ".encoder_attn.sampling_offsets." in key:
+            coordinate_dim = 2
+        elif ".encoder_attn.attention_weights." in key:
+            coordinate_dim = None
+        else:
+            continue
+        target_tensor = target.get(key)
+        if target_tensor is None or source_tensor.ndim not in (1, 2):
+            continue
+        tail_shape = tuple(source_tensor.shape[1:])
+        if coordinate_dim is None:
+            expected_source = heads * old_levels * points
+            expected_target = heads * new_levels * points
+            if source_tensor.shape[0] != expected_source or target_tensor.shape[0] != expected_target:
+                continue
+            source_view = source_tensor.reshape(heads, old_levels, points, *tail_shape)
+            target_view = target_tensor.clone().reshape(heads, new_levels, points, *tail_shape)
+        else:
+            expected_source = heads * old_levels * points * coordinate_dim
+            expected_target = heads * new_levels * points * coordinate_dim
+            if source_tensor.shape[0] != expected_source or target_tensor.shape[0] != expected_target:
+                continue
+            source_view = source_tensor.reshape(
+                heads, old_levels, points, coordinate_dim, *tail_shape
+            )
+            target_view = target_tensor.clone().reshape(
+                heads, new_levels, points, coordinate_dim, *tail_shape
+            )
+
+        # Initialise P2 from the closest pretrained scale (old P3), then place
+        # the original P3--P5 tensors at their shifted levels 1--3.
+        target_view[:, 0].copy_(source_view[:, 0])
+        target_view[:, 1:].copy_(source_view)
+        output[key] = target_view.reshape_as(target_tensor)
+
+
+def build_p2_pretrained_state(source_state, target_state, config):
+    """Remap a three-level COCO checkpoint into the four-level P2 model.
+
+    Level-indexed tensors cannot be loaded by their unchanged numeric key:
+    adding P2 shifts the semantic meaning of P3--P5 by one position.
+    """
+    shifted_prefixes = (
+        "model.encoder_input_proj.",
+        "model.decoder_input_proj.",
+        "model.encoder.downsample_convs.",
+        "model.encoder.pan_blocks.",
+    )
+    output = {}
+    for key, value in source_state.items():
+        if key.startswith(shifted_prefixes):
+            continue
+        if (
+            ".encoder_attn.sampling_offsets." in key
+            or ".encoder_attn.attention_weights." in key
+        ):
+            continue
+        if key in target_state and target_state[key].shape == value.shape:
+            output[key] = value
+
+    for prefix in shifted_prefixes:
+        _copy_indexed_group(source_state, target_state, output, prefix, index_offset=1)
+
+    # New P2 decoder/PAN operations use the closest pretrained P3 operation.
+    for prefix in (
+        "model.decoder_input_proj.",
+        "model.encoder.downsample_convs.",
+        "model.encoder.pan_blocks.",
+    ):
+        _copy_group_index(source_state, target_state, output, prefix, 0, 0)
+
+    # The extra top-down P3->P2 operation is initialised from P4->P3.
+    for prefix in (
+        "model.encoder.lateral_convs.",
+        "model.encoder.fpn_blocks.",
+    ):
+        _copy_group_index(source_state, target_state, output, prefix, 1, 2)
+
+    # P2 has 256 input/output channels in the R50-vd backbone. Start its 1x1
+    # projection as an exact channel identity instead of a random remapping.
+    p2_projection_key = "model.encoder_input_proj.0.0.weight"
+    p2_projection = target_state.get(p2_projection_key)
+    if p2_projection is not None:
+        identity = torch.zeros_like(p2_projection)
+        diagonal = min(identity.shape[0], identity.shape[1])
+        indices = torch.arange(diagonal, device=identity.device)
+        identity[indices, indices, 0, 0] = 1.0
+        output[p2_projection_key] = identity
+
+    _expand_deformable_attention_levels(source_state, target_state, output, config)
+    return output
+
+
 def copy_matching_pretrained_label_heads(target, source, target_id2label):
     """Reuse checkpoint class rows whose semantic labels match the target.
 
@@ -345,6 +492,7 @@ class RTDetrFusionBackbone(nn.Module):
         self._adapt_ir_backbone()
         
         # Feature Alignment Modules - optional
+        self.use_p2 = bool(getattr(config, "use_p2", False))
         self.use_fam = use_fam
         self.freeze_fam = freeze_fam
         self.ir_dropout_rate = ir_dropout_rate
@@ -455,9 +603,19 @@ class RTDetrFusionBackbone(nn.Module):
 # 3. RT-DETR MODEL (NO forward override!)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0, fam_variant: str = "current_dcnv2"):
+    def __init__(
+        self,
+        config: RTDetrConfig,
+        use_fam: bool = False,
+        freeze_fam: bool = False,
+        ir_dropout_rate: float = 0.0,
+        spatial_jitter_std: float = 0.0,
+        fam_variant: str = "current_dcnv2",
+        use_p2: bool = False,
+    ):
         super().__init__(config)
         self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
+        self.use_p2 = use_p2
         self.post_init()
         # Hugging Face post_init may visit newly attached modules. Restore the
         # ablation's defining initialization after that global initialization.
@@ -472,7 +630,16 @@ class RTDetrFusionModel(RTDetrModel):
 # 4. OBJECT DETECTION WRAPPER
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0, fam_variant: str = "current_dcnv2"):
+    def __init__(
+        self,
+        config: RTDetrConfig,
+        use_fam: bool = False,
+        freeze_fam: bool = False,
+        ir_dropout_rate: float = 0.0,
+        spatial_jitter_std: float = 0.0,
+        fam_variant: str = "current_dcnv2",
+        use_p2: bool = False,
+    ):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
@@ -483,7 +650,15 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         saved_bbox_embed = self.bbox_embed
 
         # Replace the model
-        self.model = RTDetrFusionModel(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
+        self.model = RTDetrFusionModel(
+            config,
+            use_fam=use_fam,
+            freeze_fam=freeze_fam,
+            ir_dropout_rate=ir_dropout_rate,
+            spatial_jitter_std=spatial_jitter_std,
+            fam_variant=fam_variant,
+            use_p2=use_p2,
+        )
 
         # Restore heads in decoder
         self.model.decoder.class_embed = saved_class_embed
@@ -494,6 +669,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
         self.fam_variant = fam_variant
+        self.use_p2 = use_p2
 
     def load_state_dict(self, state_dict, strict=True):
         # Permissive loading (necessary for IR)
@@ -512,6 +688,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         spatial_jitter_std=0.0,
         fam_variant="current_dcnv2",
         reuse_pretrained_class_head=False,
+        use_p2=False,
     ):
         if reuse_pretrained_class_head:
             # Load the original label space so matching semantic rows (notably
@@ -531,12 +708,41 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         config.id2label = {int(index): label for index, label in id2label.items()}
         config.label2id = {label: int(index) for index, label in config.id2label.items()}
         config.num_channels = 4
-        instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
+        if use_p2:
+            configure_rtdetr_p2(config)
+        else:
+            config.use_p2 = False
+        instance = cls(
+            config,
+            use_fam=use_fam,
+            freeze_fam=freeze_fam,
+            ir_dropout_rate=ir_dropout_rate,
+            spatial_jitter_std=spatial_jitter_std,
+            fam_variant=fam_variant,
+            use_p2=use_p2,
+        )
 
-        # Load everything (decoder, encoder, etc.)
+        # Load everything (decoder, encoder, etc.). P2 changes the semantic
+        # level associated with several numeric module indices, so it requires
+        # an explicit remap rather than shape-only loading.
         base_state = base.state_dict()
-        if reuse_pretrained_class_head:
-            instance_state = instance.state_dict()
+        instance_state = instance.state_dict()
+        if use_p2:
+            compatible_state = build_p2_pretrained_state(
+                base_state,
+                instance_state,
+                config,
+            )
+            instance.load_state_dict(compatible_state)
+            print(
+                "P2 pretrained transfer: "
+                f"{len(compatible_state)} compatible tensors staged; RGB and "
+                "IR backbones are transferred separately; new P2/FAM tensors "
+                "keep their explicit initialization"
+            )
+            if reuse_pretrained_class_head:
+                copy_matching_pretrained_label_heads(instance, base, config.id2label)
+        elif reuse_pretrained_class_head:
             compatible_state = {
                 key: value
                 for key, value in base_state.items()

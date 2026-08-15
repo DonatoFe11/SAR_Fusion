@@ -77,11 +77,13 @@ training split and checkpoint rule differ.
 
 The corrected paired-modality evaluation, the train-derived validation, the
 fixed checkpoint rule and the RT-DETR + FAM development baseline are complete.
-The next controlled architecture experiment is RT-DETR + FAM + P2 at the
-existing input resolution. It should first run as one complete seed-40
-technical campaign under this exact split and selector. Only after checking
-memory, tensor shapes and its paired `best` result should it be expanded to
-five seeds. Higher input resolution and reliability-gated alignment remain
+RT-DETR + FAM + P2 at the existing input resolution is now implemented and
+documented in `notes/rtdetr_fam_p2_stage_a.md`. Its frozen configuration
+contains one complete seed-40 run under this exact split and selector. Local
+shape, pretrained-transfer and CUDA memory checks passed before launch. Its
+validation result, not MtErie, determines whether it is expanded to additional
+seeds according to the predeclared engineering triage. Higher input resolution
+and reliability-gated alignment remain
 later, separate ablations so their effects are not confounded with P2.
 
 ## Two-stage policy for future models
@@ -255,6 +257,10 @@ The thesis source is intentionally unchanged for now. The final revision must:
 
 - Definitive configuration:
   `parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml`
+- P2 Stage-A report: `notes/rtdetr_fam_p2_stage_a.md`
+- P2 seed-40 configuration:
+  `parameters/RTDETR/rtdetr_fam_p2_sequence_validation_seed40.yaml`
+- P2 regression tests: `tests/test_rtdetr_p2.py`
 - Retired pilot report: `notes/rtdetr_temporal_validation_protocol.md`
 - Retired split manifest:
   `parameters/RTDETR/rtdetr_temporal_validation_split.json`
