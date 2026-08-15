@@ -40,9 +40,10 @@ new setup improves absolute accuracy over the historical campaign. Historical
 FAM `latest` was approximately `0.3780 +/- 0.0439` mAP@50; its nominal value
 is above the new `best` mean, but the comparison is not controlled because the
 old run optimized all 4,019 paired frames whereas this protocol optimizes
-3,123 and reserves an entire 896-frame video for validation. New architectures
-must be compared against `0.3590 +/- 0.0416` under this same split and selector.
-The older result remains a separately labelled historical reference.
+3,123 and reserves an entire 896-frame video for validation. During development,
+new architectures must be compared against `0.3590 +/- 0.0416` under this same
+split and selector. After selection, the chosen architecture is retrained on all
+4,019 paired frames. The older result remains a historical reference.
 
 The five W&B runtimes range from 2 h 38 min 59 s to 2 h 47 min 34 s, with a
 mean of about 2 h 42 min per run and about 13 h 30 min in total. Ten training
@@ -75,13 +76,42 @@ training split and checkpoint rule differ.
 ## Current position in the experimental plan
 
 The corrected paired-modality evaluation, the train-derived validation, the
-fixed checkpoint rule and the replacement RT-DETR + FAM baseline are complete.
+fixed checkpoint rule and the RT-DETR + FAM development baseline are complete.
 The next controlled architecture experiment is RT-DETR + FAM + P2 at the
 existing input resolution. It should first run as one complete seed-40
 technical campaign under this exact split and selector. Only after checking
 memory, tensor shapes and its paired `best` result should it be expanded to
 five seeds. Higher input resolution and reliability-gated alignment remain
 later, separate ablations so their effects are not confounded with P2.
+
+## Two-stage policy for future models
+
+The whole-sequence split is a model-development instrument, not the final
+full-data training recipe.
+
+### Stage A: architecture development
+
+- Train on 3,123 frames and validate on the complete 896-frame FHL 0401/0402
+  sequence.
+- Always complete ten epochs and retain `best` using validation mAP@50.
+- Compare variants only under this common split and checkpoint rule.
+- Start P2 with one complete seed-40 technical run; expand only variants that
+  pass tensor-shape, memory and validation checks.
+- Keep P2, higher resolution, reliability gating and alignment as separate
+  ablations so their effects remain identifiable.
+
+### Stage B: final full-data retraining
+
+- Freeze the winning architecture and all hyperparameters before retraining.
+- Restore all 4,019 paired training frames; do not reserve FHL 0401/0402.
+- Train exactly ten epochs with the historical full-data recipe and evaluate
+  epoch-10 `latest`.
+- Use seeds 40--44 and compare only models trained under this same recipe.
+- Reuse historical FAM (`0.3780 +/- 0.0439`) only after confirming optimizer,
+  pretrained class head, augmentations, preprocessing, resolution and seed
+  handling are identical; otherwise retrain FAM alongside the candidate.
+- Consult MtErie for the candidate only after Stage A has frozen the model and
+  continue to label it as an internal development benchmark, not a fresh blind test.
 
 ## Decision
 
@@ -91,7 +121,7 @@ to retain the strongest checkpoint observed within those ten epochs. Both
 checkpoints are preserved:
 
 - `best`: highest validation `map_50`, requiring an improvement greater than
-  `0.001`; this is the predefined primary checkpoint for final evaluation;
+  `0.001`; this is the predefined primary checkpoint for Stage-A development;
 - `latest`: state after epoch 10; this is retained for a paired diagnostic of
   whether checkpoint selection helped.
 
@@ -150,8 +180,10 @@ benchmark. Nevertheless, it removes direct same-video temporal adjacency.
 
 The number of optimization frames, 3,123, is almost identical to the retired
 pilot's 3,125, keeping epoch runtime and optimization-step count comparable.
-All candidate architectures must use exactly the same folder split, seeds and
-checkpoint rule.
+All candidate architectures in Stage A must use exactly the same folder split,
+seeds and checkpoint rule. Stage-B results must instead share the full-data,
+fixed-ten-epoch `latest` recipe and must not be compared directly with Stage-A
+scores.
 
 ## Fixed training and checkpoint rule
 
@@ -161,15 +193,15 @@ checkpoint rule.
 4. Require an improvement strictly greater than `0.001`; a near-tie retains
    the earlier checkpoint.
 5. Save `latest` at epoch 10 regardless of validation behaviour.
-6. Use `best` as the primary final checkpoint and evaluate `latest` as a paired
-   diagnostic for every seed, not only for favourable cases.
+6. Use `best` as the primary Stage-A checkpoint and evaluate `latest` as a
+   paired diagnostic for every seed, not only for favourable cases.
 7. Do not inspect MtErie while deciding epochs, hyperparameters or candidates.
 
 Because the previous project already consulted MtErie repeatedly, it must
 still be described in the thesis as an internal development benchmark rather
 than a newly blinded test set.
 
-## Execution
+## Reproduction and launch history
 
 The configuration expands to five sequential runs, seeds 40--44:
 
@@ -179,7 +211,7 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml
 ```
 
-Before the full campaign, run only seed 40 as a technical and scientific pilot
+The completed campaign first ran seed 40 as a technical and scientific pilot
 of the replacement split:
 
 ```bash
@@ -189,9 +221,9 @@ python main.py experiment \
   --max-runs 1
 ```
 
-Unlike the earlier two-epoch smoke, this seed-40 run belongs to the campaign if
-it completes successfully: it uses the final split, all ten epochs and the
-frozen checkpoint rule. After verifying its artifacts, continue without
+Unlike the earlier two-epoch smoke, this seed-40 run belongs to the campaign:
+it completed with the frozen split, all ten epochs and the checkpoint rule.
+After verifying its artifacts, the remaining four seeds were launched without
 repeating it:
 
 ```bash
@@ -214,7 +246,10 @@ The thesis source is intentionally unchanged for now. The final revision must:
 - report both `best` and `latest` final results across all seeds;
 - state that FHL whole-sequence validation is internal and MtErie is a
   previously consulted development benchmark, not a fresh blind test;
-- compare new architectures only under this same replacement protocol.
+- distinguish Stage-A model selection from Stage-B full-data retraining;
+- compare architectures within the same stage only;
+- report the final full-data candidate against a configuration-matched
+  full-data FAM baseline using epoch-10 `latest`.
 
 ## Artifacts
 

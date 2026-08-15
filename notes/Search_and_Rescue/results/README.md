@@ -13,6 +13,11 @@ checkpoint sono valutati sui medesimi 708 frame VIS+IR MtErie con ground truth
 VIS. `best` è selezionato esclusivamente dalla validation FHL 0401/0402; MtErie
 è usato solo a posteriori e non modifica la selezione.
 
+Questa è la baseline di sviluppo per scegliere l'architettura. Il modello
+selezionato verrà poi ritrainato su tutti i 4.019 frame per dieci epoche e
+confrontato tramite `latest` con una baseline FAM full-data configurata allo
+stesso modo; i risultati delle due fasi non saranno confrontati direttamente.
+
 Il risultato primario `best` è `0.3590 +/- 0.0416` mAP@50, contro
 `0.2689 +/- 0.0317` per `latest`. Il delta appaiato è `+0.0901 +/- 0.0466`,
 positivo in 5/5 seed, IC95% `[+0.0323, +0.1479]`. Protocollo, limiti e
