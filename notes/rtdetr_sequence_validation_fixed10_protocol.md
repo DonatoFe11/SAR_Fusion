@@ -83,9 +83,12 @@ documented in `notes/rtdetr_fam_p2_stage_a.md`. Five complete seeds obtain
 the paired delta is `-0.0655`, negative in 5/5 seeds, with IC95%
 `[-0.1032, -0.0278]`. P2 is therefore not promoted to MtErie or Stage B. Since
 P2 required micro-batch two with accumulation while FAM used a direct batch of
-four, one matched seed-40 FAM control is pending before attributing the deficit
-specifically to the stride-4 architecture. Higher input resolution and
-reliability-gated alignment remain later, separate ablations.
+four, a matched seed-40 FAM control was run before attributing the deficit
+specifically to the stride-4 architecture. It completed with `0.1593`
+versus `0.1521` for direct-batch FAM and `0.1014` for P2. It rules out the
+micro-batch explanation under the predeclared seed-40 check, so P2 is closed
+without MtErie evaluation or Stage-B promotion. Reliability-aware fusion on
+the original P3--P5 baseline is the next separate ablation.
 
 ## Two-stage policy for future models
 

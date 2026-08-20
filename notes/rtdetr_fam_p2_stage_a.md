@@ -1,7 +1,7 @@
 # RT-DETR + FAM + P2: Stage-A ablation
 
-Status: five P2 seeds completed; P2 recipe underperformed FAM on validation;
-matched batch-2 FAM control pending
+Status: completed and closed; P2 underperformed FAM on five validation seeds,
+and the matched batch-2 FAM control ruled out the micro-batch explanation
 
 Defined: 2026-08-15
 
@@ -193,6 +193,30 @@ The decision is fixed before seeing that result:
 - an unexpected matched-FAM score more than `0.02` below P2 triggers a pipeline
   audit rather than model promotion.
 
+The matched control completed all ten epochs as W&B run `ci0ickvx`. Its selected
+epoch was 2 and its best validation mAP@50 was `0.1593`; epoch 10 obtained
+`0.1031`. For seed 40, the controlled comparison is therefore:
+
+| Configuration | Training batch recipe | Best validation mAP@50 |
+|---|---|---:|
+| FAM baseline | batch 4 | 0.1521 |
+| FAM matched control | batch 2, accumulation 2 | 0.1593 |
+| FAM + P2 | batch 2, accumulation 2 | 0.1014 |
+
+Matched FAM exceeds P2 by `+0.0579`, while differing from the original FAM
+baseline by only `+0.0072`. This passes the predeclared closure condition:
+smaller micro-batches do not explain the seed-40 P2 deficit. No additional
+matched-control seed is required. One seed cannot estimate every possible
+batch-by-architecture interaction, so the thesis should phrase this as a
+targeted confounder check rather than a five-seed batch-size study.
+
+## Stage-A decision
+
+P2 is closed as a negative ablation. It is not evaluated on MtErie, not promoted
+to full-data Stage B, and not used as the foundation of the next architecture.
+The next candidate should test reliability-aware fusion on the original P3--P5
+FAM baseline, keeping P2 absent so the effects remain identifiable.
+
 ## Launch order
 
 The operational probe is reproducible with:
@@ -243,6 +267,8 @@ are `lbrr41te`, `61wyomy4`, `aflizsb0` and `y4q7b3sz`; seed 40 is `k0uugy3n`.
   `parameters/RTDETR/rtdetr_fam_sequence_validation_batch2_control_seed40.yaml`
 - Five-seed validation table:
   `notes/Search_and_Rescue/results/rtdetr_fam_p2_stage_a_validation.csv`
+- Matched-control table:
+  `notes/Search_and_Rescue/results/rtdetr_fam_p2_batch2_control.csv`
 - Implementation: `sarfusion/models/rtdetr_fusion.py`,
   `sarfusion/models/detr.py` and `sarfusion/models/__init__.py`
 - Regression tests: `tests/test_rtdetr_p2.py`
