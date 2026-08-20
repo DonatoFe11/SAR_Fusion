@@ -1,7 +1,7 @@
 # RT-DETR + FAM + reliability gating: Stage-A ablation
 
-Status: implemented, regression-tested and verified by real runtime probe;
-complete seed-40 Stage-A training pending
+Status: seed 40 completed and passed the frozen expansion threshold; seeds
+41--44 pending
 
 Defined: 2026-08-20
 
@@ -78,6 +78,22 @@ This rule controls compute allocation. A scientific performance claim still
 requires five seeds. MtErie must not be consulted to decide whether the gate
 advances.
 
+## Seed-40 result and expansion decision
+
+The complete seed-40 run `h18ch26u` finished all ten epochs. Its selected
+checkpoint is epoch 2.
+
+| Seed-40 configuration | Best validation mAP@50 | Epoch-10 mAP@50 |
+|---|---:|---:|
+| FAM baseline | 0.1521 | 0.0397 |
+| FAM + reliability gate | **0.1662** | 0.1022 |
+
+The gate improves the primary validation score by `+0.0141`, exceeding the
+predeclared `+0.01` expansion threshold. Seeds 41--44 must therefore be run
+under the identical protocol. The epoch-10 decline is not used to alter the
+fixed ten-epoch budget; it reinforces the predefined use of `best` for Stage A.
+MtErie remains unconsulted.
+
 ## Verification
 
 Automated tests cover:
@@ -106,7 +122,7 @@ Its validation mAP is not a scientific result because the model received only
 
 ## Launch
 
-After committing the implementation, launch exactly one complete seed with:
+The completed seed 40 was launched with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -114,8 +130,17 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_seed40.yaml
 ```
 
-Do not run MtErie and do not launch seeds 41--44 until the seed-40 validation
-result has been checked against the frozen rule.
+After checking seed 40 against the frozen rule, launch only seeds 41--44 from
+the versioned five-seed grid with:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_five_seed.yaml \
+  --start-from-run 1
+```
+
+Do not run MtErie until all five validation results have been aggregated.
 
 ## Artifacts and later thesis changes
 
@@ -124,6 +149,8 @@ result has been checked against the frozen rule.
   `sarfusion/models/__init__.py`
 - Stage-A configuration:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_seed40.yaml`
+- Five-seed expansion grid:
+  `parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_five_seed.yaml`
 - Operational probe:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_runtime_probe.yaml`
 - Regression tests: `tests/test_rtdetr_reliability_gating.py`

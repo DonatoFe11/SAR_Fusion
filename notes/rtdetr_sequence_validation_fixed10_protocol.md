@@ -91,7 +91,9 @@ without MtErie evaluation or Stage-B promotion. Reliability-aware fusion on
 the original P3--P5 baseline is the next separate ablation. It is now
 implemented with exact neutral initialization and documented in
 `notes/rtdetr_fam_reliability_gate_stage_a.md`. A checkpoint-free real probe
-passed at batch four; the complete seed-40 validation run is pending.
+passed at batch four. Seed 40 then obtained `0.1662` best validation mAP@50
+versus `0.1521` for FAM, passing the frozen expansion threshold; seeds 41--44
+are pending, and MtErie remains unconsulted.
 
 ## Two-stage policy for future models
 
