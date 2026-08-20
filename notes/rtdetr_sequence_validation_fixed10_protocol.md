@@ -78,16 +78,14 @@ training split and checkpoint rule differ.
 The corrected paired-modality evaluation, the train-derived validation, the
 fixed checkpoint rule and the RT-DETR + FAM development baseline are complete.
 RT-DETR + FAM + P2 at the existing input resolution is now implemented and
-documented in `notes/rtdetr_fam_p2_stage_a.md`. Its frozen configuration
-contains one complete replacement seed-40 run under this exact split and
-selector. The initial launch was aborted and excluded after exposing repeated
-batch-12 CUDA-cache growth; the corrected lifecycle preserves validation batch
-12 and is documented in the P2 report. The real runtime probe completed
-all 75 validation batches in 3:18 without progressive degradation. The
-replacement validation result, not MtErie, determines whether P2 is expanded
-to additional seeds according to the predeclared engineering triage. Higher input
-resolution and reliability-gated alignment remain
-later, separate ablations so their effects are not confounded with P2.
+documented in `notes/rtdetr_fam_p2_stage_a.md`. Five complete seeds obtain
+`0.0991 +/- 0.0207` best validation mAP@50 versus `0.1646 +/- 0.0196` for FAM;
+the paired delta is `-0.0655`, negative in 5/5 seeds, with IC95%
+`[-0.1032, -0.0278]`. P2 is therefore not promoted to MtErie or Stage B. Since
+P2 required micro-batch two with accumulation while FAM used a direct batch of
+four, one matched seed-40 FAM control is pending before attributing the deficit
+specifically to the stride-4 architecture. Higher input resolution and
+reliability-gated alignment remain later, separate ablations.
 
 ## Two-stage policy for future models
 

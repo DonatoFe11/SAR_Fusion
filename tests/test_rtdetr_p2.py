@@ -31,6 +31,18 @@ P2_RUNTIME_PROBE_PATH = (
     / "RTDETR"
     / "rtdetr_fam_p2_runtime_probe.yaml"
 )
+FAM_BASELINE_PROTOCOL_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
+)
+FAM_BATCH2_CONTROL_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_sequence_validation_batch2_control_seed40.yaml"
+)
 
 
 def tiny_rtdetr_config():
@@ -282,6 +294,34 @@ class TestRTDetrP2(unittest.TestCase):
         self.assertEqual(
             params["dataset"]["val_folders"],
             full["parameters"]["dataset"]["val_folders"],
+        )
+
+    def test_batch2_control_is_fam_without_p2_under_the_p2_training_recipe(self):
+        control = load_yaml(FAM_BATCH2_CONTROL_PATH)
+        baseline = load_yaml(FAM_BASELINE_PROTOCOL_PATH)
+        p2 = load_yaml(P2_PROTOCOL_PATH)
+        params = control["parameters"]
+
+        self.assertEqual(params["seed"], [40])
+        self.assertEqual(params["train"]["max_epochs"], [10])
+        self.assertEqual(params["train"]["gradient_accumulation_steps"], [2])
+        self.assertEqual(params["train"]["eval_cuda_cache_interval"], [1])
+        self.assertEqual(params["dataloader"]["batch_size"], [2])
+        self.assertEqual(params["dataloader"]["evaluation_batch_size"], [12])
+        self.assertEqual(params["model"]["params"]["use_p2"], [False])
+        self.assertEqual(params["run_test"], [False])
+        self.assertEqual(
+            params["dataset"], baseline["parameters"]["dataset"]
+        )
+        self.assertEqual(
+            params["dataset"], p2["parameters"]["dataset"]
+        )
+
+        control_model = dict(params["model"]["params"])
+        control_model.pop("use_p2")
+        self.assertEqual(
+            control_model,
+            baseline["parameters"]["model"]["params"],
         )
 
 

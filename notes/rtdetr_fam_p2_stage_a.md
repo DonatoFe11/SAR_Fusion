@@ -1,7 +1,7 @@
 # RT-DETR + FAM + P2: Stage-A ablation
 
-Status: corrected and verified by real runtime probe; initial seed-40 launch
-aborted and excluded, replacement launch pending
+Status: five P2 seeds completed; P2 recipe underperformed FAM on validation;
+matched batch-2 FAM control pending
 
 Defined: 2026-08-15
 
@@ -9,9 +9,16 @@ Defined: 2026-08-15
 
 This ablation asks whether exposing a stride-4 feature level improves detection
 of tiny people without changing input resolution or the RGB--IR fusion rule.
-The control is the completed RT-DETR + FAM whole-sequence baseline. P2 is the
-only architectural variable; reliability gating, a new alignment module and
-higher input resolution are intentionally excluded.
+The intended control is the completed RT-DETR + FAM whole-sequence baseline.
+Reliability gating, a new alignment module and higher input resolution are
+intentionally excluded.
+
+P2 did not fit the 8 GB GPU with the baseline's direct batch of four, so its
+training used micro-batch two with two-step gradient accumulation. The effective
+batch and number of optimizer updates are preserved, but RT-DETR's hybrid
+encoder contains train-mode BatchNorm layers. Consequently, the completed
+comparison tests the full P2 training recipe; a matched FAM batch-2 control is
+required before the deficit can be attributed specifically to P2.
 
 ## Architecture
 
@@ -54,14 +61,15 @@ by the baseline, including the newly introduced P2 FAM.
 
 ## Frozen Stage-A training protocol
 
-The seed-40 run is a complete Stage-A experiment, not a shortened smoke test:
+Every retained P2 run is a complete Stage-A experiment, not a shortened smoke
+test:
 
 - train: FHL 0405/0406 plus Baker VIS/IR 1, 3,123 paired frames;
 - validation: complete FHL 0401/0402 video, 896 paired frames;
 - ten epochs exactly, without early stopping;
 - primary checkpoint: highest validation mAP@50 with `min_delta = 0.001`;
 - MtErie test disabled during training;
-- seed 40 only;
+- seeds 40--44;
 - batch size 2 and two-step gradient accumulation, preserving the baseline's
   effective batch size of 4 and approximately the same optimizer-step count;
 - validation batch size 12, exactly as in the baseline;
@@ -82,9 +90,11 @@ seed 40 (`0.1521` mAP@50):
 - P2 below `-0.01`: do not expand immediately; first inspect optimization,
   per-size metrics and the P2/FAM activations.
 
-This rule controls compute allocation, not the final scientific claim. Any
-performance claim requires the same five seeds for P2 and the baseline. MtErie
-must not be consulted to choose whether P2 advances.
+This rule controls compute allocation, not the final scientific claim. Although
+seed 40 fell below the stop threshold, seeds 41--44 were launched before the
+aggregate analysis and therefore constitute a documented deviation from the
+compute-triage rule. They are nevertheless complete runs under the same P2
+protocol and provide the required five-seed estimate. MtErie was not consulted.
 
 ## Initial launch, failure and correction
 
@@ -142,8 +152,46 @@ The corrected implementation now covers:
 - repeated batch-12 inference with the real mAP evaluator;
 - unit checks for gradient, evaluator-state and CUDA-cache cleanup.
 
-The real P2 graph contains 123,608,847 parameters. The replacement seed-40 run
-must start from scratch; resuming `vhusi1io` is forbidden.
+The real P2 graph contains 123,608,847 parameters. The replacement runs started
+from scratch; the aborted `vhusi1io` run is excluded.
+
+## Completed five-seed validation result
+
+All five retained runs completed ten epochs. The table compares the selected
+validation checkpoint against the already completed FAM baseline under the same
+whole-sequence split and checkpoint selector.
+
+| Seed | FAM best epoch | FAM best mAP@50 | P2 best epoch | P2 best mAP@50 | P2 latest mAP@50 | P2 - FAM |
+|---:|---:|---:|---:|---:|---:|---:|
+| 40 | 1 | 0.1521 | 5 | 0.1014 | 0.0649 | -0.0508 |
+| 41 | 4 | 0.1424 | 2 | 0.1226 | 0.0230 | -0.0197 |
+| 42 | 6 | 0.1655 | 2 | 0.0835 | 0.0592 | -0.0820 |
+| 43 | 1 | 0.1939 | 7 | 0.1145 | 0.0214 | -0.0794 |
+| 44 | 1 | 0.1689 | 1 | 0.0733 | 0.0416 | -0.0956 |
+
+FAM obtains `0.1646 +/- 0.0196`; P2 obtains `0.0991 +/- 0.0207`. The paired
+delta is `-0.0655 +/- 0.0304`, negative in 5/5 seeds, with a two-sided Student-t
+95% confidence interval of `[-0.1032, -0.0278]`. Thus the P2 recipe fails Stage
+A and must not be evaluated on MtErie or promoted to full-data Stage B.
+
+This is not yet a clean estimate of the P2 architectural effect because FAM
+used batch four while P2 used batch two plus accumulation. The frozen follow-up
+is one FAM seed-40 control with P2 disabled and the P2 batch/accumulation recipe:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_sequence_validation_batch2_control_seed40.yaml
+```
+
+The decision is fixed before seeing that result:
+
+- if matched FAM exceeds P2 seed 40 by more than `0.02` mAP@50, the substantial
+  deficit remains P2-specific and P2 is closed;
+- if matched FAM lies within `+/-0.02` of P2 seed 40, micro-batch effects are a
+  plausible explanation and a second matched control is required;
+- an unexpected matched-FAM score more than `0.02` below P2 triggers a pipeline
+  audit rather than model promotion.
 
 ## Launch order
 
@@ -173,7 +221,7 @@ The real probe `4d6r2p0f` passed all four conditions on 2026-08-15:
   VRAM after exit.
 
 The probe's mAP is not a performance result because it trained for only 20
-micro-batches. The replacement seed-40 campaign may now start from scratch:
+micro-batches. The retained seed-40 campaign was launched from scratch with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -181,9 +229,9 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_p2_sequence_validation_seed40.yaml
 ```
 
-The campaign YAML contains only seed 40, so this launches exactly one complete
-run. Do not resume `vhusi1io`, do not add `--max-runs 1`, and do not run a
-separate MtErie evaluation yet.
+The versioned campaign YAML contains seed 40. Seeds 41--44 were run from
+temporary copies that changed only the seed value. Their retained W&B run IDs
+are `lbrr41te`, `61wyomy4`, `aflizsb0` and `y4q7b3sz`; seed 40 is `k0uugy3n`.
 
 ## Artifacts and thesis changes to apply later
 
@@ -191,12 +239,16 @@ separate MtErie evaluation yet.
   `parameters/RTDETR/rtdetr_fam_p2_sequence_validation_seed40.yaml`
 - Operational probe configuration:
   `parameters/RTDETR/rtdetr_fam_p2_runtime_probe.yaml`
+- Matched batch-2 FAM control:
+  `parameters/RTDETR/rtdetr_fam_sequence_validation_batch2_control_seed40.yaml`
+- Five-seed validation table:
+  `notes/Search_and_Rescue/results/rtdetr_fam_p2_stage_a_validation.csv`
 - Implementation: `sarfusion/models/rtdetr_fusion.py`,
   `sarfusion/models/detr.py` and `sarfusion/models/__init__.py`
 - Regression tests: `tests/test_rtdetr_p2.py`
 
-The thesis source is intentionally unchanged. If P2 reaches the five-seed
-campaign, the methodology must document the stride-4 path, four-level FAM,
-checkpoint remapping and controlled Stage-A comparison. The evaluation must
-report P2 against the new FAM baseline under the identical split and selector,
-then keep the later full-data Stage-B comparison separate.
+The thesis source is intentionally unchanged. Its later revision should report
+P2 as a negative Stage-A ablation, including the five paired validation deltas
+and the matched-batch control outcome. It must not report the aborted run or the
+runtime probe as performance evidence, and must keep any later full-data Stage-B
+comparison separate.
