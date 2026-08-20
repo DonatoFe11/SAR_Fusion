@@ -222,6 +222,8 @@ def build_fusion_rt_detr(
     fam_variant="current_dcnv2",
     reuse_pretrained_class_head=False,
     use_p2=False,
+    use_reliability_gating=False,
+    reliability_gate_hidden_channels=16,
 ):
     return FusionRTDetr(
         threshold=threshold,
@@ -233,6 +235,8 @@ def build_fusion_rt_detr(
         fam_variant=fam_variant,
         reuse_pretrained_class_head=reuse_pretrained_class_head,
         use_p2=use_p2,
+        use_reliability_gating=use_reliability_gating,
+        reliability_gate_hidden_channels=reliability_gate_hidden_channels,
     )
 
 

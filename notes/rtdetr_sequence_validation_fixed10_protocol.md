@@ -88,7 +88,10 @@ specifically to the stride-4 architecture. It completed with `0.1593`
 versus `0.1521` for direct-batch FAM and `0.1014` for P2. It rules out the
 micro-batch explanation under the predeclared seed-40 check, so P2 is closed
 without MtErie evaluation or Stage-B promotion. Reliability-aware fusion on
-the original P3--P5 baseline is the next separate ablation.
+the original P3--P5 baseline is the next separate ablation. It is now
+implemented with exact neutral initialization and documented in
+`notes/rtdetr_fam_reliability_gate_stage_a.md`. A checkpoint-free real probe
+passed at batch four; the complete seed-40 validation run is pending.
 
 ## Two-stage policy for future models
 

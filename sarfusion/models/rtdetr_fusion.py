@@ -468,6 +468,120 @@ def build_feature_alignment_module(
     )
 
 
+class ReliabilityGatedFusion(nn.Module):
+    """Spatially modulate aligned RGB and IR features without changing FAM at init.
+
+    The predictor works on channel-compressed descriptors, so its parameter and
+    memory cost does not grow quadratically with the backbone width. Independent
+    weights allow one modality to be suppressed without forcing the other to be
+    amplified. The final convolution is zero-initialized and weights are
+    ``2 * sigmoid(logit)``, hence both weights are exactly one initially and the
+    first forward is the existing additive FAM fusion.
+    """
+
+    NUM_DESCRIPTORS = 7
+
+    def __init__(self, hidden_channels=16):
+        super().__init__()
+        if int(hidden_channels) < 1:
+            raise ValueError("reliability gate hidden_channels must be positive")
+        self.hidden_channels = int(hidden_channels)
+        self.descriptor_conv = nn.Conv2d(
+            self.NUM_DESCRIPTORS,
+            self.hidden_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        self.activation = nn.SiLU()
+        self.logit_conv = nn.Conv2d(
+            self.hidden_channels,
+            2,
+            kernel_size=1,
+        )
+        self.reset_neutral_parameters()
+
+    def reset_neutral_parameters(self):
+        nn.init.zeros_(self.logit_conv.weight)
+        nn.init.zeros_(self.logit_conv.bias)
+
+    @staticmethod
+    def _presence_map(presence, feature):
+        if presence is None:
+            return feature.new_ones((feature.shape[0], 1, 1, 1))
+        presence = presence.to(device=feature.device, dtype=feature.dtype)
+        if presence.ndim == 1:
+            presence = presence[:, None, None, None]
+        if presence.shape != (feature.shape[0], 1, 1, 1):
+            raise ValueError(
+                "modality presence must have shape [B] or [B, 1, 1, 1], "
+                f"got {tuple(presence.shape)}"
+            )
+        return presence
+
+    def compute_weights(
+        self,
+        rgb_feat,
+        ir_feat,
+        rgb_present=None,
+        ir_present=None,
+    ):
+        if rgb_feat.shape != ir_feat.shape:
+            raise ValueError(
+                "Reliability gating requires aligned feature shapes, got "
+                f"{tuple(rgb_feat.shape)} and {tuple(ir_feat.shape)}"
+            )
+
+        eps = torch.finfo(rgb_feat.dtype).eps
+        rgb_mean = rgb_feat.mean(dim=1, keepdim=True)
+        ir_mean = ir_feat.mean(dim=1, keepdim=True)
+        rgb_rms = rgb_feat.square().mean(dim=1, keepdim=True).add(eps).sqrt()
+        ir_rms = ir_feat.square().mean(dim=1, keepdim=True).add(eps).sqrt()
+        agreement = (
+            (rgb_feat * ir_feat).mean(dim=1, keepdim=True)
+            / (rgb_rms * ir_rms).clamp_min(eps)
+        ).clamp(-1.0, 1.0)
+
+        height, width = rgb_feat.shape[-2:]
+        rgb_presence = self._presence_map(rgb_present, rgb_feat).expand(
+            -1, -1, height, width
+        )
+        ir_presence = self._presence_map(ir_present, ir_feat).expand(
+            -1, -1, height, width
+        )
+        descriptors = torch.cat(
+            (
+                rgb_mean,
+                rgb_rms,
+                ir_mean,
+                ir_rms,
+                agreement,
+                rgb_presence,
+                ir_presence,
+            ),
+            dim=1,
+        )
+        logits = self.logit_conv(
+            self.activation(self.descriptor_conv(descriptors))
+        )
+        weights = 2.0 * torch.sigmoid(logits)
+        return weights[:, :1], weights[:, 1:]
+
+    def forward(
+        self,
+        rgb_feat,
+        ir_feat,
+        rgb_present=None,
+        ir_present=None,
+    ):
+        rgb_weight, ir_weight = self.compute_weights(
+            rgb_feat,
+            ir_feat,
+            rgb_present=rgb_present,
+            ir_present=ir_present,
+        )
+        return rgb_weight * rgb_feat + ir_weight * ir_feat
+
+
 # ============================================================
 # 2. FUSION BACKBONE (RT-DETR + FAM)
 #    - RGB and IR processed separately
@@ -476,8 +590,21 @@ def build_feature_alignment_module(
 #    - Geometry preserved
 # ============================================================
 class RTDetrFusionBackbone(nn.Module):
-    def __init__(self, config: RTDetrConfig, use_fam: bool = False, freeze_fam: bool = False, ir_dropout_rate: float = 0.0, spatial_jitter_std: float = 0.0, fam_variant: str = "current_dcnv2"):
+    def __init__(
+        self,
+        config: RTDetrConfig,
+        use_fam: bool = False,
+        freeze_fam: bool = False,
+        ir_dropout_rate: float = 0.0,
+        spatial_jitter_std: float = 0.0,
+        fam_variant: str = "current_dcnv2",
+        use_reliability_gating: bool = False,
+        reliability_gate_hidden_channels: int = 16,
+    ):
         super().__init__()
+
+        if use_reliability_gating and not use_fam:
+            raise ValueError("Reliability gating requires use_fam=True")
 
         # RGB backbone (standard)
         rgb_cfg = copy.deepcopy(config)
@@ -498,6 +625,10 @@ class RTDetrFusionBackbone(nn.Module):
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
         self.fam_variant = fam_variant
+        self.use_reliability_gating = use_reliability_gating
+        self.reliability_gate_hidden_channels = int(
+            reliability_gate_hidden_channels
+        )
         
         if self.ir_dropout_rate > 0.0:
             # Dropout2d azzera randomicamente interi canali della feature map (Spatial Dropout)
@@ -526,6 +657,18 @@ class RTDetrFusionBackbone(nn.Module):
             )
         else:
             self.fam_modules = None
+
+        if self.use_reliability_gating:
+            self.reliability_gates = nn.ModuleList(
+                [
+                    ReliabilityGatedFusion(
+                        hidden_channels=self.reliability_gate_hidden_channels
+                    )
+                    for _ in feature_channels
+                ]
+            )
+        else:
+            self.reliability_gates = None
 
     def _adapt_ir_backbone(self):
         """
@@ -558,6 +701,8 @@ class RTDetrFusionBackbone(nn.Module):
 
         # RGB + IR (4 channels)
         if c == 4:
+            rgb_present = pixel_values[:, :3].detach().ne(0).flatten(1).any(dim=1)
+            ir_present = pixel_values[:, 3:].detach().ne(0).flatten(1).any(dim=1)
             rgb_feats = self.rgb_backbone(pixel_values[:, :3], pixel_mask)
             ir_feats  = self.ir_backbone(pixel_values[:, 3:], pixel_mask)
 
@@ -566,6 +711,15 @@ class RTDetrFusionBackbone(nn.Module):
                 if len(self.fam_modules) != len(rgb_feats):
                     raise ValueError(
                         f"FAM levels mismatch: got {len(self.fam_modules)} modules for {len(rgb_feats)} feature levels"
+                    )
+                if (
+                    self.reliability_gates is not None
+                    and len(self.reliability_gates) != len(rgb_feats)
+                ):
+                    raise ValueError(
+                        "Reliability-gate levels mismatch: got "
+                        f"{len(self.reliability_gates)} modules for "
+                        f"{len(rgb_feats)} feature levels"
                     )
 
                 fused_feats = []
@@ -577,8 +731,17 @@ class RTDetrFusionBackbone(nn.Module):
                     if self.ir_dropout is not None:
                         i_aligned = self.ir_dropout(i_aligned)
                     
-                    # Additive fusion on aligned features
-                    fused_feats.append((r_feat + i_aligned, r_mask))
+                    if self.reliability_gates is not None:
+                        fused = self.reliability_gates[idx](
+                            r_feat,
+                            i_aligned,
+                            rgb_present=rgb_present,
+                            ir_present=ir_present,
+                        )
+                    else:
+                        fused = r_feat + i_aligned
+
+                    fused_feats.append((fused, r_mask))
 
                 return fused_feats
             
@@ -612,10 +775,22 @@ class RTDetrFusionModel(RTDetrModel):
         spatial_jitter_std: float = 0.0,
         fam_variant: str = "current_dcnv2",
         use_p2: bool = False,
+        use_reliability_gating: bool = False,
+        reliability_gate_hidden_channels: int = 16,
     ):
         super().__init__(config)
-        self.backbone = RTDetrFusionBackbone(config, use_fam=use_fam, freeze_fam=freeze_fam, ir_dropout_rate=ir_dropout_rate, spatial_jitter_std=spatial_jitter_std, fam_variant=fam_variant)
+        self.backbone = RTDetrFusionBackbone(
+            config,
+            use_fam=use_fam,
+            freeze_fam=freeze_fam,
+            ir_dropout_rate=ir_dropout_rate,
+            spatial_jitter_std=spatial_jitter_std,
+            fam_variant=fam_variant,
+            use_reliability_gating=use_reliability_gating,
+            reliability_gate_hidden_channels=reliability_gate_hidden_channels,
+        )
         self.use_p2 = use_p2
+        self.use_reliability_gating = use_reliability_gating
         self.post_init()
         # Hugging Face post_init may visit newly attached modules. Restore the
         # ablation's defining initialization after that global initialization.
@@ -624,6 +799,9 @@ class RTDetrFusionModel(RTDetrModel):
                 reset_identity = getattr(fam_module, "reset_identity_parameters", None)
                 if reset_identity is not None:
                     reset_identity()
+        if self.backbone.reliability_gates is not None:
+            for reliability_gate in self.backbone.reliability_gates:
+                reliability_gate.reset_neutral_parameters()
 
 
 # ============================================================
@@ -639,6 +817,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         spatial_jitter_std: float = 0.0,
         fam_variant: str = "current_dcnv2",
         use_p2: bool = False,
+        use_reliability_gating: bool = False,
+        reliability_gate_hidden_channels: int = 16,
     ):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
@@ -658,6 +838,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             spatial_jitter_std=spatial_jitter_std,
             fam_variant=fam_variant,
             use_p2=use_p2,
+            use_reliability_gating=use_reliability_gating,
+            reliability_gate_hidden_channels=reliability_gate_hidden_channels,
         )
 
         # Restore heads in decoder
@@ -670,6 +852,10 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         self.spatial_jitter_std = spatial_jitter_std
         self.fam_variant = fam_variant
         self.use_p2 = use_p2
+        self.use_reliability_gating = use_reliability_gating
+        self.reliability_gate_hidden_channels = int(
+            reliability_gate_hidden_channels
+        )
 
     def load_state_dict(self, state_dict, strict=True):
         # Permissive loading (necessary for IR)
@@ -689,6 +875,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         fam_variant="current_dcnv2",
         reuse_pretrained_class_head=False,
         use_p2=False,
+        use_reliability_gating=False,
+        reliability_gate_hidden_channels=16,
     ):
         if reuse_pretrained_class_head:
             # Load the original label space so matching semantic rows (notably
@@ -720,6 +908,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             spatial_jitter_std=spatial_jitter_std,
             fam_variant=fam_variant,
             use_p2=use_p2,
+            use_reliability_gating=use_reliability_gating,
+            reliability_gate_hidden_channels=reliability_gate_hidden_channels,
         )
 
         # Load everything (decoder, encoder, etc.). P2 changes the semantic
