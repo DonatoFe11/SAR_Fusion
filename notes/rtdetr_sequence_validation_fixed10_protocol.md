@@ -92,8 +92,12 @@ the original P3--P5 baseline is the next separate ablation. It is now
 implemented with exact neutral initialization and documented in
 `notes/rtdetr_fam_reliability_gate_stage_a.md`. A checkpoint-free real probe
 passed at batch four. Seed 40 then obtained `0.1662` best validation mAP@50
-versus `0.1521` for FAM, passing the frozen expansion threshold; seeds 41--44
-are pending, and MtErie remains unconsulted.
+versus `0.1521` for FAM, passing the frozen expansion threshold. Across five
+seeds, however, the paired mean gain is only `+0.0016`, with 3/5 wins and IC95%
+`[-0.0242, +0.0274]`. The gate is not promoted to MtErie or Stage B; a
+validation-only learned-weight audit found every weight within
+`[0.99794, 1.00200]`, with no meaningful response to missing modalities. This
+gate version is closed as an inconclusive performance and mechanistic null.
 
 ## Two-stage policy for future models
 

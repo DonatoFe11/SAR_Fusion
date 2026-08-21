@@ -1,7 +1,7 @@
 # RT-DETR + FAM + reliability gating: Stage-A ablation
 
-Status: seed 40 completed and passed the frozen expansion threshold; seeds
-41--44 pending
+Status: completed and closed; no supported mean improvement over FAM, and the
+learned gate remained functionally neutral
 
 Defined: 2026-08-20
 
@@ -94,6 +94,70 @@ under the identical protocol. The epoch-10 decline is not used to alter the
 fixed ten-epoch budget; it reinforces the predefined use of `best` for Stage A.
 MtErie remains unconsulted.
 
+## Completed five-seed result
+
+All five runs completed ten epochs and contain both `best` and `latest`
+checkpoints. The primary comparison uses the predeclared `best` selector.
+
+| Seed | FAM best | Gate best | Gate latest | Gate - FAM |
+|---:|---:|---:|---:|---:|
+| 40 | 0.1521 | 0.1662 | 0.1022 | +0.0141 |
+| 41 | 0.1424 | 0.1568 | 0.0884 | +0.0145 |
+| 42 | 0.1655 | 0.1794 | 0.1284 | +0.0140 |
+| 43 | 0.1939 | 0.1602 | 0.0786 | -0.0337 |
+| 44 | 0.1689 | 0.1681 | 0.0918 | -0.0008 |
+
+FAM obtains `0.1646 +/- 0.0196`; reliability gating obtains
+`0.1662 +/- 0.0087`. The paired delta is `+0.0016 +/- 0.0208`, positive in 3/5
+seeds, with a two-sided Student-t 95% confidence interval of
+`[-0.0242, +0.0274]`. The median paired delta is `+0.0140`.
+
+The five-seed experiment therefore does not support a mean performance
+improvement. The smaller observed standard deviation is potentially useful but
+is exploratory: five seeds are insufficient to claim a variance reduction, and
+the primary paired interval includes both meaningful harm and benefit. The gate
+is not promoted to MtErie or full-data Stage B on this evidence.
+
+Before closure, a validation-only audit was frozen to verify whether the learned
+weights actually departed from one and responded coherently to fusion, RGB-only
+and IR-only inputs. The audit diagnoses mechanism behavior; it cannot rescue
+the unsupported detection-performance claim.
+
+## Learned-weight audit
+
+The five `best` checkpoints were evaluated on all 896 validation pairs in three
+conditions: fusion, RGB-only and IR-only. The audit captured both modality
+weights at P3, P4 and P5 for every spatial position. All checkpoints loaded with
+zero missing and zero unexpected state-dict keys.
+
+The result is a mechanistic null:
+
+- global weight range across seeds, levels and modes: `0.99794`--`1.00200`;
+- largest mean absolute deviation from neutral weight 1: `0.00193`;
+- largest within-condition spatial standard deviation: `0.00013`;
+- fraction of weights below `0.9` or above `1.1`: zero in all 90 audit rows;
+- largest mean-weight span between fusion, RGB-only and IR-only: `0.00206`.
+
+The completed audit JSON has SHA-256
+`fb95e3a52b00438acf3175f53dac7afb81b5e33030c41fc9d720ef08293f6824`;
+the CSV contains one header plus 90 seed/mode/level/modality rows.
+
+The output heads did leave their exact zero initialization, but only enough to
+produce sub-percent, nearly spatially constant changes. The gate therefore did
+not learn substantive reliability modulation and did not react meaningfully to
+an absent modality. The small five-seed mean detection delta cannot be
+interpreted as evidence that reliability gating worked.
+
+## Stage-A decision
+
+This gate version is closed. It is not evaluated on MtErie and is not promoted
+to full-data Stage B. It remains useful as a negative ablation: neutral
+initialization protected the baseline, but the shared `2e-5` learning rate left
+the 3,174 new parameters too close to identity to test strong reliability
+adaptation. A future follow-up must be declared as a separate optimization
+ablation, for example a gate-specific learning rate, rather than being folded
+into this result post hoc.
+
 ## Verification
 
 Automated tests cover:
@@ -151,12 +215,23 @@ Do not run MtErie until all five validation results have been aggregated.
   `parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_seed40.yaml`
 - Five-seed expansion grid:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_five_seed.yaml`
+- Five-seed validation results:
+  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_stage_a_validation.csv`
+- Learned-weight audit protocol:
+  `parameters/RTDETR/rtdetr_fam_reliability_gate_weight_audit.yaml`
+- Learned-weight audit runner:
+  `scripts/run_rtdetr_fam_reliability_gate_weight_audit.py`
+- Learned-weight audit results:
+  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_weight_audit.json`
+  and `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_weight_audit.csv`
+- Audit regression tests:
+  `tests/test_rtdetr_reliability_gate_weight_audit.py`
 - Operational probe:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_runtime_probe.yaml`
 - Regression tests: `tests/test_rtdetr_reliability_gating.py`
 
-The thesis source is intentionally unchanged. If the gate reaches five seeds,
-the methodology should report its descriptors, neutral initialization,
-per-level spatial weights and controlled P3--P5 comparison. The evaluation
-should include both detection performance and a post-hoc audit showing whether
-the learned weights respond meaningfully to fusion, RGB-only and IR-only input.
+The thesis source is intentionally unchanged. The methodology should report the
+gate descriptors, neutral initialization and controlled P3--P5 comparison. The
+evaluation should report the inconclusive five-seed detection delta together
+with the mechanistic audit, explicitly stating that this version remained near
+identity and did not provide evidence of reliability-aware behavior.
