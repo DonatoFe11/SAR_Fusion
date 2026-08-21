@@ -1,7 +1,7 @@
 # RT-DETR + FAM + reliability gate LR10x: Stage-A optimization ablation
 
-Status: seed 40 passed the frozen performance and mechanism checks; seeds
-41--44 authorized and pending
+Status: completed and closed; gate activation increased, but the five-seed
+experiment provides no evidence of a detection improvement
 
 Defined: 2026-08-21, before observing the complete seed-40 result
 
@@ -120,6 +120,60 @@ the 18-row CSV has SHA-256
 Both predeclared checks pass, so seeds 41--44 are authorized under the identical
 protocol. MtErie remains unconsulted.
 
+## Completed five-seed result
+
+All five runs completed exactly ten epochs with the configured gate LR `2e-4`
+and contain both `best` and `latest` checkpoints. The primary comparison uses
+the predefined validation-selected `best` checkpoint.
+
+| Seed | FAM best | Shared-LR gate best | LR10x best | LR10x epoch | LR10x latest | LR10x - FAM |
+|---:|---:|---:|---:|---:|---:|---:|
+| 40 | 0.1521 | 0.1662 | **0.1747** | 1 | 0.0978 | +0.0226 |
+| 41 | 0.1424 | **0.1568** | 0.1431 | 9 | 0.1336 | +0.0008 |
+| 42 | 0.1655 | **0.1794** | 0.1771 | 2 | 0.1184 | +0.0116 |
+| 43 | **0.1939** | 0.1602 | 0.1329 | 1 | 0.0893 | -0.0610 |
+| 44 | **0.1689** | 0.1681 | 0.1453 | 4 | 0.0644 | -0.0236 |
+
+Across seeds, FAM obtains `0.1646 +/- 0.0196`, the shared-LR gate obtains
+`0.1662 +/- 0.0087`, and LR10x obtains `0.1546 +/- 0.0200` best validation
+mAP@50. Relative to FAM, the LR10x paired delta is
+`-0.0099 +/- 0.0333`, positive in 3/5 seeds, with a two-sided Student-t 95%
+confidence interval of `[-0.0512, +0.0314]`. Its median paired delta is
+`+0.0008`.
+
+Relative to the same gate trained at the shared LR, LR10x is
+`-0.0115 +/- 0.0147`, positive in only 1/5 seeds, with IC95%
+`[-0.0298, +0.0067]`. Thus increasing gate activation did not translate into a
+repeatable detection improvement and nominally reduced the mean score.
+
+LR10x `latest` obtains `0.1007 +/- 0.0267`. The paired `best - latest` gain is
+`+0.0539 +/- 0.0290`, positive in 5/5 seeds, with IC95%
+`[+0.0180, +0.0899]`. This supports the existing Stage-A checkpoint selector;
+it does not rescue the architecture comparison, which consistently uses
+`best` for every model.
+
+## Stage-A decision
+
+The LR10x optimization ablation is closed. It is not promoted to MtErie or
+full-data Stage B. The seed-40 audit already answered its intended mechanistic
+question: a dedicated LR can move the gate away from identity and make it
+respond to missing-modality indicators. The five-seed result answers the
+primary detection question without supporting an improvement. It does not
+prove that LR10x is intrinsically worse: the paired confidence interval
+contains both benefit and harm. A fifteen-pass five-seed weight audit cannot
+change the promotion decision and is therefore not run solely to search for a
+favourable secondary explanation.
+
+This is an informative negative result: insufficient gate optimization
+explains the neutral weights of the first version, but not its lack of a robust
+accuracy gain. Further tuning of this gate's LR on the same validation sequence
+would increase selection bias. Before another architectural experiment, its
+hypothesis must be frozen separately. The remaining defensible directions are
+a higher-resolution FAM control for the tiny-object hypothesis, or a
+reliability-conditioned alignment mechanism that is distinct from the already
+completed DCNv2, identity, grid-sample and bounded-offset FAM variants. Another
+post-hoc gate-LR value is excluded.
+
 ## Launch and post-run audit
 
 Launch the single complete scientific seed with:
@@ -148,6 +202,9 @@ python main.py experiment \
   --start-from-run 1
 ```
 
+This expansion completed on 2026-08-22. No further command from this section
+remains to be run.
+
 ## Artifacts and later thesis treatment
 
 - training implementation: `sarfusion/experiment/run.py`;
@@ -162,9 +219,15 @@ python main.py experiment \
 - seed-40 audit outputs:
   `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.json`
   and `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.csv`;
+- five-seed validation table:
+  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_stage_a_validation.csv`;
 - regression tests: `tests/test_rtdetr_reliability_gating.py` and
   `tests/test_rtdetr_reliability_gate_weight_audit.py`.
 
-The thesis source is intentionally unchanged. If reported, this belongs after
-the neutral-gate result as an optimization ablation. It must not be presented
-as a new architecture, because only a parameter-group learning rate changes.
+The thesis source is intentionally unchanged. This belongs after the
+neutral-gate result as an optimization ablation and must not be presented as a
+new architecture, because only a parameter-group learning rate changes. Its
+main value is the contrast between a successful mechanistic intervention and
+an unsupported detection benefit: stronger non-neutral gating is not by itself
+evidence of a better detector. The five-seed result, not seed 40, controls the
+conclusion.

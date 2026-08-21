@@ -1,5 +1,7 @@
+import csv
 import inspect
 from pathlib import Path
+import statistics
 import unittest
 
 import torch
@@ -61,6 +63,13 @@ GATE_LR10X_FIVE_SEED_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_reliability_gate_lr10x_sequence_validation_five_seed.yaml"
+)
+GATE_LR10X_RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_reliability_gate_lr10x_stage_a_validation.csv"
 )
 
 
@@ -377,6 +386,21 @@ class TestReliabilityGatedFusion(unittest.TestCase):
         campaign_without_seed.pop("seed")
         self.assertEqual(campaign_without_seed, pilot_without_seed)
         self.assertEqual(campaign["experiment"], pilot["experiment"])
+
+    def test_lr10x_five_seed_results_are_complete_and_do_not_beat_fam(self):
+        with GATE_LR10X_RESULTS_PATH.open(newline="", encoding="utf-8") as file:
+            rows = list(csv.DictReader(file))
+
+        self.assertEqual([int(row["seed"]) for row in rows], [40, 41, 42, 43, 44])
+        self.assertEqual(len({row["lr10x_run_id"] for row in rows}), 5)
+        lr10x = [float(row["lr10x_best_map50"]) for row in rows]
+        baseline = [float(row["baseline_best_map50"]) for row in rows]
+        deltas = [candidate - reference for candidate, reference in zip(lr10x, baseline)]
+
+        self.assertAlmostEqual(statistics.fmean(lr10x), 0.1546303600, places=9)
+        self.assertAlmostEqual(statistics.stdev(lr10x), 0.0199792631, places=9)
+        self.assertAlmostEqual(statistics.fmean(deltas), -0.0099322975, places=9)
+        self.assertEqual(sum(delta > 0 for delta in deltas), 3)
 
 
 if __name__ == "__main__":

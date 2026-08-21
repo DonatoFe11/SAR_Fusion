@@ -105,9 +105,18 @@ passed; one complete seed 40 and its predeclared validation-weight audit are the
 next screening step. Seed 40 subsequently obtained `0.1747` best validation
 mAP@50 and passed the three frozen mechanism thresholds: maximum absolute
 modulation `0.03776`, missing-RGB response `0.02046` and missing-IR response
-`0.01822`. Seeds 41--44 are therefore authorized under the unchanged LR10x
-protocol. MtErie and full-data Stage B remain disabled until the five-seed
-result is known.
+`0.01822`. Seeds 41--44 were therefore run under the unchanged LR10x protocol.
+Across all five seeds, LR10x obtains `0.1546 +/- 0.0200` versus
+`0.1646 +/- 0.0196` for FAM. The paired delta is `-0.0099 +/- 0.0333`, positive
+in 3/5 seeds, with IC95% `[-0.0512, +0.0314]`. Against the shared-LR gate it is
+`-0.0115` and wins only 1/5 seeds. LR10x is closed without MtErie or full-data
+Stage B: it activated the gate mechanistically but did not improve detection
+reliably. This is lack of evidence for improvement, not evidence of certain
+degradation: LR10x wins 3/5 pairs, but its two losses are larger and its paired
+IC95% includes both signs. The next candidate must be declared separately; the remaining
+directions are a higher-resolution FAM tiny-object control or a genuinely
+reliability-conditioned P3--P5 alignment mechanism, not another gate-LR search
+or a repeat of the alignment variants already evaluated historically.
 
 ## Two-stage policy for future models
 
