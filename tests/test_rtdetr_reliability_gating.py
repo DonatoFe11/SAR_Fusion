@@ -56,6 +56,12 @@ GATE_LR10X_PROBE_PATH = (
     / "RTDETR"
     / "rtdetr_fam_reliability_gate_lr10x_runtime_probe.yaml"
 )
+GATE_LR10X_FIVE_SEED_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_reliability_gate_lr10x_sequence_validation_five_seed.yaml"
+)
 
 
 def tiny_rtdetr_config():
@@ -359,6 +365,18 @@ class TestReliabilityGatedFusion(unittest.TestCase):
         self.assertIn("ExcludeFromCampaign", params["tracker"]["tags"][0])
         self.assertEqual(params["model"], full["parameters"]["model"])
         self.assertEqual(params["dataset"], full["parameters"]["dataset"])
+
+    def test_lr10x_expansion_changes_only_the_seed_grid(self):
+        pilot = load_yaml(GATE_LR10X_PROTOCOL_PATH)
+        campaign = load_yaml(GATE_LR10X_FIVE_SEED_PATH)
+
+        self.assertEqual(campaign["parameters"]["seed"], [40, 41, 42, 43, 44])
+        pilot_without_seed = dict(pilot["parameters"])
+        campaign_without_seed = dict(campaign["parameters"])
+        pilot_without_seed.pop("seed")
+        campaign_without_seed.pop("seed")
+        self.assertEqual(campaign_without_seed, pilot_without_seed)
+        self.assertEqual(campaign["experiment"], pilot["experiment"])
 
 
 if __name__ == "__main__":

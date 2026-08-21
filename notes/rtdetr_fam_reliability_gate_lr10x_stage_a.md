@@ -1,6 +1,7 @@
 # RT-DETR + FAM + reliability gate LR10x: Stage-A optimization ablation
 
-Status: implementation and real probe complete; scientific seed 40 pending
+Status: seed 40 passed the frozen performance and mechanism checks; seeds
+41--44 authorized and pending
 
 Defined: 2026-08-21, before observing the complete seed-40 result
 
@@ -80,6 +81,45 @@ The checkpoint-free W&B probe `8an9s9vz`, tagged `ExcludeFromCampaign`, passed:
 Its validation mAP@50 (`0.0967`) is not a scientific result because it saw only
 20 training batches.
 
+## Seed-40 result and expansion decision
+
+The complete seed-40 run `2d54ipjg` finished all ten epochs in approximately
+2 h 13 min. The configured and W&B-recorded learning rates are `2e-5` for
+backbone, FAM and detector groups and `2e-4` for the reliability gate.
+
+| Seed-40 configuration | Best validation mAP@50 | Selected epoch | Epoch-10 mAP@50 |
+|---|---:|---:|---:|
+| FAM baseline | 0.1521 | 1 | 0.0397 |
+| gate, shared LR `2e-5` | 0.1662 | 2 | 0.1022 |
+| gate, dedicated LR `2e-4` | **0.1747** | 1 | 0.0978 |
+
+LR10x is `+0.0226` above the FAM seed-40 reference, exceeding the frozen
+performance threshold of `0.1621`. Its best checkpoint was then audited on all
+896 validation pairs in fusion, RGB-only and IR-only conditions. It loaded with
+zero missing and zero unexpected state-dict keys.
+
+| Frozen mechanism check | Observed maximum | Required | Result |
+|---|---:|---:|---|
+| Mean absolute weight deviation from 1 | 0.03776 | >= 0.01 | pass |
+| RGB-weight response when RGB is absent | 0.02046 | >= 0.01 | pass |
+| IR-weight response when IR is absent | 0.01822 | >= 0.01 | pass |
+
+The largest missing-RGB response occurs at P3 between fusion and IR-only; the
+largest missing-IR response also occurs at P3 between fusion and RGB-only. The
+gate therefore moved materially farther from identity and reacted to both
+presence indicators, unlike the shared-LR version. The modulation is still
+mostly level-wise rather than strongly spatial: within-condition standard
+deviations remain at most `0.00426`. This is a mechanistic observation, not yet
+a multi-seed performance conclusion.
+
+The raw audit JSON has SHA-256
+`8d4af0b9c4914979085b94cf497dfe207a6912c5072a432f5d972ae4b8586034`;
+the 18-row CSV has SHA-256
+`34daa976b90e4f0c3542be23ccaac92d02f71c56349bb51bbcb10c33f0c3b023`.
+
+Both predeclared checks pass, so seeds 41--44 are authorized under the identical
+protocol. MtErie remains unconsulted.
+
 ## Launch and post-run audit
 
 Launch the single complete scientific seed with:
@@ -99,15 +139,29 @@ python scripts/run_rtdetr_fam_reliability_gate_weight_audit.py \
   --protocol parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.yaml
 ```
 
+The audit passed. Launch the remaining four seeds without repeating seed 40:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python main.py experiment \
+  --parameters parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_sequence_validation_five_seed.yaml \
+  --start-from-run 1
+```
+
 ## Artifacts and later thesis treatment
 
 - training implementation: `sarfusion/experiment/run.py`;
 - scientific configuration:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_sequence_validation_seed40.yaml`;
+- five-seed expansion:
+  `parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_sequence_validation_five_seed.yaml`;
 - runtime probe:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_runtime_probe.yaml`;
 - frozen seed-40 weight audit:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.yaml`;
+- seed-40 audit outputs:
+  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.json`
+  and `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.csv`;
 - regression tests: `tests/test_rtdetr_reliability_gating.py` and
   `tests/test_rtdetr_reliability_gate_weight_audit.py`.
 

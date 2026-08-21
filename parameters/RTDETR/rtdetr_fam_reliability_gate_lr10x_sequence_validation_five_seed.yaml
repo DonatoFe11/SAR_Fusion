@@ -1,0 +1,92 @@
+# Five-seed Stage-A expansion of the gate-LR10x optimization ablation. Seed 40
+# was completed under the identical single-seed protocol and passed both frozen
+# performance and mechanism checks. Use --start-from-run 1 for seeds 41--44.
+
+experiment:
+  name: RTDETR_FAM_ReliabilityGateLR10x_SequenceVal_Seed40
+  group: RTDETR_FAM_reliability_gate_lr10x_sequence_validation_v1
+  continue_with_errors: false
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: [40, 41, 42, 43, 44]
+  repetition: [0]
+  task: [detection]
+  run_test: [false]
+  test_checkpoint: [best]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, FAM, ReliabilityGate, GateLR10x, SequenceValidation, Fixed10, StageA]]
+
+  train:
+    max_epochs: [10]
+    run_validation: [true]
+    compute_validation_loss: [false]
+    val_frequency: [1]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    checkpoint_min_delta: [0.001]
+    compile: [false]
+    initial_lr: [0.00002]
+    reliability_gate_lr: [0.0002]
+    optimizer: [AdamW]
+    eval_cuda_cache_interval: [1]
+    watch_metric: [map_50]
+    greater_is_better: [true]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      use_p2: [false]
+      use_reliability_gating: [true]
+      reliability_gate_hidden_channels: [16]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    train_folders:
+      - - [210924_FHL_Enterprise_VIS_0405, 210924_FHL_Enterprise_IR_0406]
+        - [220109_Baker_Enterprise_VIS_1, 220109_Baker_Enterprise_IR_1]
+    val_folders:
+      - - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

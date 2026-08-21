@@ -102,7 +102,12 @@ A separate optimization ablation is now frozen in
 `notes/rtdetr_fam_reliability_gate_lr10x_stage_a.md`: it retains the same gate
 and raises only its learning rate from `2e-5` to `2e-4`. A real batch-4 probe
 passed; one complete seed 40 and its predeclared validation-weight audit are the
-next screening step. MtErie and full-data Stage B remain disabled.
+next screening step. Seed 40 subsequently obtained `0.1747` best validation
+mAP@50 and passed the three frozen mechanism thresholds: maximum absolute
+modulation `0.03776`, missing-RGB response `0.02046` and missing-IR response
+`0.01822`. Seeds 41--44 are therefore authorized under the unchanged LR10x
+protocol. MtErie and full-data Stage B remain disabled until the five-seed
+result is known.
 
 ## Two-stage policy for future models
 
