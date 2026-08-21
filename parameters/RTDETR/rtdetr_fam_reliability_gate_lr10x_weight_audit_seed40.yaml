@@ -1,0 +1,15 @@
+protocol_id: rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40_v1
+project: RTDETR_FAM_ReliabilityGateLR10x_SequenceVal_Seed40
+training_config: parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_sequence_validation_seed40.yaml
+seeds: [40]
+checkpoint: best
+split: val
+modes: [fusion, rgb, ir]
+level_labels: [P3, P4, P5]
+expected_validation_frames: 896
+expected_validation_batches: 75
+histogram_bins: 400
+low_weight_threshold: 0.9
+high_weight_threshold: 1.1
+output_json: notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.json
+output_csv: notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.csv

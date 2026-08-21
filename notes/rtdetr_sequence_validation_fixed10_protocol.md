@@ -98,6 +98,11 @@ seeds, however, the paired mean gain is only `+0.0016`, with 3/5 wins and IC95%
 validation-only learned-weight audit found every weight within
 `[0.99794, 1.00200]`, with no meaningful response to missing modalities. This
 gate version is closed as an inconclusive performance and mechanistic null.
+A separate optimization ablation is now frozen in
+`notes/rtdetr_fam_reliability_gate_lr10x_stage_a.md`: it retains the same gate
+and raises only its learning rate from `2e-5` to `2e-4`. A real batch-4 probe
+passed; one complete seed 40 and its predeclared validation-weight audit are the
+next screening step. MtErie and full-data Stage B remain disabled.
 
 ## Two-stage policy for future models
 

@@ -3,12 +3,14 @@ from pathlib import Path
 import unittest
 
 import torch
+from torch import nn
 from transformers.models.rt_detr.configuration_rt_detr import RTDetrConfig
 from transformers.models.rt_detr.configuration_rt_detr_resnet import (
     RTDetrResNetConfig,
 )
 
 from sarfusion.models import build_fusion_rt_detr
+from sarfusion.experiment.run import partition_optimizer_parameters
 from sarfusion.models.rtdetr_fusion import (
     RTDetrFusionBackbone,
     RTDetrFusionForObjectDetection,
@@ -41,6 +43,18 @@ GATE_FIVE_SEED_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_reliability_gate_sequence_validation_five_seed.yaml"
+)
+GATE_LR10X_PROTOCOL_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_reliability_gate_lr10x_sequence_validation_seed40.yaml"
+)
+GATE_LR10X_PROBE_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_reliability_gate_lr10x_runtime_probe.yaml"
 )
 
 
@@ -287,6 +301,64 @@ class TestReliabilityGatedFusion(unittest.TestCase):
         campaign_without_seed.pop("seed")
         self.assertEqual(campaign_without_seed, pilot_without_seed)
         self.assertEqual(campaign["experiment"], pilot["experiment"])
+
+    def test_optimizer_partition_isolates_reliability_gate_parameters(self):
+        model = nn.Module()
+        model.backbone = nn.Linear(2, 2)
+        model.ir_backbone = nn.Linear(2, 2)
+        model.class_embed = nn.Linear(2, 2)
+        model.reliability_gates = nn.ModuleList([nn.Linear(2, 2)])
+
+        groups = partition_optimizer_parameters(model.named_parameters())
+        parameter_ids = {
+            name: {id(parameter) for parameter in parameters}
+            for name, parameters in groups.items()
+        }
+        all_ids = set().union(*parameter_ids.values())
+
+        self.assertEqual(len(all_ids), len(list(model.parameters())))
+        self.assertTrue(parameter_ids["reliability_gate"])
+        self.assertTrue(parameter_ids["backbone"])
+        self.assertTrue(parameter_ids["new_modules"])
+        self.assertTrue(parameter_ids["head_and_dino"])
+        for first, first_ids in parameter_ids.items():
+            for second, second_ids in parameter_ids.items():
+                if first != second:
+                    self.assertTrue(first_ids.isdisjoint(second_ids))
+
+    def test_lr10x_protocol_changes_only_the_declared_gate_learning_rate(self):
+        original = load_yaml(GATE_PROTOCOL_PATH)
+        lr10x = load_yaml(GATE_LR10X_PROTOCOL_PATH)
+        original_params = original["parameters"]
+        lr10x_params = lr10x["parameters"]
+
+        self.assertEqual(lr10x_params["seed"], [40])
+        self.assertEqual(lr10x_params["train"]["initial_lr"], [0.00002])
+        self.assertEqual(
+            lr10x_params["train"]["reliability_gate_lr"], [0.0002]
+        )
+        self.assertEqual(lr10x_params["model"], original_params["model"])
+        self.assertEqual(lr10x_params["dataset"], original_params["dataset"])
+        self.assertEqual(
+            lr10x_params["dataloader"], original_params["dataloader"]
+        )
+
+        lr10x_train = dict(lr10x_params["train"])
+        lr10x_train.pop("reliability_gate_lr")
+        self.assertEqual(lr10x_train, original_params["train"])
+
+    def test_lr10x_probe_is_short_checkpoint_free_and_excluded(self):
+        probe = load_yaml(GATE_LR10X_PROBE_PATH)
+        full = load_yaml(GATE_LR10X_PROTOCOL_PATH)
+        params = probe["parameters"]
+
+        self.assertEqual(params["train"]["max_epochs"], [1])
+        self.assertEqual(params["train"]["max_steps_per_epoch"], [20])
+        self.assertEqual(params["train"]["save_checkpoints"], [False])
+        self.assertEqual(params["train"]["reliability_gate_lr"], [0.0002])
+        self.assertIn("ExcludeFromCampaign", params["tracker"]["tags"][0])
+        self.assertEqual(params["model"], full["parameters"]["model"])
+        self.assertEqual(params["dataset"], full["parameters"]["dataset"])
 
 
 if __name__ == "__main__":

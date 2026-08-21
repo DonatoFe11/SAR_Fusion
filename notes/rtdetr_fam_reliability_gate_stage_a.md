@@ -158,6 +158,9 @@ adaptation. A future follow-up must be declared as a separate optimization
 ablation, for example a gate-specific learning rate, rather than being folded
 into this result post hoc.
 
+That follow-up was frozen before execution as the separate LR10x Stage-A
+ablation documented in `notes/rtdetr_fam_reliability_gate_lr10x_stage_a.md`.
+
 ## Verification
 
 Automated tests cover:

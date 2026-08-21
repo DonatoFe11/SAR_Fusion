@@ -20,6 +20,12 @@ PROTOCOL_PATH = (
     / "RTDETR"
     / "rtdetr_fam_reliability_gate_weight_audit.yaml"
 )
+LR10X_PROTOCOL_PATH = (
+    REPO_ROOT
+    / "parameters"
+    / "RTDETR"
+    / "rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.yaml"
+)
 
 
 class TestReliabilityGateWeightAudit(unittest.TestCase):
@@ -28,6 +34,14 @@ class TestReliabilityGateWeightAudit(unittest.TestCase):
         validate_protocol(protocol)
         self.assertEqual(protocol["expected_validation_frames"], 896)
         self.assertEqual(protocol["expected_validation_batches"], 75)
+
+    def test_lr10x_protocol_is_frozen_to_seed40_best_validation(self):
+        protocol = load_yaml(LR10X_PROTOCOL_PATH)
+        validate_protocol(protocol)
+        self.assertEqual(protocol["seeds"], [40])
+        self.assertEqual(protocol["checkpoint"], "best")
+        self.assertEqual(protocol["split"], "val")
+        self.assertEqual(protocol["modes"], ["fusion", "rgb", "ir"])
 
     def test_modality_masks_preserve_the_requested_channels(self):
         pixels = torch.ones(2, 4, 3, 3)
@@ -70,6 +84,19 @@ class TestReliabilityGateWeightAudit(unittest.TestCase):
         self.assertAlmostEqual(summary["mean"], 1.0)
         self.assertAlmostEqual(summary["sample_std"], 2 ** 0.5 / 10)
         self.assertEqual(summary["seed_means"], {"40": 0.9, "41": 1.1})
+
+    def test_single_seed_summary_does_not_invent_a_standard_deviation(self):
+        rows = [
+            {
+                "seed": 40,
+                "mode": "fusion",
+                "level": 0,
+                "modality": "rgb",
+                "mean": 1.01,
+            }
+        ]
+        summary = summarize_across_seeds(rows)[0]
+        self.assertIsNone(summary["sample_std"])
 
 
 if __name__ == "__main__":

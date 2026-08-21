@@ -54,6 +54,36 @@ from copy import deepcopy
 logger = get_logger(__name__)
 
 
+HEAD_AND_DINO_PARAMETER_NAMES = (
+    "mixed_query_content",
+    "dn_label_embeddings",
+    "enc_output",
+    "pos_trans",
+    "bbox_embed",
+    "class_embed",
+)
+
+
+def partition_optimizer_parameters(named_parameters):
+    """Partition parameters once, keeping reliability gates out of backbone."""
+    groups = {
+        "backbone": [],
+        "new_modules": [],
+        "head_and_dino": [],
+        "reliability_gate": [],
+    }
+    for name, parameter in named_parameters:
+        if "reliability_gates" in name:
+            groups["reliability_gate"].append(parameter)
+        elif any(key in name for key in HEAD_AND_DINO_PARAMETER_NAMES):
+            groups["head_and_dino"].append(parameter)
+        elif any(key in name for key in ("ir_backbone", "channel_fusion")):
+            groups["new_modules"].append(parameter)
+        else:
+            groups["backbone"].append(parameter)
+    return groups
+
+
 class Run:
     def __init__(self):
         self.params = None
@@ -84,6 +114,7 @@ class Run:
         self._ended = False
         self.reproducibility = {}
         self.repro_trace = ReproducibilityTrace(None)
+        self.reliability_gate_optimizer_group_index = None
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -214,25 +245,28 @@ class Run:
         head_and_dino_lr = self.train_params.get(
             "dino_lr", self.train_params["initial_lr"]
         )
-        new_module_params = []
-        head_and_dino_params = []
-        backbone_params = []
-
-        head_and_dino_parameter_names = (
-            "mixed_query_content",
-            "dn_label_embeddings",
-            "enc_output",
-            "pos_trans",
-            "bbox_embed",
-            "class_embed",
+        parameter_groups = partition_optimizer_parameters(
+            self.model.named_parameters()
         )
-        for name, param in self.model.named_parameters():
-            if any(k in name for k in head_and_dino_parameter_names):
-                head_and_dino_params.append(param)
-            elif any(k in name for k in ["ir_backbone", "channel_fusion"]):
-                new_module_params.append(param)
-            else:
-                backbone_params.append(param)
+        backbone_params = parameter_groups["backbone"]
+        new_module_params = parameter_groups["new_modules"]
+        head_and_dino_params = parameter_groups["head_and_dino"]
+        reliability_gate_params = parameter_groups["reliability_gate"]
+        reliability_gate_lr = float(
+            self.train_params.get(
+                "reliability_gate_lr", self.train_params["initial_lr"]
+            )
+        )
+        if reliability_gate_lr <= 0:
+            raise ValueError("reliability_gate_lr must be positive")
+        if (
+            "reliability_gate_lr" in self.train_params
+            and not reliability_gate_params
+        ):
+            raise ValueError(
+                "reliability_gate_lr was configured but the model has no "
+                "reliability-gate parameters"
+            )
 
         frozen = sum(1 for _, p in self.model.named_parameters() if not p.requires_grad)
         logger.info(f"Frozen params: {frozen}")
@@ -255,19 +289,28 @@ class Run:
         logger.info(
             f"New module params: {len(new_module_params)}, "
             f"Detection-head/DINO-specific params: {len(head_and_dino_params)}, "
+            f"Reliability-gate params: {len(reliability_gate_params)}, "
             f"Backbone params: {len(backbone_params)}"
         )
         logger.info(
             f"LR for new modules: {self.train_params['initial_lr']}, "
             f"LR for detection-head/DINO-specific modules: {head_and_dino_lr}, "
+            f"LR for reliability gate: {reliability_gate_lr}, "
             f"LR for backbone: {backbone_lr}"
         )
 
-        self.optimizer = AdamW([
+        optimizer_groups = [
             {"params": backbone_params, "lr": backbone_lr},
             {"params": new_module_params, "lr": self.train_params["initial_lr"]},
             {"params": head_and_dino_params, "lr": head_and_dino_lr},
-        ])
+        ]
+        self.reliability_gate_optimizer_group_index = None
+        if reliability_gate_params:
+            self.reliability_gate_optimizer_group_index = len(optimizer_groups)
+            optimizer_groups.append(
+                {"params": reliability_gate_params, "lr": reliability_gate_lr}
+            )
+        self.optimizer = AdamW(optimizer_groups)
 
         scheduler_params = self.train_params.get("scheduler", None)
         if scheduler_params:
@@ -728,6 +771,13 @@ class Run:
             self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
             self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
             self.tracker.log_metric("lr_dino", self.optimizer.param_groups[2]["lr"])
+            if self.reliability_gate_optimizer_group_index is not None:
+                self.tracker.log_metric(
+                    "lr_reliability_gate",
+                    self.optimizer.param_groups[
+                        self.reliability_gate_optimizer_group_index
+                    ]["lr"],
+                )
 
             self._update_train_metrics(
                 result_dict,

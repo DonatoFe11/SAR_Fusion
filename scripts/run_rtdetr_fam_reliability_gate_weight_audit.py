@@ -34,6 +34,11 @@ DEFAULT_PROTOCOL = (
     / "rtdetr_fam_reliability_gate_weight_audit.yaml"
 )
 
+EXPECTED_SEEDS_BY_PROTOCOL = {
+    "rtdetr_fam_reliability_gate_weight_audit_v1": [40, 41, 42, 43, 44],
+    "rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40_v1": [40],
+}
+
 
 class WeightAccumulator:
     def __init__(self, bins, low_threshold, high_threshold):
@@ -170,7 +175,8 @@ class GateCapture:
 
 
 def validate_protocol(protocol):
-    if protocol.get("protocol_id") != "rtdetr_fam_reliability_gate_weight_audit_v1":
+    protocol_id = protocol.get("protocol_id")
+    if protocol_id not in EXPECTED_SEEDS_BY_PROTOCOL:
         raise ValueError("Unexpected reliability-gate audit protocol_id")
     if protocol.get("checkpoint") != "best":
         raise ValueError("The audit must use the predeclared best checkpoint")
@@ -178,8 +184,8 @@ def validate_protocol(protocol):
         raise ValueError("The gate audit is restricted to validation")
     if protocol.get("modes") != ["fusion", "rgb", "ir"]:
         raise ValueError("The audit modes must be fusion, rgb, ir in that order")
-    if protocol.get("seeds") != [40, 41, 42, 43, 44]:
-        raise ValueError("The audit requires the five completed seeds")
+    if protocol.get("seeds") != EXPECTED_SEEDS_BY_PROTOCOL[protocol_id]:
+        raise ValueError("Unexpected seeds for the selected audit protocol")
 
 
 def gate_parameter_rows(seed, gates, level_labels):
@@ -247,7 +253,7 @@ def summarize_across_seeds(rows):
                     str(seed): value for seed, value in sorted(seed_values)
                 },
                 "mean": statistics.fmean(values),
-                "sample_std": statistics.stdev(values),
+                "sample_std": statistics.stdev(values) if len(values) > 1 else None,
                 "min": min(values),
                 "max": max(values),
             }
@@ -306,8 +312,8 @@ def run(protocol_path, dry_run=False):
     )
     rows = []
     parameter_rows = []
-    for seed in protocol["seeds"]:
-        seed_config = load_run_config(config_path, run_index=seed - 40)
+    for run_index, seed in enumerate(protocol["seeds"]):
+        seed_config = load_run_config(config_path, run_index=run_index)
         model = load_fusion_model(
             seed_config["model"], checkpoints[seed], device
         )
