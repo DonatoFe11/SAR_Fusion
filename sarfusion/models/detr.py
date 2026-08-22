@@ -148,6 +148,8 @@ class FusionRTDetr(BaseDetr):
         use_p2=False,
         use_reliability_gating=False,
         reliability_gate_hidden_channels=16,
+        use_residual_alignment_gating=False,
+        residual_alignment_hidden_channels=16,
     ):
         super(FusionRTDetr, self).__init__(
             processor_class=RTDetrImageProcessor,
@@ -163,6 +165,8 @@ class FusionRTDetr(BaseDetr):
             use_p2=use_p2,
             use_reliability_gating=use_reliability_gating,
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
+            use_residual_alignment_gating=use_residual_alignment_gating,
+            residual_alignment_hidden_channels=residual_alignment_hidden_channels,
             reuse_pretrained_class_head=reuse_pretrained_class_head,
         )
         # Force the processor to accept 4 channels
@@ -176,6 +180,12 @@ class FusionRTDetr(BaseDetr):
         self.use_reliability_gating = use_reliability_gating
         self.reliability_gate_hidden_channels = int(
             reliability_gate_hidden_channels
+        )
+        self.use_residual_alignment_gating = bool(
+            use_residual_alignment_gating
+        )
+        self.residual_alignment_hidden_channels = int(
+            residual_alignment_hidden_channels
         )
         self.reuse_pretrained_class_head = reuse_pretrained_class_head
 

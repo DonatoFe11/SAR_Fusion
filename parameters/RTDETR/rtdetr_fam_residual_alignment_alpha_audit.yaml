@@ -1,0 +1,15 @@
+protocol_id: rtdetr_fam_residual_alignment_alpha_audit_v1
+project: RTDETR_FAM_RCRA_SequenceVal_FiveSeed
+training_config: parameters/RTDETR/rtdetr_fam_residual_alignment_sequence_validation_five_seed.yaml
+seeds: [40, 41, 42, 43, 44]
+checkpoint: best
+split: val
+modes: [fusion, rgb, ir]
+level_labels: [P3, P4, P5]
+expected_validation_frames: 896
+expected_validation_batches: 75
+histogram_bins: 400
+low_alpha_threshold: 0.9
+high_alpha_threshold: 1.1
+output_json: notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.json
+output_csv: notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.csv

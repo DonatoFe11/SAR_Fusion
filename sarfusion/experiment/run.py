@@ -65,15 +65,18 @@ HEAD_AND_DINO_PARAMETER_NAMES = (
 
 
 def partition_optimizer_parameters(named_parameters):
-    """Partition parameters once, keeping reliability gates out of backbone."""
+    """Partition parameters once, keeping experimental gates isolated."""
     groups = {
         "backbone": [],
         "new_modules": [],
         "head_and_dino": [],
         "reliability_gate": [],
+        "alignment_gate": [],
     }
     for name, parameter in named_parameters:
-        if "reliability_gates" in name:
+        if "alignment_gates" in name:
+            groups["alignment_gate"].append(parameter)
+        elif "reliability_gates" in name:
             groups["reliability_gate"].append(parameter)
         elif any(key in name for key in HEAD_AND_DINO_PARAMETER_NAMES):
             groups["head_and_dino"].append(parameter)
@@ -115,6 +118,7 @@ class Run:
         self.reproducibility = {}
         self.repro_trace = ReproducibilityTrace(None)
         self.reliability_gate_optimizer_group_index = None
+        self.alignment_gate_optimizer_group_index = None
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -252,6 +256,7 @@ class Run:
         new_module_params = parameter_groups["new_modules"]
         head_and_dino_params = parameter_groups["head_and_dino"]
         reliability_gate_params = parameter_groups["reliability_gate"]
+        alignment_gate_params = parameter_groups["alignment_gate"]
         reliability_gate_lr = float(
             self.train_params.get(
                 "reliability_gate_lr", self.train_params["initial_lr"]
@@ -266,6 +271,18 @@ class Run:
             raise ValueError(
                 "reliability_gate_lr was configured but the model has no "
                 "reliability-gate parameters"
+            )
+        alignment_gate_lr = float(
+            self.train_params.get(
+                "alignment_gate_lr", self.train_params["initial_lr"]
+            )
+        )
+        if alignment_gate_lr <= 0:
+            raise ValueError("alignment_gate_lr must be positive")
+        if "alignment_gate_lr" in self.train_params and not alignment_gate_params:
+            raise ValueError(
+                "alignment_gate_lr was configured but the model has no "
+                "residual-alignment-gate parameters"
             )
 
         frozen = sum(1 for _, p in self.model.named_parameters() if not p.requires_grad)
@@ -290,12 +307,14 @@ class Run:
             f"New module params: {len(new_module_params)}, "
             f"Detection-head/DINO-specific params: {len(head_and_dino_params)}, "
             f"Reliability-gate params: {len(reliability_gate_params)}, "
+            f"Residual-alignment-gate params: {len(alignment_gate_params)}, "
             f"Backbone params: {len(backbone_params)}"
         )
         logger.info(
             f"LR for new modules: {self.train_params['initial_lr']}, "
             f"LR for detection-head/DINO-specific modules: {head_and_dino_lr}, "
             f"LR for reliability gate: {reliability_gate_lr}, "
+            f"LR for residual alignment gate: {alignment_gate_lr}, "
             f"LR for backbone: {backbone_lr}"
         )
 
@@ -309,6 +328,12 @@ class Run:
             self.reliability_gate_optimizer_group_index = len(optimizer_groups)
             optimizer_groups.append(
                 {"params": reliability_gate_params, "lr": reliability_gate_lr}
+            )
+        self.alignment_gate_optimizer_group_index = None
+        if alignment_gate_params:
+            self.alignment_gate_optimizer_group_index = len(optimizer_groups)
+            optimizer_groups.append(
+                {"params": alignment_gate_params, "lr": alignment_gate_lr}
             )
         self.optimizer = AdamW(optimizer_groups)
 
@@ -776,6 +801,13 @@ class Run:
                     "lr_reliability_gate",
                     self.optimizer.param_groups[
                         self.reliability_gate_optimizer_group_index
+                    ]["lr"],
+                )
+            if self.alignment_gate_optimizer_group_index is not None:
+                self.tracker.log_metric(
+                    "lr_alignment_gate",
+                    self.optimizer.param_groups[
+                        self.alignment_gate_optimizer_group_index
                     ]["lr"],
                 )
 

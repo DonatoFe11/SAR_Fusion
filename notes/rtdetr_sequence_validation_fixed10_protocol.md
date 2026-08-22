@@ -124,6 +124,16 @@ obtains `0.1447 +/- 0.0151` best validation mAP@50 versus
 `[-0.0484, +0.0087]`. It fails both frozen promotion requirements and is closed
 without MtErie or Stage B. Global upsampling, P2 and the tested reliability
 gate variants therefore do not displace FAM under the common Stage-A protocol.
+The next alignment candidate is now frozen in
+`notes/rtdetr_fam_residual_alignment_stage_a.md`. Reliability-Conditioned
+Residual Alignment (RCRA) leaves P3--P5, 640x640 input and FAM unchanged, but
+predicts locally how much of `I_aligned - I_raw` to retain before additive
+fusion. It is exactly equivalent to FAM at initialization, uses a predeclared
+dedicated `2e-4` LR for its 5,283 new parameters, and keeps the previous
+post-fusion reliability gate disabled. Its checkpoint-free batch-4 runtime
+probe `1bbxubjk` passed all 20 training and 75 validation batches without OOM;
+the five-seed Stage-A campaign is the next operation and MtErie remains
+excluded.
 
 ## Two-stage policy for future models
 

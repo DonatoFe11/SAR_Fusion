@@ -582,6 +582,156 @@ class ReliabilityGatedFusion(nn.Module):
         return rgb_weight * rgb_feat + ir_weight * ir_feat
 
 
+class ReliabilityConditionedResidualAlignment(nn.Module):
+    """Select how much of FAM's IR alignment correction should be retained.
+
+    FAM always replaces the raw IR feature with its aligned counterpart. This
+    module instead predicts a spatial coefficient from compact RGB/raw-IR/
+    aligned-IR descriptors and applies it only to FAM's residual correction::
+
+        selected = aligned + (alpha - 1) * (aligned - raw)
+
+    ``alpha = 2 * sigmoid(logit)`` is in ``(0, 2)``. The last convolution is
+    zero-initialized, hence ``alpha == 1`` and ``selected == aligned`` exactly
+    at initialization. The candidate therefore starts from the existing FAM
+    baseline, can bypass a harmful correction as ``alpha`` approaches zero,
+    and can moderately amplify a useful correction above one.
+    """
+
+    NUM_DESCRIPTORS = 12
+
+    def __init__(self, hidden_channels=16):
+        super().__init__()
+        if int(hidden_channels) < 1:
+            raise ValueError(
+                "residual alignment gate hidden_channels must be positive"
+            )
+        self.hidden_channels = int(hidden_channels)
+        self.descriptor_conv = nn.Conv2d(
+            self.NUM_DESCRIPTORS,
+            self.hidden_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        self.activation = nn.SiLU()
+        self.logit_conv = nn.Conv2d(
+            self.hidden_channels,
+            1,
+            kernel_size=1,
+        )
+        self.reset_neutral_parameters()
+
+    def reset_neutral_parameters(self):
+        nn.init.zeros_(self.logit_conv.weight)
+        nn.init.zeros_(self.logit_conv.bias)
+
+    @staticmethod
+    def _presence_map(presence, feature):
+        if presence is None:
+            return feature.new_ones((feature.shape[0], 1, 1, 1))
+        presence = presence.to(device=feature.device, dtype=feature.dtype)
+        if presence.ndim == 1:
+            presence = presence[:, None, None, None]
+        if presence.shape != (feature.shape[0], 1, 1, 1):
+            raise ValueError(
+                "modality presence must have shape [B] or [B, 1, 1, 1], "
+                f"got {tuple(presence.shape)}"
+            )
+        return presence
+
+    @staticmethod
+    def _rms(feature, eps):
+        return feature.square().mean(dim=1, keepdim=True).add(eps).sqrt()
+
+    @staticmethod
+    def _cosine_agreement(first, second, first_rms, second_rms, eps):
+        return (
+            (first * second).mean(dim=1, keepdim=True)
+            / (first_rms * second_rms).clamp_min(eps)
+        ).clamp(-1.0, 1.0)
+
+    def compute_alpha(
+        self,
+        rgb_feat,
+        ir_raw,
+        ir_aligned,
+        rgb_present=None,
+        ir_present=None,
+    ):
+        if rgb_feat.shape != ir_raw.shape or ir_raw.shape != ir_aligned.shape:
+            raise ValueError(
+                "Residual alignment gating requires equal RGB, raw-IR and "
+                "aligned-IR shapes, got "
+                f"{tuple(rgb_feat.shape)}, {tuple(ir_raw.shape)} and "
+                f"{tuple(ir_aligned.shape)}"
+            )
+
+        eps = torch.finfo(rgb_feat.dtype).eps
+        rgb_mean = rgb_feat.mean(dim=1, keepdim=True)
+        raw_mean = ir_raw.mean(dim=1, keepdim=True)
+        aligned_mean = ir_aligned.mean(dim=1, keepdim=True)
+        rgb_rms = self._rms(rgb_feat, eps)
+        raw_rms = self._rms(ir_raw, eps)
+        aligned_rms = self._rms(ir_aligned, eps)
+        raw_agreement = self._cosine_agreement(
+            rgb_feat, ir_raw, rgb_rms, raw_rms, eps
+        )
+        aligned_agreement = self._cosine_agreement(
+            rgb_feat, ir_aligned, rgb_rms, aligned_rms, eps
+        )
+        alignment_residual_rms = self._rms(ir_aligned - ir_raw, eps)
+        agreement_gain = aligned_agreement - raw_agreement
+
+        height, width = rgb_feat.shape[-2:]
+        rgb_presence = self._presence_map(rgb_present, rgb_feat).expand(
+            -1, -1, height, width
+        )
+        ir_presence = self._presence_map(ir_present, ir_raw).expand(
+            -1, -1, height, width
+        )
+        descriptors = torch.cat(
+            (
+                rgb_mean,
+                rgb_rms,
+                raw_mean,
+                raw_rms,
+                aligned_mean,
+                aligned_rms,
+                raw_agreement,
+                aligned_agreement,
+                alignment_residual_rms,
+                agreement_gain,
+                rgb_presence,
+                ir_presence,
+            ),
+            dim=1,
+        )
+        logits = self.logit_conv(
+            self.activation(self.descriptor_conv(descriptors))
+        )
+        return 2.0 * torch.sigmoid(logits)
+
+    def forward(
+        self,
+        rgb_feat,
+        ir_raw,
+        ir_aligned,
+        rgb_present=None,
+        ir_present=None,
+    ):
+        alpha = self.compute_alpha(
+            rgb_feat,
+            ir_raw,
+            ir_aligned,
+            rgb_present=rgb_present,
+            ir_present=ir_present,
+        )
+        alignment_residual = ir_aligned - ir_raw
+        # This form, instead of raw + alpha * residual, makes alpha == 1 an
+        # exact pass-through of ir_aligned even in finite-precision arithmetic.
+        return ir_aligned + (alpha - 1.0) * alignment_residual
+
+
 # ============================================================
 # 2. FUSION BACKBONE (RT-DETR + FAM)
 #    - RGB and IR processed separately
@@ -600,11 +750,20 @@ class RTDetrFusionBackbone(nn.Module):
         fam_variant: str = "current_dcnv2",
         use_reliability_gating: bool = False,
         reliability_gate_hidden_channels: int = 16,
+        use_residual_alignment_gating: bool = False,
+        residual_alignment_hidden_channels: int = 16,
     ):
         super().__init__()
 
         if use_reliability_gating and not use_fam:
             raise ValueError("Reliability gating requires use_fam=True")
+        if use_residual_alignment_gating and not use_fam:
+            raise ValueError("Residual alignment gating requires use_fam=True")
+        if use_reliability_gating and use_residual_alignment_gating:
+            raise ValueError(
+                "Post-fusion reliability gating and residual alignment gating "
+                "must be evaluated as separate ablations"
+            )
 
         # RGB backbone (standard)
         rgb_cfg = copy.deepcopy(config)
@@ -628,6 +787,12 @@ class RTDetrFusionBackbone(nn.Module):
         self.use_reliability_gating = use_reliability_gating
         self.reliability_gate_hidden_channels = int(
             reliability_gate_hidden_channels
+        )
+        self.use_residual_alignment_gating = bool(
+            use_residual_alignment_gating
+        )
+        self.residual_alignment_hidden_channels = int(
+            residual_alignment_hidden_channels
         )
         
         if self.ir_dropout_rate > 0.0:
@@ -669,6 +834,18 @@ class RTDetrFusionBackbone(nn.Module):
             )
         else:
             self.reliability_gates = None
+
+        if self.use_residual_alignment_gating:
+            self.alignment_gates = nn.ModuleList(
+                [
+                    ReliabilityConditionedResidualAlignment(
+                        hidden_channels=self.residual_alignment_hidden_channels
+                    )
+                    for _ in feature_channels
+                ]
+            )
+        else:
+            self.alignment_gates = None
 
     def _adapt_ir_backbone(self):
         """
@@ -721,11 +898,29 @@ class RTDetrFusionBackbone(nn.Module):
                         f"{len(self.reliability_gates)} modules for "
                         f"{len(rgb_feats)} feature levels"
                     )
+                if (
+                    self.alignment_gates is not None
+                    and len(self.alignment_gates) != len(rgb_feats)
+                ):
+                    raise ValueError(
+                        "Residual-alignment-gate levels mismatch: got "
+                        f"{len(self.alignment_gates)} modules for "
+                        f"{len(rgb_feats)} feature levels"
+                    )
 
                 fused_feats = []
                 for idx, ((r_feat, r_mask), (i_feat, _)) in enumerate(zip(rgb_feats, ir_feats)):
                     # Apply FAM to align IR to RGB
                     i_aligned = self.fam_modules[idx](r_feat, i_feat)
+
+                    if self.alignment_gates is not None:
+                        i_aligned = self.alignment_gates[idx](
+                            r_feat,
+                            i_feat,
+                            i_aligned,
+                            rgb_present=rgb_present,
+                            ir_present=ir_present,
+                        )
                     
                     # Apply Spatial Dropout to IR if active
                     if self.ir_dropout is not None:
@@ -777,6 +972,8 @@ class RTDetrFusionModel(RTDetrModel):
         use_p2: bool = False,
         use_reliability_gating: bool = False,
         reliability_gate_hidden_channels: int = 16,
+        use_residual_alignment_gating: bool = False,
+        residual_alignment_hidden_channels: int = 16,
     ):
         super().__init__(config)
         self.backbone = RTDetrFusionBackbone(
@@ -788,9 +985,12 @@ class RTDetrFusionModel(RTDetrModel):
             fam_variant=fam_variant,
             use_reliability_gating=use_reliability_gating,
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
+            use_residual_alignment_gating=use_residual_alignment_gating,
+            residual_alignment_hidden_channels=residual_alignment_hidden_channels,
         )
         self.use_p2 = use_p2
         self.use_reliability_gating = use_reliability_gating
+        self.use_residual_alignment_gating = use_residual_alignment_gating
         self.post_init()
         # Hugging Face post_init may visit newly attached modules. Restore the
         # ablation's defining initialization after that global initialization.
@@ -802,6 +1002,9 @@ class RTDetrFusionModel(RTDetrModel):
         if self.backbone.reliability_gates is not None:
             for reliability_gate in self.backbone.reliability_gates:
                 reliability_gate.reset_neutral_parameters()
+        if self.backbone.alignment_gates is not None:
+            for alignment_gate in self.backbone.alignment_gates:
+                alignment_gate.reset_neutral_parameters()
 
 
 # ============================================================
@@ -819,6 +1022,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         use_p2: bool = False,
         use_reliability_gating: bool = False,
         reliability_gate_hidden_channels: int = 16,
+        use_residual_alignment_gating: bool = False,
+        residual_alignment_hidden_channels: int = 16,
     ):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
@@ -840,6 +1045,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             use_p2=use_p2,
             use_reliability_gating=use_reliability_gating,
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
+            use_residual_alignment_gating=use_residual_alignment_gating,
+            residual_alignment_hidden_channels=residual_alignment_hidden_channels,
         )
 
         # Restore heads in decoder
@@ -855,6 +1062,12 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         self.use_reliability_gating = use_reliability_gating
         self.reliability_gate_hidden_channels = int(
             reliability_gate_hidden_channels
+        )
+        self.use_residual_alignment_gating = bool(
+            use_residual_alignment_gating
+        )
+        self.residual_alignment_hidden_channels = int(
+            residual_alignment_hidden_channels
         )
 
     def load_state_dict(self, state_dict, strict=True):
@@ -877,6 +1090,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         use_p2=False,
         use_reliability_gating=False,
         reliability_gate_hidden_channels=16,
+        use_residual_alignment_gating=False,
+        residual_alignment_hidden_channels=16,
     ):
         if reuse_pretrained_class_head:
             # Load the original label space so matching semantic rows (notably
@@ -910,6 +1125,8 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             use_p2=use_p2,
             use_reliability_gating=use_reliability_gating,
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
+            use_residual_alignment_gating=use_residual_alignment_gating,
+            residual_alignment_hidden_channels=residual_alignment_hidden_channels,
         )
 
         # Load everything (decoder, encoder, etc.). P2 changes the semantic
