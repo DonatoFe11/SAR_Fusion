@@ -1,3 +1,5 @@
+import csv
+import statistics
 import unittest
 from pathlib import Path
 
@@ -23,6 +25,13 @@ PROBE_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_800_runtime_probe.yaml"
+)
+RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_800_stage_a_validation.csv"
 )
 
 
@@ -67,6 +76,20 @@ class TestRTDetrFAMHighResolution(unittest.TestCase):
         self.assertEqual(probe["model"], campaign["model"])
         self.assertEqual(probe["dataset"], campaign["dataset"])
         self.assertEqual(probe["dataloader"], campaign["dataloader"])
+
+    def test_five_seed_results_are_complete_and_fail_promotion_rule(self):
+        with RESULTS_PATH.open(newline="", encoding="utf-8") as file:
+            rows = list(csv.DictReader(file))
+
+        self.assertEqual([int(row["seed"]) for row in rows], [40, 41, 42, 43, 44])
+        self.assertEqual(len({row["highres_run_id"] for row in rows}), 5)
+        highres = [float(row["highres_best_map50"]) for row in rows]
+        deltas = [float(row["highres_minus_baseline"]) for row in rows]
+
+        self.assertAlmostEqual(statistics.fmean(highres), 0.1446889848, places=9)
+        self.assertAlmostEqual(statistics.stdev(highres), 0.0151117409, places=9)
+        self.assertAlmostEqual(statistics.fmean(deltas), -0.0198736727, places=9)
+        self.assertEqual(sum(delta > 0 for delta in deltas), 1)
 
 
 if __name__ == "__main__":

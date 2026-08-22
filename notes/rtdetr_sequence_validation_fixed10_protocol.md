@@ -117,6 +117,13 @@ IC95% includes both signs. The next candidate must be declared separately; the r
 directions are a higher-resolution FAM tiny-object control or a genuinely
 reliability-conditioned P3--P5 alignment mechanism, not another gate-LR search
 or a repeat of the alignment variants already evaluated historically.
+The 800x800 FAM control was subsequently completed over all five seeds. It
+obtains `0.1447 +/- 0.0151` best validation mAP@50 versus
+`0.1646 +/- 0.0196` at 640x640; the paired delta is
+`-0.0199 +/- 0.0230`, positive in only 1/5 seeds, with IC95%
+`[-0.0484, +0.0087]`. It fails both frozen promotion requirements and is closed
+without MtErie or Stage B. Global upsampling, P2 and the tested reliability
+gate variants therefore do not displace FAM under the common Stage-A protocol.
 
 ## Two-stage policy for future models
 
