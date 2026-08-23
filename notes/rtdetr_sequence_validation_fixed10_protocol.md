@@ -132,8 +132,15 @@ fusion. It is exactly equivalent to FAM at initialization, uses a predeclared
 dedicated `2e-4` LR for its 5,283 new parameters, and keeps the previous
 post-fusion reliability gate disabled. Its checkpoint-free batch-4 runtime
 probe `1bbxubjk` passed all 20 training and 75 validation batches without OOM;
-the five-seed Stage-A campaign is the next operation and MtErie remains
-excluded.
+the five-seed Stage-A campaign then obtained `0.1825 +/- 0.0257` versus
+`0.1646 +/- 0.0196` for FAM. The paired gain is `+0.0179 +/- 0.0427`, positive
+in 4/5 seeds, with IC95% `[-0.0350, +0.0709]`: both frozen engineering
+thresholds pass, although the interval does not establish statistical
+superiority. The five-checkpoint alpha audit also passes both mechanism rules;
+RCRA mainly suppresses the FAM residual at P3/P4 and reacts to either missing
+modality in 5/5 seeds. Before final full-data training, a per-level scalar
+residual control should distinguish local reliability conditioning from simple
+FAM-level calibration. MtErie remains excluded.
 
 ## Two-stage policy for future models
 

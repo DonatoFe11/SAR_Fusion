@@ -1,7 +1,7 @@
 # RT-DETR + FAM + Reliability-Conditioned Residual Alignment: Stage A
 
-Status: implemented and frozen; runtime probe passed, scientific campaign not
-yet trained
+Status: completed; passes the frozen Stage-A promotion rule and the independent
+mechanism audit
 
 Defined: 2026-08-22
 
@@ -168,7 +168,7 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_residual_alignment_runtime_probe.yaml
 ```
 
-The probe passed. Launch the complete five-seed campaign with:
+The probe passed. The complete five-seed campaign was launched with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -176,7 +176,8 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_residual_alignment_sequence_validation_five_seed.yaml
 ```
 
-After all five `best` checkpoints exist, audit alpha without consulting MtErie:
+After all five `best` checkpoints existed, alpha was audited without consulting
+MtErie:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -184,12 +185,102 @@ python scripts/run_rtdetr_fam_residual_alignment_alpha_audit.py \
   --protocol parameters/RTDETR/rtdetr_fam_residual_alignment_alpha_audit.yaml
 ```
 
-No probe command remains to be run.
+Both commands completed. No command in this section remains to be run.
 
-## Results placeholder
+## Completed five-seed performance result
 
-No performance or mechanism result exists at definition time. Populate this
-section only from the five complete scientific runs and the frozen audit.
+All five scientific runs completed exactly ten epochs (`7,810` optimizer
+steps), recorded `train/lr_alignment_gate = 2e-4`, and contain both `best` and
+`latest` checkpoints. The primary comparison uses the predefined
+validation-selected `best` checkpoint.
+
+| Seed | FAM best | RCRA best | RCRA epoch | RCRA latest | RCRA - FAM |
+|---:|---:|---:|---:|---:|---:|
+| 40 | 0.1521 | **0.1692** | 5 | 0.1177 | +0.0171 |
+| 41 | 0.1424 | **0.2243** | 1 | 0.0422 | +0.0820 |
+| 42 | 0.1655 | **0.1848** | 5 | 0.1210 | +0.0193 |
+| 43 | **0.1939** | 0.1562 | 1 | 0.1006 | -0.0377 |
+| 44 | 0.1689 | **0.1778** | 1 | 0.1029 | +0.0089 |
+
+FAM obtains `0.1646 +/- 0.0196`; RCRA obtains `0.1825 +/- 0.0257` best
+validation mAP@50. The paired RCRA-minus-FAM delta is
+`+0.0179 +/- 0.0427`, positive in 4/5 seeds, with median `+0.0171` and a
+two-sided Student-t 95% confidence interval of `[-0.0350, +0.0709]`.
+
+The frozen promotion rule required a mean gain of at least `+0.01` and at least
+4/5 wins. RCRA reaches `+0.0179` and exactly 4/5, so both requirements pass.
+The confidence interval nevertheless includes both signs because five seeds
+are few and seed-to-seed variance is substantial. The correct conclusion is
+that RCRA is the first candidate to pass the predeclared engineering rule, not
+that statistical superiority has been established.
+
+RCRA `latest` obtains `0.0969 +/- 0.0318`. The paired `best - latest` gain is
+`+0.0856 +/- 0.0547`, positive in 5/5 seeds, with IC95%
+`[+0.0177, +0.1535]`. This again supports validation-based checkpoint selection
+in Stage A and shows why the epoch-10 result cannot replace `best` in this
+comparison.
+
+## Completed alpha-mechanism audit
+
+Every `best` checkpoint loaded with zero missing and zero unexpected keys. The
+audit evaluated all 896 FHL validation pairs in fusion, RGB-only and IR-only
+modes, without consulting MtErie.
+
+| Seed | P3 mean / MAD | P4 mean / MAD | P5 mean / MAD | max response: RGB absent | max response: IR absent |
+|---:|---:|---:|---:|---:|---:|
+| 40 | 0.9762 / 0.0299 | 0.9315 / 0.0685 | 0.9849 / 0.0151 | 0.4401 | 0.0822 |
+| 41 | 0.9177 / 0.0823 | 0.9077 / 0.0923 | 0.9686 / 0.0314 | 0.1899 | 0.0704 |
+| 42 | 0.9937 / 0.0310 | 0.7876 / 0.2124 | 0.9982 / 0.0018 | 0.4820 | 0.0954 |
+| 43 | 0.9318 / 0.0682 | 0.9527 / 0.0473 | 0.9957 / 0.0043 | 0.2231 | 0.0788 |
+| 44 | 0.9151 / 0.0849 | 0.9600 / 0.0400 | 0.9961 / 0.0039 | 0.1478 | 0.0892 |
+
+`MAD` is the spatial mean of `|alpha - 1|` in fusion mode. Across seeds, the
+mean fusion alpha is `0.9469` at P3, `0.9079` at P4 and `0.9887` at P5; mean
+MAD is respectively `0.0593`, `0.0921` and `0.0113`. Thus the learned behavior
+mainly suppresses part of the FAM correction at P3/P4 and leaves P5 close to
+the original FAM. It is not a uniform return to raw IR: P3 retains meaningful
+spatial variation (mean within-condition standard deviation `0.0260`), while
+P4 and especially P5 act more like level-wise calibration.
+
+When RGB is removed, the maximum mean-alpha response exceeds `0.01` in 5/5
+seeds and always occurs at P3 (`0.1478--0.4820`). The gate therefore moves
+toward raw IR when the RGB guide required by FAM is absent. Removing IR also
+changes mean alpha by at least `0.01` in 5/5 seeds (`0.0704--0.0954`, again at
+P3). Both frozen mechanism conditions required only 3/5 wins and therefore
+pass decisively.
+
+The failed seed 43 is not explained by a neutral or obviously pathological
+gate: its P3/P4 alpha and both missing-modality responses are within the range
+of the other seeds. With only five observations there is no defensible simple
+relationship between gate magnitude and paired performance. The audit supports
+that RCRA learned the intended conditional mechanism, but not that stronger
+modulation necessarily produces higher mAP.
+
+The audit JSON has SHA-256
+`bd675be09c1f4c8ad29f50f495819f663b50e541bb08fb8953e18b83e5a6161d`;
+the 45-row CSV has SHA-256
+`36815e5358f9b4e4444002babda3d5a03e02abbc7293efe996cb62e06a404adf`.
+The compact five-seed performance CSV has SHA-256
+`ab688933790ef8cba496c1f968eb28f917f56ed9a12f0945d191359e03419a6c`.
+
+## Stage-A decision and next control
+
+RCRA passes Stage A on both performance and mechanism and is therefore retained
+as the first candidate for final training. MtErie has still not been consulted.
+
+Before spending the final five-seed full-data budget, one attribution question
+remains valuable: much of P4/P5 behaves like level-wise residual scaling. A
+three-parameter control with one learned scalar alpha per pyramid level, the
+same exact-neutral initialization and the same dedicated LR can test whether
+the gain requires local reliability descriptors or merely rescaling FAM. This
+control should use the same Stage-A split and five paired seeds. It cannot
+invalidate RCRA's observed result, but it determines whether the thesis can
+attribute the gain to reliability-conditioned spatial selection rather than a
+much simpler per-level calibration.
+
+After that control, freeze the selected architecture and proceed to Stage B:
+full 4,019-frame training, ten epochs, five seeds, epoch-10 `latest`, and a
+matched FAM comparison before the already-used MtErie benchmark.
 
 ## Thesis treatment after results
 
@@ -216,5 +307,10 @@ method section should distinguish:
 - frozen alpha audit:
   `parameters/RTDETR/rtdetr_fam_residual_alignment_alpha_audit.yaml` and
   `scripts/run_rtdetr_fam_residual_alignment_alpha_audit.py`;
+- performance table:
+  `notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_stage_a_validation.csv`;
+- alpha audit outputs:
+  `notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.json`
+  and `notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.csv`;
 - regression tests: `tests/test_rtdetr_residual_alignment.py` and
   `tests/test_rtdetr_residual_alignment_alpha_audit.py`.

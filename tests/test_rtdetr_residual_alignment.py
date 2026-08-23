@@ -1,5 +1,7 @@
+import csv
 import inspect
 from pathlib import Path
+import statistics
 import unittest
 
 import torch
@@ -37,6 +39,13 @@ PROBE_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_residual_alignment_runtime_probe.yaml"
+)
+RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_residual_alignment_stage_a_validation.csv"
 )
 
 
@@ -300,6 +309,22 @@ class TestReliabilityConditionedResidualAlignment(unittest.TestCase):
         self.assertEqual(probe["model"], protocol["model"])
         self.assertEqual(probe["dataset"], protocol["dataset"])
         self.assertEqual(probe["dataloader"], protocol["dataloader"])
+
+    def test_five_seed_result_is_complete_and_passes_promotion_rule(self):
+        with RESULTS_PATH.open(newline="", encoding="utf-8") as result_file:
+            rows = list(csv.DictReader(result_file))
+
+        self.assertEqual([int(row["seed"]) for row in rows], [40, 41, 42, 43, 44])
+        self.assertEqual(len({row["rcra_run_id"] for row in rows}), 5)
+        deltas = [float(row["rcra_minus_baseline"]) for row in rows]
+        rcra = [float(row["rcra_best_map50"]) for row in rows]
+        latest = [float(row["rcra_latest_map50"]) for row in rows]
+
+        self.assertAlmostEqual(statistics.fmean(rcra), 0.1824914724, places=9)
+        self.assertAlmostEqual(statistics.fmean(deltas), 0.0179288149, places=9)
+        self.assertGreaterEqual(statistics.fmean(deltas), 0.01)
+        self.assertEqual(sum(delta > 0 for delta in deltas), 4)
+        self.assertTrue(all(best > last for best, last in zip(rcra, latest)))
 
 
 if __name__ == "__main__":

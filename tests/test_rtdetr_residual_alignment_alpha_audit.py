@@ -1,3 +1,4 @@
+import csv
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,13 @@ PROTOCOL_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_residual_alignment_alpha_audit.yaml"
+)
+RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_residual_alignment_alpha_audit.csv"
 )
 
 
@@ -60,6 +68,51 @@ class TestResidualAlignmentAlphaAudit(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "Expected three"):
             find_alignment_gates(model)
+
+    def test_completed_audit_passes_both_frozen_mechanism_rules(self):
+        with RESULTS_PATH.open(newline="", encoding="utf-8") as result_file:
+            rows = list(csv.DictReader(result_file))
+        self.assertEqual(len(rows), 5 * 3 * 3)
+        lookup = {
+            (int(row["seed"]), row["mode"], row["level_label"]): row
+            for row in rows
+        }
+
+        fusion_mad_passes = []
+        missing_rgb_passes = []
+        missing_ir_passes = []
+        for seed in range(40, 45):
+            fusion_mad_passes.append(
+                max(
+                    float(lookup[seed, "fusion", level]["mean_abs_delta_one"])
+                    for level in ("P3", "P4", "P5")
+                )
+                >= 0.01
+            )
+            missing_rgb_passes.append(
+                max(
+                    abs(
+                        float(lookup[seed, "fusion", level]["mean"])
+                        - float(lookup[seed, "ir", level]["mean"])
+                    )
+                    for level in ("P3", "P4", "P5")
+                )
+                >= 0.01
+            )
+            missing_ir_passes.append(
+                max(
+                    abs(
+                        float(lookup[seed, "fusion", level]["mean"])
+                        - float(lookup[seed, "rgb", level]["mean"])
+                    )
+                    for level in ("P3", "P4", "P5")
+                )
+                >= 0.01
+            )
+
+        self.assertEqual(sum(fusion_mad_passes), 5)
+        self.assertEqual(sum(missing_rgb_passes), 5)
+        self.assertEqual(sum(missing_ir_passes), 5)
 
 
 if __name__ == "__main__":
