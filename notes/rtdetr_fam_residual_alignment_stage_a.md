@@ -284,10 +284,12 @@ as an adequate replacement in Stage A, but it does not establish statistical
 superiority of RCRA over the scalar control. Full results are in
 `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`.
 
-The next operation is therefore Stage B: freeze RCRA and retrain on all 4,019
-paired frames for ten epochs and five seeds, evaluate epoch-10 `latest`, and
-compare against a configuration-matched full-data FAM baseline before drawing
-conclusions from the already-used MtErie benchmark.
+The next operation is therefore Stage B. Its FAM and RCRA five-seed full-data
+grids, epoch-10 `latest` rule, paired MtErie evaluator and final decision rule
+are now frozen in `notes/rtdetr_fam_rcra_full_data_stage_b.md`. The preflight
+confirmed matching configurations and the 4,019-frame inventory before either
+campaign was launched. Historical FAM remains secondary; the primary
+comparator is FAM retrained under the same current code as RCRA.
 
 ## Thesis treatment after results
 

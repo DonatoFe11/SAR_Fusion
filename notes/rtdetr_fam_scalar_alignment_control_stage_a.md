@@ -215,7 +215,8 @@ The compact performance CSV has SHA-256
 
 The result follows the first branch of the rule declared before training: the
 scalar control does not pass the comparison with FAM, so RCRA is retained for
-Stage B. MtErie has not been used for this decision.
+Stage B. The subsequent matched full-data protocol is frozen in
+`notes/rtdetr_fam_rcra_full_data_stage_b.md`; MtErie was not used to define it.
 
 This control rules out a particularly simple explanation of the RCRA result:
 three input-independent per-level residual scales do not reproduce its

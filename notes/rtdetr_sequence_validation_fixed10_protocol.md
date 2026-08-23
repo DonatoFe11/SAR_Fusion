@@ -147,8 +147,11 @@ P3/P4, so inactivity does not explain the failed performance rule. RCRA is
 retained by the predeclared selection rule. Its direct advantage over the
 scalar model is `+0.0222` with 3/5 wins and an inconclusive IC95%
 `[-0.0218, +0.0662]`; this supports selection, not a claim of statistically
-proven superiority. Stage A is now closed and Stage B matched full-data
-retraining is next. MtErie remains excluded until that protocol is frozen.
+proven superiority. Stage A is now closed. The configuration-matched Stage-B
+FAM/RCRA training and evaluation protocol is frozen in
+`notes/rtdetr_fam_rcra_full_data_stage_b.md`; its checkpoint-free inventory and
+grid preflight passed before training. MtErie inference remains excluded until
+all ten full-data `latest` checkpoints exist.
 
 ## Two-stage policy for future models
 
@@ -168,16 +171,17 @@ full-data training recipe.
 
 ### Stage B: final full-data retraining
 
-- Freeze the winning architecture and all hyperparameters before retraining.
+- RCRA and all hyperparameters were frozen before full-data training.
 - Restore all 4,019 paired training frames; do not reserve FHL 0401/0402.
 - Train exactly ten epochs with the historical full-data recipe and evaluate
   epoch-10 `latest`.
-- Use seeds 40--44 and compare only models trained under this same recipe.
-- Reuse historical FAM (`0.3780 +/- 0.0439`) only after confirming optimizer,
-  pretrained class head, augmentations, preprocessing, resolution and seed
-  handling are identical; otherwise retrain FAM alongside the candidate.
-- Consult MtErie for the candidate only after Stage A has frozen the model and
-  continue to label it as an internal development benchmark, not a fresh blind test.
+- Retrain both FAM and RCRA under the current code for seeds 40--44; the old
+  FAM result (`0.3780 +/- 0.0439`) is secondary because it was produced at an
+  earlier code revision.
+- Use the frozen mean-gain `>= +0.01` and 4/5-win confirmation rule. If RCRA
+  fails either condition, retain matched FAM as the final performance baseline.
+- Consult MtErie only after all matched runs exist and continue to label it as
+  an internal development benchmark, not a fresh blind test.
 
 ## Decision
 
@@ -328,6 +332,7 @@ The thesis source is intentionally unchanged for now. The final revision must:
 - RCRA Stage-A report: `notes/rtdetr_fam_residual_alignment_stage_a.md`
 - Scalar attribution-control report:
   `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`
+- Full-data Stage-B report: `notes/rtdetr_fam_rcra_full_data_stage_b.md`
 - Retired pilot report: `notes/rtdetr_temporal_validation_protocol.md`
 - Retired split manifest:
   `parameters/RTDETR/rtdetr_temporal_validation_split.json`
