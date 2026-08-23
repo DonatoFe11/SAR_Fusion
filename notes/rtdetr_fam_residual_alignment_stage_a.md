@@ -263,26 +263,31 @@ the 45-row CSV has SHA-256
 The compact five-seed performance CSV has SHA-256
 `ab688933790ef8cba496c1f968eb28f917f56ed9a12f0945d191359e03419a6c`.
 
-## Stage-A decision and next control
+## Stage-A decision and completed attribution control
 
 RCRA passes Stage A on both performance and mechanism and is therefore retained
 as the first candidate for final training. MtErie has still not been consulted.
 
-Before spending the final five-seed full-data budget, one attribution question
-remains valuable: much of P4/P5 behaves like level-wise residual scaling. A
-three-parameter control with one learned scalar alpha per pyramid level, the
-same exact-neutral initialization and the same dedicated LR can test whether
-the gain requires local reliability descriptors or merely rescaling FAM. This
-control should use the same Stage-A split and five paired seeds. It cannot
-invalidate RCRA's observed result, but it determines whether the thesis can
-attribute the gain to reliability-conditioned spatial selection rather than a
-much simpler per-level calibration. The control is now implemented and frozen
-in `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`; its runtime probe is
-complete (`3x1v3qfk`) and the five-seed campaign is the next operation.
+Before spending the final full-data budget, a frozen attribution control tested
+whether the gain could be reproduced by only one input-independent residual
+scale at each of P3--P5. Across five paired seeds, that three-parameter scalar
+model obtains `0.1603 +/- 0.0127`, with a mean delta of `-0.0043` against FAM
+and only 2/5 wins. It therefore fails the predeclared FAM-promotion rule. RCRA
+exceeds it by `+0.0222` on average with 3/5 wins, although the direct IC95%
+`[-0.0218, +0.0662]` remains inconclusive.
 
-After that control, freeze the selected architecture and proceed to Stage B:
-full 4,019-frame training, ten epochs, five seeds, epoch-10 `latest`, and a
-matched FAM comparison before the already-used MtErie benchmark.
+The scalar audit confirms that the negative result is not caused by an inactive
+control: mean alpha moves to `0.9576`, `0.9788` and `0.9950` at P3--P5. Under
+the selection rule frozen before those runs, failure of the scalar model
+against FAM retains RCRA. This rules out simple constant per-level calibration
+as an adequate replacement in Stage A, but it does not establish statistical
+superiority of RCRA over the scalar control. Full results are in
+`notes/rtdetr_fam_scalar_alignment_control_stage_a.md`.
+
+The next operation is therefore Stage B: freeze RCRA and retrain on all 4,019
+paired frames for ten epochs and five seeds, evaluate epoch-10 `latest`, and
+compare against a configuration-matched full-data FAM baseline before drawing
+conclusions from the already-used MtErie benchmark.
 
 ## Thesis treatment after results
 

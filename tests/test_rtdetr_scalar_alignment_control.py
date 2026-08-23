@@ -1,5 +1,7 @@
+import csv
 import inspect
 from pathlib import Path
+import statistics
 import unittest
 
 import torch
@@ -53,6 +55,20 @@ AUDIT_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_scalar_alignment_control_audit.yaml"
+)
+AUDIT_RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_scalar_alignment_control_audit.csv"
+)
+PERFORMANCE_RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_scalar_alignment_control_stage_a_validation.csv"
 )
 
 
@@ -288,6 +304,55 @@ class TestScalarResidualAlignmentControl(unittest.TestCase):
         rows = scalar_rows(40, gates, protocol["level_labels"])
         self.assertEqual(len(rows), 3)
         self.assertEqual([row["alpha"] for row in rows], [1.0, 1.0, 1.0])
+
+    def test_completed_performance_follows_frozen_selection_rule(self):
+        with PERFORMANCE_RESULTS_PATH.open(
+            newline="", encoding="utf-8"
+        ) as result_file:
+            rows = list(csv.DictReader(result_file))
+
+        self.assertEqual(len(rows), 5)
+        self.assertEqual([int(row["seed"]) for row in rows], list(range(40, 45)))
+
+        scalar_minus_fam = [
+            float(row["scalar_minus_baseline"]) for row in rows
+        ]
+        rcra_minus_fam = [
+            float(row["rcra_best_map50"])
+            - float(row["baseline_best_map50"])
+            for row in rows
+        ]
+        rcra_minus_scalar = [
+            float(row["rcra_minus_scalar"]) for row in rows
+        ]
+
+        self.assertLess(statistics.fmean(scalar_minus_fam), 0.01)
+        self.assertEqual(sum(delta > 0.0 for delta in scalar_minus_fam), 2)
+        self.assertGreaterEqual(statistics.fmean(rcra_minus_fam), 0.01)
+        self.assertEqual(sum(delta > 0.0 for delta in rcra_minus_fam), 4)
+        self.assertEqual(sum(delta > 0.0 for delta in rcra_minus_scalar), 3)
+
+    def test_completed_audit_has_three_active_bounded_scalars_per_seed(self):
+        with AUDIT_RESULTS_PATH.open(
+            newline="", encoding="utf-8"
+        ) as result_file:
+            rows = list(csv.DictReader(result_file))
+
+        self.assertEqual(len(rows), 5 * 3)
+        self.assertEqual(
+            sorted({int(row["seed"]) for row in rows}), list(range(40, 45))
+        )
+        for seed in range(40, 45):
+            seed_rows = [row for row in rows if int(row["seed"]) == seed]
+            self.assertEqual(
+                [row["level_label"] for row in seed_rows], ["P3", "P4", "P5"]
+            )
+            self.assertTrue(
+                all(0.0 < float(row["alpha"]) < 2.0 for row in seed_rows)
+            )
+            self.assertGreaterEqual(
+                float(seed_rows[0]["abs_delta_one"]), 0.02
+            )
 
 
 if __name__ == "__main__":

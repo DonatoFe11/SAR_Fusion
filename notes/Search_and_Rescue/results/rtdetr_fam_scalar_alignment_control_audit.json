@@ -1,0 +1,152 @@
+{
+  "protocol": {
+    "protocol_id": "rtdetr_fam_scalar_alignment_control_audit_v1",
+    "project": "RTDETR_FAM_ScalarAlignmentControl_SequenceVal_FiveSeed",
+    "training_config": "parameters/RTDETR/rtdetr_fam_scalar_alignment_control_sequence_validation_five_seed.yaml",
+    "seeds": [
+      40,
+      41,
+      42,
+      43,
+      44
+    ],
+    "checkpoint": "best",
+    "level_labels": [
+      "P3",
+      "P4",
+      "P5"
+    ],
+    "output_json": "notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.json",
+    "output_csv": "notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.csv"
+  },
+  "checkpoints": {
+    "40": "wandb/run-20260823_115344-xvqxo64o/files/best/model.safetensors",
+    "41": "wandb/run-20260823_141113-3jjdc90u/files/best/model.safetensors",
+    "42": "wandb/run-20260823_163647-zloo08p0/files/best/model.safetensors",
+    "43": "wandb/run-20260823_190018-u3whbjpt/files/best/model.safetensors",
+    "44": "wandb/run-20260823_212337-vkp19mm2/files/best/model.safetensors"
+  },
+  "scalar_rows": [
+    {
+      "seed": 40,
+      "level": 0,
+      "level_label": "P3",
+      "logit": -0.048701412975788116,
+      "alpha": 0.975654125213623,
+      "abs_delta_one": 0.024345874786376953
+    },
+    {
+      "seed": 40,
+      "level": 1,
+      "level_label": "P4",
+      "logit": -0.018185533583164215,
+      "alpha": 0.9909074306488037,
+      "abs_delta_one": 0.009092569351196289
+    },
+    {
+      "seed": 40,
+      "level": 2,
+      "level_label": "P5",
+      "logit": -0.0023856943007558584,
+      "alpha": 0.9988071918487549,
+      "abs_delta_one": 0.0011928081512451172
+    },
+    {
+      "seed": 41,
+      "level": 0,
+      "level_label": "P3",
+      "logit": -0.09607815742492676,
+      "alpha": 0.9519978165626526,
+      "abs_delta_one": 0.04800218343734741
+    },
+    {
+      "seed": 41,
+      "level": 1,
+      "level_label": "P4",
+      "logit": -0.05644426494836807,
+      "alpha": 0.971785306930542,
+      "abs_delta_one": 0.028214693069458008
+    },
+    {
+      "seed": 41,
+      "level": 2,
+      "level_label": "P5",
+      "logit": -0.009540083818137646,
+      "alpha": 0.995229959487915,
+      "abs_delta_one": 0.004770040512084961
+    },
+    {
+      "seed": 42,
+      "level": 0,
+      "level_label": "P3",
+      "logit": -0.10620593279600143,
+      "alpha": 0.9469467997550964,
+      "abs_delta_one": 0.053053200244903564
+    },
+    {
+      "seed": 42,
+      "level": 1,
+      "level_label": "P4",
+      "logit": -0.0626726970076561,
+      "alpha": 0.9686739444732666,
+      "abs_delta_one": 0.0313260555267334
+    },
+    {
+      "seed": 42,
+      "level": 2,
+      "level_label": "P5",
+      "logit": -0.007805036846548319,
+      "alpha": 0.9960975050926208,
+      "abs_delta_one": 0.0039024949073791504
+    },
+    {
+      "seed": 43,
+      "level": 0,
+      "level_label": "P3",
+      "logit": -0.07350253313779831,
+      "alpha": 0.9632652401924133,
+      "abs_delta_one": 0.03673475980758667
+    },
+    {
+      "seed": 43,
+      "level": 1,
+      "level_label": "P4",
+      "logit": -0.03724716603755951,
+      "alpha": 0.9813785552978516,
+      "abs_delta_one": 0.018621444702148438
+    },
+    {
+      "seed": 43,
+      "level": 2,
+      "level_label": "P5",
+      "logit": -0.006650062743574381,
+      "alpha": 0.9966748952865601,
+      "abs_delta_one": 0.0033251047134399414
+    },
+    {
+      "seed": 44,
+      "level": 0,
+      "level_label": "P3",
+      "logit": -0.09974870830774307,
+      "alpha": 0.9501669406890869,
+      "abs_delta_one": 0.049833059310913086
+    },
+    {
+      "seed": 44,
+      "level": 1,
+      "level_label": "P4",
+      "logit": -0.03793086111545563,
+      "alpha": 0.9810367822647095,
+      "abs_delta_one": 0.018963217735290527
+    },
+    {
+      "seed": 44,
+      "level": 2,
+      "level_label": "P5",
+      "logit": -0.023474333807826042,
+      "alpha": 0.9882633686065674,
+      "abs_delta_one": 0.011736631393432617
+    }
+  ],
+  "protocol_complete": true
+}

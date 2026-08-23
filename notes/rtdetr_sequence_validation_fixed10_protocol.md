@@ -138,12 +138,17 @@ in 4/5 seeds, with IC95% `[-0.0350, +0.0709]`: both frozen engineering
 thresholds pass, although the interval does not establish statistical
 superiority. The five-checkpoint alpha audit also passes both mechanism rules;
 RCRA mainly suppresses the FAM residual at P3/P4 and reacts to either missing
-modality in 5/5 seeds. Before final full-data training, a per-level scalar
-residual control should distinguish local reliability conditioning from simple
-FAM-level calibration. That three-parameter control is now implemented and
-frozen in `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`; its runtime
-probe `3x1v3qfk` passed at batch four, and the five-seed attribution campaign
-is next. MtErie remains excluded.
+modality in 5/5 seeds. The subsequent frozen three-parameter attribution
+control tested one input-independent residual scale per level. It obtains
+`0.1603 +/- 0.0127`; its paired delta against FAM is
+`-0.0043 +/- 0.0195`, positive in only 2/5 seeds, with IC95%
+`[-0.0284, +0.0199]`. The learned scales did move away from identity, mainly at
+P3/P4, so inactivity does not explain the failed performance rule. RCRA is
+retained by the predeclared selection rule. Its direct advantage over the
+scalar model is `+0.0222` with 3/5 wins and an inconclusive IC95%
+`[-0.0218, +0.0662]`; this supports selection, not a claim of statistically
+proven superiority. Stage A is now closed and Stage B matched full-data
+retraining is next. MtErie remains excluded until that protocol is frozen.
 
 ## Two-stage policy for future models
 
@@ -320,6 +325,9 @@ The thesis source is intentionally unchanged for now. The final revision must:
 - P2 seed-40 configuration:
   `parameters/RTDETR/rtdetr_fam_p2_sequence_validation_seed40.yaml`
 - P2 regression tests: `tests/test_rtdetr_p2.py`
+- RCRA Stage-A report: `notes/rtdetr_fam_residual_alignment_stage_a.md`
+- Scalar attribution-control report:
+  `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`
 - Retired pilot report: `notes/rtdetr_temporal_validation_protocol.md`
 - Retired split manifest:
   `parameters/RTDETR/rtdetr_temporal_validation_split.json`

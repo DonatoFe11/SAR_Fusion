@@ -1,7 +1,7 @@
 # RT-DETR + FAM + scalar residual alignment: Stage-A attribution control
 
-Status: implemented and frozen; runtime probe passed, scientific campaign not
-yet trained
+Status: completed; the scalar control fails the frozen FAM-promotion rule and
+RCRA is retained for Stage B
 
 Defined: 2026-08-23, after completing RCRA and before observing any scalar
 control result
@@ -131,7 +131,7 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_scalar_alignment_control_runtime_probe.yaml
 ```
 
-The probe passed. Launch all five scientific seeds with:
+The probe passed. All five scientific seeds were launched with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -139,7 +139,7 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_scalar_alignment_control_sequence_validation_five_seed.yaml
 ```
 
-After training, extract the selected scalars with:
+After training, the selected scalars were extracted with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -147,26 +147,96 @@ python scripts/run_rtdetr_fam_scalar_alignment_control_audit.py \
   --protocol parameters/RTDETR/rtdetr_fam_scalar_alignment_control_audit.yaml
 ```
 
-No probe command remains to be run.
+Both commands completed successfully. No command in this section remains to be
+run.
 
-## Results placeholder
+## Completed five-seed performance result
 
-No scalar-control performance or learned-alpha result exists at definition
-time. Populate this section only after five complete runs.
+All five runs completed exactly ten epochs, recorded the dedicated scalar LR
+`train/lr_alignment_gate = 2e-4`, and contain both `best` and `latest`
+checkpoints. The primary comparison uses the predefined validation-selected
+`best` checkpoint.
+
+| Seed | FAM best | RCRA best | Scalar best (epoch) | Scalar latest | Scalar - FAM | RCRA - scalar |
+|---:|---:|---:|---:|---:|---:|---:|
+| 40 | 0.1521 | 0.1692 | **0.1750 (1)** | 0.0107 | +0.0228 | -0.0057 |
+| 41 | 0.1424 | **0.2243** | 0.1502 (3) | 0.1158 | +0.0078 | +0.0741 |
+| 42 | 0.1655 | **0.1848** | 0.1573 (5) | 0.0774 | -0.0081 | +0.0275 |
+| 43 | **0.1939** | 0.1562 | 0.1721 (3) | 0.0979 | -0.0218 | -0.0159 |
+| 44 | 0.1689 | **0.1778** | 0.1470 (5) | 0.1318 | -0.0219 | +0.0309 |
+
+The scalar control obtains `0.1603 +/- 0.0127` best validation mAP@50. Its
+paired scalar-minus-FAM delta is `-0.0043 +/- 0.0195`, positive in only 2/5
+seeds, with median `-0.0081` and a two-sided Student-t 95% confidence interval
+of `[-0.0284, +0.0199]`. It fails both parts of the frozen promotion rule: the
+mean is below `+0.01` and there are fewer than 4/5 wins.
+
+RCRA exceeds the scalar control by `+0.0222 +/- 0.0355` on average, with a
+median paired delta of `+0.0275`, 3/5 wins and IC95%
+`[-0.0218, +0.0662]`. This direct comparison is uncertain and does not by
+itself meet the stronger 4/5-win rule. The predeclared selection rule does not
+require that secondary condition here: because the scalar model fails its FAM
+threshold while RCRA already passed it, the first frozen branch retains RCRA.
+
+Scalar `latest` obtains `0.0867 +/- 0.0471`. Its paired `best - latest` gain is
+`+0.0736 +/- 0.0575`, positive in 5/5 seeds, with median `+0.0742` and IC95%
+`[+0.0022, +0.1450]`. This is another independent indication that Stage-A
+checkpoint selection cannot be replaced by epoch-10 `latest`.
+
+## Completed scalar-parameter audit
+
+Every selected checkpoint loaded with zero missing and zero unexpected keys.
+The control has no input-dependent behavior, so its complete audit consists of
+the three learned coefficients from each `best` checkpoint:
+
+| Seed | P3 alpha | P4 alpha | P5 alpha |
+|---:|---:|---:|---:|
+| 40 | 0.9757 | 0.9909 | 0.9988 |
+| 41 | 0.9520 | 0.9718 | 0.9952 |
+| 42 | 0.9469 | 0.9687 | 0.9961 |
+| 43 | 0.9633 | 0.9814 | 0.9967 |
+| 44 | 0.9502 | 0.9810 | 0.9883 |
+
+Across seeds, mean alpha is `0.9576` at P3, `0.9788` at P4 and `0.9950` at
+P5. Mean absolute distance from the neutral value is respectively `0.0424`,
+`0.0212` and `0.0050`. Thus optimization did move the control consistently:
+it learned a modest global suppression of the FAM residual, strongest at P3,
+rather than remaining at its identity initialization. Its failed promotion is
+therefore not explained by an inactive three-parameter module.
+
+The audit JSON has SHA-256
+`c5e4dad9d396c839bb23eb024c6933fe80c1935d91b39abbdb7f2dff78331063`;
+the 15-row audit CSV has SHA-256
+`58641be66faa97764cd1b8eaf493a1d95a4c87ecef3a9d2ca62192999e6418f1`.
+The compact performance CSV has SHA-256
+`e07a54324cf21abf9d353722215276c640680d9c4e5bc4ca0020f38943ef44e1`.
+
+## Frozen decision
+
+The result follows the first branch of the rule declared before training: the
+scalar control does not pass the comparison with FAM, so RCRA is retained for
+Stage B. MtErie has not been used for this decision.
+
+This control rules out a particularly simple explanation of the RCRA result:
+three input-independent per-level residual scales do not reproduce its
+Stage-A promotion. It is consistent with conditional/local prediction being
+useful, but the claim must remain calibrated. RCRA beats the scalar model in
+only 3/5 paired seeds and their direct IC95% crosses zero, so these five runs do
+not establish statistical superiority or prove that every RCRA descriptor is
+necessary. They justify selecting RCRA under the frozen engineering rule and
+reporting the scalar experiment as an attribution ablation.
 
 ## Thesis treatment
 
-This is a required architectural ablation, not the main proposed method. It
-will determine which claim is defensible:
+This is an architectural attribution ablation, not the main proposed method.
+The result should be reported as evidence that input-independent per-level
+calibration is insufficient under the fixed Stage-A protocol. It supports
+carrying RCRA forward, while the uncertain direct comparison prevents a claim
+that local conditioning has been statistically proven superior.
 
-- RCRA wins clearly: local reliability-conditioned residual selection adds
-  value beyond simple FAM rescaling;
-- scalar control is equivalent or better: the useful contribution is residual
-  calibration, and RCRA's extra complexity should not be credited;
-- neither is stable: report the uncertainty and retain FAM as final model.
-
-The thesis source remains intentionally unchanged until this attribution test
-and Stage B are complete.
+The thesis source remains intentionally unchanged until Stage B is complete,
+so the final method and evaluation can be rewritten once using the frozen
+result chain.
 
 ## Versioned artifacts
 
@@ -180,4 +250,10 @@ and Stage B are complete.
 - frozen scalar audit:
   `parameters/RTDETR/rtdetr_fam_scalar_alignment_control_audit.yaml` and
   `scripts/run_rtdetr_fam_scalar_alignment_control_audit.py`;
+- compact performance table:
+  `notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_stage_a_validation.csv`;
+- scalar audit outputs:
+  `notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.json`
+  and
+  `notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.csv`;
 - regression tests: `tests/test_rtdetr_scalar_alignment_control.py`.
