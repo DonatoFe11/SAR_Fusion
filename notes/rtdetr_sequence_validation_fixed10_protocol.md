@@ -140,7 +140,10 @@ superiority. The five-checkpoint alpha audit also passes both mechanism rules;
 RCRA mainly suppresses the FAM residual at P3/P4 and reacts to either missing
 modality in 5/5 seeds. Before final full-data training, a per-level scalar
 residual control should distinguish local reliability conditioning from simple
-FAM-level calibration. MtErie remains excluded.
+FAM-level calibration. That three-parameter control is now implemented and
+frozen in `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`; its runtime
+probe `3x1v3qfk` passed at batch four, and the five-seed attribution campaign
+is next. MtErie remains excluded.
 
 ## Two-stage policy for future models
 

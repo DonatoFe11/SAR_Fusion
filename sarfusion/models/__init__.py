@@ -226,6 +226,7 @@ def build_fusion_rt_detr(
     reliability_gate_hidden_channels=16,
     use_residual_alignment_gating=False,
     residual_alignment_hidden_channels=16,
+    use_scalar_residual_alignment=False,
 ):
     return FusionRTDetr(
         threshold=threshold,
@@ -241,6 +242,7 @@ def build_fusion_rt_detr(
         reliability_gate_hidden_channels=reliability_gate_hidden_channels,
         use_residual_alignment_gating=use_residual_alignment_gating,
         residual_alignment_hidden_channels=residual_alignment_hidden_channels,
+        use_scalar_residual_alignment=use_scalar_residual_alignment,
     )
 
 

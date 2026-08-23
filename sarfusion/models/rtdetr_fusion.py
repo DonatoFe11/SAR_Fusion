@@ -732,6 +732,49 @@ class ReliabilityConditionedResidualAlignment(nn.Module):
         return ir_aligned + (alpha - 1.0) * alignment_residual
 
 
+class ScalarResidualAlignment(nn.Module):
+    """Per-level scalar control for the RCRA residual formulation.
+
+    This deliberately removes every image-, modality- and location-dependent
+    descriptor from RCRA. One scalar logit is learned for each feature level,
+    allowing the experiment to distinguish conditional spatial selection from
+    simple calibration of the FAM residual. The parameterization and exact
+    neutral initialization are otherwise identical to RCRA.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.logit = nn.Parameter(torch.zeros(()))
+
+    def reset_neutral_parameters(self):
+        nn.init.zeros_(self.logit)
+
+    def compute_alpha(self):
+        return 2.0 * torch.sigmoid(self.logit)
+
+    def forward(
+        self,
+        rgb_feat,
+        ir_raw,
+        ir_aligned,
+        rgb_present=None,
+        ir_present=None,
+    ):
+        del rgb_feat, rgb_present, ir_present
+        if ir_raw.shape != ir_aligned.shape:
+            raise ValueError(
+                "Scalar residual alignment requires equal raw-IR and "
+                f"aligned-IR shapes, got {tuple(ir_raw.shape)} and "
+                f"{tuple(ir_aligned.shape)}"
+            )
+        alpha = self.compute_alpha().to(
+            device=ir_aligned.device,
+            dtype=ir_aligned.dtype,
+        )
+        alignment_residual = ir_aligned - ir_raw
+        return ir_aligned + (alpha - 1.0) * alignment_residual
+
+
 # ============================================================
 # 2. FUSION BACKBONE (RT-DETR + FAM)
 #    - RGB and IR processed separately
@@ -752,6 +795,7 @@ class RTDetrFusionBackbone(nn.Module):
         reliability_gate_hidden_channels: int = 16,
         use_residual_alignment_gating: bool = False,
         residual_alignment_hidden_channels: int = 16,
+        use_scalar_residual_alignment: bool = False,
     ):
         super().__init__()
 
@@ -759,10 +803,20 @@ class RTDetrFusionBackbone(nn.Module):
             raise ValueError("Reliability gating requires use_fam=True")
         if use_residual_alignment_gating and not use_fam:
             raise ValueError("Residual alignment gating requires use_fam=True")
-        if use_reliability_gating and use_residual_alignment_gating:
+        if use_scalar_residual_alignment and not use_fam:
+            raise ValueError("Scalar residual alignment requires use_fam=True")
+        alignment_ablation_count = sum(
+            bool(enabled)
+            for enabled in (
+                use_reliability_gating,
+                use_residual_alignment_gating,
+                use_scalar_residual_alignment,
+            )
+        )
+        if alignment_ablation_count > 1:
             raise ValueError(
-                "Post-fusion reliability gating and residual alignment gating "
-                "must be evaluated as separate ablations"
+                "Post-fusion reliability gating, RCRA and scalar residual "
+                "alignment must be evaluated as separate ablations"
             )
 
         # RGB backbone (standard)
@@ -793,6 +847,9 @@ class RTDetrFusionBackbone(nn.Module):
         )
         self.residual_alignment_hidden_channels = int(
             residual_alignment_hidden_channels
+        )
+        self.use_scalar_residual_alignment = bool(
+            use_scalar_residual_alignment
         )
         
         if self.ir_dropout_rate > 0.0:
@@ -843,6 +900,10 @@ class RTDetrFusionBackbone(nn.Module):
                     )
                     for _ in feature_channels
                 ]
+            )
+        elif self.use_scalar_residual_alignment:
+            self.alignment_gates = nn.ModuleList(
+                [ScalarResidualAlignment() for _ in feature_channels]
             )
         else:
             self.alignment_gates = None
@@ -974,6 +1035,7 @@ class RTDetrFusionModel(RTDetrModel):
         reliability_gate_hidden_channels: int = 16,
         use_residual_alignment_gating: bool = False,
         residual_alignment_hidden_channels: int = 16,
+        use_scalar_residual_alignment: bool = False,
     ):
         super().__init__(config)
         self.backbone = RTDetrFusionBackbone(
@@ -987,10 +1049,12 @@ class RTDetrFusionModel(RTDetrModel):
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
             use_residual_alignment_gating=use_residual_alignment_gating,
             residual_alignment_hidden_channels=residual_alignment_hidden_channels,
+            use_scalar_residual_alignment=use_scalar_residual_alignment,
         )
         self.use_p2 = use_p2
         self.use_reliability_gating = use_reliability_gating
         self.use_residual_alignment_gating = use_residual_alignment_gating
+        self.use_scalar_residual_alignment = use_scalar_residual_alignment
         self.post_init()
         # Hugging Face post_init may visit newly attached modules. Restore the
         # ablation's defining initialization after that global initialization.
@@ -1024,6 +1088,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         reliability_gate_hidden_channels: int = 16,
         use_residual_alignment_gating: bool = False,
         residual_alignment_hidden_channels: int = 16,
+        use_scalar_residual_alignment: bool = False,
     ):
         # Trick: initialize as standard RGB model
         tmp_cfg = copy.deepcopy(config)
@@ -1047,6 +1112,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
             use_residual_alignment_gating=use_residual_alignment_gating,
             residual_alignment_hidden_channels=residual_alignment_hidden_channels,
+            use_scalar_residual_alignment=use_scalar_residual_alignment,
         )
 
         # Restore heads in decoder
@@ -1068,6 +1134,9 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         )
         self.residual_alignment_hidden_channels = int(
             residual_alignment_hidden_channels
+        )
+        self.use_scalar_residual_alignment = bool(
+            use_scalar_residual_alignment
         )
 
     def load_state_dict(self, state_dict, strict=True):
@@ -1092,6 +1161,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         reliability_gate_hidden_channels=16,
         use_residual_alignment_gating=False,
         residual_alignment_hidden_channels=16,
+        use_scalar_residual_alignment=False,
     ):
         if reuse_pretrained_class_head:
             # Load the original label space so matching semantic rows (notably
@@ -1127,6 +1197,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
             reliability_gate_hidden_channels=reliability_gate_hidden_channels,
             use_residual_alignment_gating=use_residual_alignment_gating,
             residual_alignment_hidden_channels=residual_alignment_hidden_channels,
+            use_scalar_residual_alignment=use_scalar_residual_alignment,
         )
 
         # Load everything (decoder, encoder, etc.). P2 changes the semantic

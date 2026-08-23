@@ -276,7 +276,9 @@ the gain requires local reliability descriptors or merely rescaling FAM. This
 control should use the same Stage-A split and five paired seeds. It cannot
 invalidate RCRA's observed result, but it determines whether the thesis can
 attribute the gain to reliability-conditioned spatial selection rather than a
-much simpler per-level calibration.
+much simpler per-level calibration. The control is now implemented and frozen
+in `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`; its runtime probe is
+complete (`3x1v3qfk`) and the five-seed campaign is the next operation.
 
 After that control, freeze the selected architecture and proceed to Stage B:
 full 4,019-frame training, ten epochs, five seeds, epoch-10 `latest`, and a
