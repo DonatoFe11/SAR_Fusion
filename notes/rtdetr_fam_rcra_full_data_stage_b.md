@@ -1,7 +1,7 @@
 # RT-DETR + FAM versus RCRA: frozen full-data Stage B
 
-Status: training and evaluation protocols frozen; preflight passed, scientific
-training not yet launched
+Status: completed; RCRA improves the mean but wins only 3/5 paired seeds, so it
+fails the frozen confirmation rule and matched FAM is retained
 
 Frozen: 2026-08-24, after the Stage-A RCRA and scalar-control decisions and
 before observing any full-data RCRA checkpoint or new MtErie result
@@ -87,8 +87,8 @@ disabling validation reduces rather than increases the runtime surface.
 
 ## Frozen evaluation and decision rule
 
-After all ten runs exist, the evaluator will resolve exactly one `latest`
-checkpoint for every configuration and seed. It rejects a run unless its local
+After all ten runs existed, the evaluator resolved exactly one `latest`
+checkpoint for every configuration and seed. It rejected a run unless its local
 W&B config matches the frozen grid, it reached epoch 10 and 10,050 steps, its
 logged LRs are correct, and it contains no automatic `test/*` metrics.
 
@@ -137,9 +137,9 @@ python scripts/run_rtdetr_fam_rcra_full_data_stage_b_evaluation.py \
   --prepare-only
 ```
 
-## Training commands
+## Completed training and evaluation commands
 
-Run the matched FAM campaign:
+The matched FAM campaign was run with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -147,7 +147,7 @@ python main.py experiment \
   --parameters parameters/RTDETR/rtdetr_fam_full_data_stage_b_five_seed.yaml
 ```
 
-Then run the RCRA campaign:
+The RCRA campaign was then run with:
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
@@ -177,16 +177,109 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 python scripts/run_rtdetr_fam_rcra_full_data_stage_b_evaluation.py
 ```
 
-## Thesis treatment after results
+## Completed run audit
 
-The thesis source remains unchanged until Stage B finishes. Its final revision
-should present:
+The dry-run passed before any new MtErie inference. It found exactly the ten
+expected checkpoints and no duplicate project/seed combination. For every
+run, the evaluator verified the frozen configuration, final epoch 10, exactly
+10,050 optimizer steps, all learning rates, one `latest` checkpoint and the
+absence of automatic `test/*` metrics.
+
+Every checkpoint loaded with zero missing and zero unexpected state-dict keys
+after recovering the known shared RT-DETR aliases. Each evaluation used all
+708 frozen samples.
+
+## Completed primary Stage-B result
+
+| Seed | Matched FAM mAP@50 | RCRA mAP@50 | RCRA - FAM |
+|---:|---:|---:|---:|
+| 40 | **0.4291** | 0.3969 | -0.0323 |
+| 41 | 0.3498 | **0.3737** | +0.0239 |
+| 42 | 0.3233 | **0.4185** | +0.0952 |
+| 43 | **0.3308** | 0.2835 | -0.0474 |
+| 44 | 0.3513 | **0.4038** | +0.0525 |
+
+Matched FAM obtains `0.3569 +/- 0.0422` mAP@50; RCRA obtains
+`0.3753 +/- 0.0538`. The paired RCRA-minus-FAM delta is
+`+0.0184 +/- 0.0591`, positive in 3/5 seeds, with median `+0.0239` and a
+two-sided Student-t IC95% of `[-0.0550, +0.0918]`.
+
+The exploratory paired t test gives `p = 0.5250`; the exact two-sided Wilcoxon
+test gives `p = 0.6250`. With only five seeds neither is evidence of statistical
+superiority, and the confidence interval contains practically relevant values
+in both directions.
+
+## Frozen Stage-B decision
+
+The predefined rule required both a mean mAP@50 gain of at least `+0.01` and
+at least 4/5 paired wins. RCRA passes the mean condition (`+0.0184`) but fails
+the stability condition (`3/5`). The frozen decision is therefore
+`fail_retain_fam`: RCRA is not confirmed as the final architecture and
+configuration-matched FAM remains the final performance baseline.
+
+This should not be paraphrased as “RCRA is worse”. Its mean and median deltas
+are positive, and it reaches sizable gains for seeds 42 and 44. The defensible
+conclusion is narrower: the gain is not stable enough across seeds to justify
+replacing FAM under the rule declared before full-data inference. The negative
+seed-43 delta and especially the high dispersion prevent a robust improvement
+claim.
+
+Stage A remains a valid development result: RCRA passed its internal
+whole-video rule and its mechanism audit. Stage B shows that this advantage
+does not transfer consistently to full-data epoch-10 training and the already
+used MtErie benchmark. No post-hoc LR, descriptor, threshold or checkpoint
+search will be used to rescue the candidate.
+
+## Secondary metrics and computational cost
+
+Secondary metrics are descriptive and cannot override the primary frozen
+mAP@50 rule:
+
+| Metric | Matched FAM | RCRA | Mean paired delta | RCRA wins |
+|---|---:|---:|---:|---:|
+| COCO mAP | 0.1244 +/- 0.0185 | 0.1336 +/- 0.0183 | +0.0091 | 3/5 |
+| mAP@50 | 0.3569 +/- 0.0422 | 0.3753 +/- 0.0538 | +0.0184 | 3/5 |
+| mAP@75 | 0.0581 +/- 0.0148 | 0.0701 +/- 0.0089 | +0.0121 | 4/5 |
+
+RCRA's more favorable mAP@75 suggests that its alignment selection may improve
+localization precision in some runs. Because mAP@75 was not the primary
+selection metric and mAP@50 fails the win rule, this is a discussion result,
+not a new selection criterion.
+
+Mean W&B training runtime is 8,534 seconds per FAM run (about 2 h 22 min) and
+12,482 seconds per RCRA run (about 3 h 28 min). RCRA therefore costs about
+46.3% more training time in this implementation despite adding only 5,283
+parameters. This is a training-runtime observation; an inference benchmark is
+still required before making any real-time deployment claim.
+
+The new matched FAM mean (`0.3569`) is below the historical old-code FAM mean
+(`0.3780`) by about `0.0211`. This supports keeping the historical result as a
+secondary implementation-era reference. It does not alter the primary
+comparison, for which FAM and RCRA were trained and evaluated under the same
+current code.
+
+The complete local aggregate JSON has SHA-256
+`d9fbaf4d589d557a39437b0a28de18d7168b9fbbfcb7dd56ccf47c2c5fe6c702`;
+the evaluator's local ten-row CSV has SHA-256
+`af6cf8f03cd266057d0a9ea0d6dd772b16f1718c96e58fc72c3f672193d3ce90`.
+The versioned compact five-row paired CSV has SHA-256
+`401a0af273818bbd8ce6e3f966f39e24b6567a68a92d7674b7dedb7de0867dd6`.
+
+
+## Thesis treatment
+
+The thesis source remains intentionally unchanged in this commit. Its final
+revision should present:
 
 - Stage A as architecture development on a complete held-out FHL video;
 - the scalar model as an attribution control that did not pass the FAM rule;
 - Stage B as a separately trained full-data confirmation using `latest`;
 - the newly matched FAM result as the primary Stage-B comparator;
 - historical FAM only as a secondary implementation-era reference;
+- the positive but unstable RCRA Stage-B delta, all five seed pairs and the
+  failed 4/5-win condition;
+- the secondary mAP@75 behavior and training-runtime overhead without using
+  either to overturn the frozen decision;
 - paired five-seed deltas and uncertainty without claiming a blind external
   test or statistical certainty unsupported by five seeds.
 
@@ -199,4 +292,8 @@ should present:
 - frozen evaluation:
   `parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_evaluation.yaml` and
   `scripts/run_rtdetr_fam_rcra_full_data_stage_b_evaluation.py`;
+- compact paired result:
+  `notes/Search_and_Rescue/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv`;
+- complete local output:
+  `out/rtdetr_fam_rcra_full_data_stage_b_evaluation/`;
 - regression tests: `tests/test_rtdetr_fam_rcra_full_data_stage_b.py`.

@@ -1,3 +1,4 @@
+import csv
 import copy
 import json
 from pathlib import Path
@@ -25,6 +26,13 @@ MANIFEST_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_temporal_validation_split.json"
+)
+RESULTS_PATH = (
+    REPO_ROOT
+    / "notes"
+    / "Search_and_Rescue"
+    / "results"
+    / "rtdetr_fam_rcra_full_data_stage_b_evaluation.csv"
 )
 
 
@@ -176,6 +184,34 @@ class TestRTDETRFAMRCRAFullDataStageB(unittest.TestCase):
                 (output_dir / "rtdetr_fam_rcra_full_data_stage_b_evaluation.csv").is_file()
             )
 
+    def test_versioned_results_reproduce_frozen_failed_confirmation(self):
+        with RESULTS_PATH.open(newline="", encoding="utf-8") as input_file:
+            rows = list(csv.DictReader(input_file))
+
+        self.assertEqual(len(rows), 5)
+        self.assertEqual([int(row["seed"]) for row in rows], EXPECTED_SEEDS)
+
+        fam_map50 = [float(row["fam_map50"]) for row in rows]
+        rcra_map50 = [float(row["rcra_map50"]) for row in rows]
+        deltas = [float(row["rcra_minus_fam_map50"]) for row in rows]
+        self.assertAlmostEqual(
+            sum(fam_map50) / len(fam_map50), 0.35687931180000304
+        )
+        self.assertAlmostEqual(
+            sum(rcra_map50) / len(rcra_map50), 0.37527340054512026
+        )
+        self.assertEqual(sum(delta > 0 for delta in deltas), 3)
+
+        fam_runtime = sum(float(row["fam_runtime_seconds"]) for row in rows)
+        rcra_runtime = sum(float(row["rcra_runtime_seconds"]) for row in rows)
+        self.assertGreater(rcra_runtime / fam_runtime, 1.4)
+
+        decision = stage_b_decision(deltas, self.protocol["primary_comparison"])
+        self.assertTrue(decision["passes_mean_gain"])
+        self.assertFalse(decision["passes_win_count"])
+        self.assertEqual(decision["candidate_wins"], 3)
+        self.assertEqual(decision["status"], "fail_retain_fam")
+        self.assertEqual(decision["selected_architecture"], "fam")
 
 if __name__ == "__main__":
     unittest.main()

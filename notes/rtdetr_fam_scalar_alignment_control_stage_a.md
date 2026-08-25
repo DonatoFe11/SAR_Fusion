@@ -235,9 +235,10 @@ calibration is insufficient under the fixed Stage-A protocol. It supports
 carrying RCRA forward, while the uncertain direct comparison prevents a claim
 that local conditioning has been statistically proven superior.
 
-The thesis source remains intentionally unchanged until Stage B is complete,
-so the final method and evaluation can be rewritten once using the frozen
-result chain.
+Stage B is now complete and retains matched FAM because RCRA's positive mean
+gain was observed in only 3/5 seeds. The thesis source remains intentionally
+unchanged in this result commit so the method and evaluation can be rewritten
+once using the complete frozen result chain.
 
 ## Versioned artifacts
 

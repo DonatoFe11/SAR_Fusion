@@ -147,11 +147,15 @@ P3/P4, so inactivity does not explain the failed performance rule. RCRA is
 retained by the predeclared selection rule. Its direct advantage over the
 scalar model is `+0.0222` with 3/5 wins and an inconclusive IC95%
 `[-0.0218, +0.0662]`; this supports selection, not a claim of statistically
-proven superiority. Stage A is now closed. The configuration-matched Stage-B
-FAM/RCRA training and evaluation protocol is frozen in
-`notes/rtdetr_fam_rcra_full_data_stage_b.md`; its checkpoint-free inventory and
-grid preflight passed before training. MtErie inference remains excluded until
-all ten full-data `latest` checkpoints exist.
+proven superiority. Stage A is now closed. The configuration-matched full-data
+Stage B then completed under the frozen protocol in
+`notes/rtdetr_fam_rcra_full_data_stage_b.md`. Matched FAM obtains
+`0.3569 +/- 0.0422` MtErie mAP@50 and RCRA obtains `0.3753 +/- 0.0538`.
+The paired RCRA-minus-FAM gain is `+0.0184 +/- 0.0591`, but it is positive in
+only 3/5 seeds with IC95% `[-0.0550, +0.0918]`. RCRA passes the mean-gain
+condition but fails the frozen 4/5-win condition, so it is not confirmed as the
+final architecture and matched FAM is retained. This is an unstable positive
+signal, not evidence that RCRA is uniformly worse.
 
 ## Two-stage policy for future models
 

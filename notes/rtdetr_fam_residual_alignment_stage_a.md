@@ -284,12 +284,16 @@ as an adequate replacement in Stage A, but it does not establish statistical
 superiority of RCRA over the scalar control. Full results are in
 `notes/rtdetr_fam_scalar_alignment_control_stage_a.md`.
 
-The next operation is therefore Stage B. Its FAM and RCRA five-seed full-data
-grids, epoch-10 `latest` rule, paired MtErie evaluator and final decision rule
-are now frozen in `notes/rtdetr_fam_rcra_full_data_stage_b.md`. The preflight
-confirmed matching configurations and the 4,019-frame inventory before either
-campaign was launched. Historical FAM remains secondary; the primary
-comparator is FAM retrained under the same current code as RCRA.
+The subsequent full-data Stage B is complete under the protocol frozen in
+`notes/rtdetr_fam_rcra_full_data_stage_b.md`. RCRA obtains
+`0.3753 +/- 0.0538` MtErie mAP@50 versus `0.3569 +/- 0.0422` for the matched
+current-code FAM baseline. Its paired mean gain is `+0.0184`, but it wins only
+3/5 seeds and its IC95% is `[-0.0550, +0.0918]`. It therefore passes the mean
+condition but fails the predeclared 4/5-win confirmation condition. Matched FAM
+is retained as the final performance baseline; the correct interpretation is
+that RCRA's positive average is unstable, not that the architecture is always
+worse. Historical FAM remains a secondary implementation-era reference, and
+no post-hoc RCRA rescue is performed.
 
 ## Thesis treatment after results
 
