@@ -102,18 +102,20 @@ class TestRTDETRFAMFullDataPairedModalityEvaluation(unittest.TestCase):
 
         fusion = [float(row["vis_ir_map50"]) for row in rows]
         vis = [float(row["vis_map50"]) for row in rows]
-        ir = [float(row["ir_map50"]) for row in rows]
-        deltas = [float(row["fusion_minus_best_single"]) for row in rows]
+        masked_ir = [float(row["masked_ir_vis_gt_map50"]) for row in rows]
+        deltas = [
+            float(row["fusion_minus_best_paired_intervention"]) for row in rows
+        ]
         self.assertTrue(
             all(
                 fused > visible > thermal
-                for fused, visible, thermal in zip(fusion, vis, ir)
+                for fused, visible, thermal in zip(fusion, vis, masked_ir)
             )
         )
         self.assertEqual(sum(delta > 0 for delta in deltas), 5)
         self.assertAlmostEqual(sum(fusion) / len(fusion), 0.3568793118)
         self.assertAlmostEqual(sum(vis) / len(vis), 0.3196012497)
-        self.assertAlmostEqual(sum(ir) / len(ir), 0.0214871965)
+        self.assertAlmostEqual(sum(masked_ir) / len(masked_ir), 0.0214871965)
         self.assertAlmostEqual(sum(deltas) / len(deltas), 0.0372780621)
 
 

@@ -36,19 +36,33 @@ SHA-256:
 Il file
 [`rtdetr_fam_full_data_paired_modality_evaluation.csv`](rtdetr_fam_full_data_paired_modality_evaluation.csv)
 contiene i cinque checkpoint FAM Stage-B selezionati e le tre condizioni
-VIS+IR, VIS e IR, valutate sugli stessi 708 frame e sulle stesse annotazioni
-VIS. La fusione supera VIS in 5/5 seed: il delta appaiato mAP@50 è
+VIS+IR, VIS mascherato e IR mascherato con ground truth VIS, valutate sugli
+stessi 708 frame e sulle stesse annotazioni VIS. La fusione supera VIS in 5/5
+seed: il delta appaiato mAP@50 è
 `+0.0373 +/- 0.0223`, IC95% `[+0.0095, +0.0650]`.
 
 Questa è una caratterizzazione post-selezione e non riapre la scelta del
-modello. Il protocollo, la cautela sull'interpretazione IR-only e le statistiche
-complete sono documentati in
+modello. Il valore IR mascherato `0.0215` misura robustezza senza il riferimento
+RGB nel sistema di coordinate VIS e non va chiamato prestazione IR nativa. Il
+protocollo e le statistiche complete sono documentati in
 [`../../rtdetr_fam_full_data_paired_modality_evaluation.md`](../../rtdetr_fam_full_data_paired_modality_evaluation.md).
 L'aggregato JSON locale contiene 15 unità sperimentali, è marcato
 `protocol_complete: true` e ha SHA-256:
 
 ```text
 28b767752de3b744e529dd7d281178a91cf08b5834414d772e706fda0012ddb5
+```
+
+Il controllo post-hoc
+[`rtdetr_fam_full_data_native_ir_coordinate_diagnostic.csv`](rtdetr_fam_full_data_native_ir_coordinate_diagnostic.csv)
+usa le stesse 708 controparti IR con preprocessing e 1.824 box IR nativi. La
+media `0.5618 +/- 0.0498` dimostra che il ramo termico non è collassato, ma non
+è direttamente confrontabile con VIS+IR perché cambia sistema di coordinate e
+ground truth. Il relativo aggregato locale è marcato
+`protocol_status: post_hoc_diagnostic`, `protocol_complete: true` e ha SHA-256:
+
+```text
+7e0fce162d298f303a4bb602379d2b78df7ac420f65335df5851d0f85eaca034
 ```
 
 ## RT-DETR Additive--FAM error analysis

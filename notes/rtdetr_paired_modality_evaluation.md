@@ -119,6 +119,14 @@ existing geometric adaptation, and therefore quantifies how much the trained
 four-channel detector can rely on IR alone in the VIS evaluation coordinate
 system. The historical IR-native benchmark answers a different question.
 
+A later post-selection diagnostic on the current-code Stage-B FAM checkpoints
+made this distinction explicit on the same 708 IR counterparts. Native IR
+preprocessing with native IR ground truth obtains `0.5618 +/- 0.0498` mAP@50,
+whereas paired masked IR with VIS ground truth obtains `0.0215 +/- 0.0091`.
+This rules out IR-branch collapse but is a post-hoc coordinate-contract check,
+not a direct metric comparison or a model-selection result; see
+`notes/rtdetr_fam_full_data_paired_modality_evaluation.md`.
+
 Machine-readable results are in
 `out/rtdetr_paired_modality_evaluation/rtdetr_paired_modality_evaluation.json`
 and the checkpoint table is in the adjacent CSV file.
