@@ -362,6 +362,8 @@ def build_wisard_items(root, folders):
 
 class WiSARDDataset(Dataset):
 
+    MODAL_DROPOUT_COORDINATE_CONTRACTS = {"native", "paired_vis"}
+
     id2class = {
         0: "running",
         1: "walking",
@@ -383,6 +385,7 @@ class WiSARDDataset(Dataset):
         single_class=False,
         modal_dropout=False,
         modal_dropout_probs=None,
+        modal_dropout_coordinate_contract="native",
         use_tiling=False,
         test_all_tiles=False,  # Nuova opzione per test
     ):
@@ -396,7 +399,13 @@ class WiSARDDataset(Dataset):
         self.return_path = return_path
         self.single_class = single_class
         self.modal_dropout = modal_dropout
-        self.modal_dropout_probs = modal_dropout_probs or [0.2, 0.2, 0.6]  # IR, RGB, Fusion
+        self.modal_dropout_probs = (
+            [0.2, 0.2, 0.6]
+            if modal_dropout_probs is None
+            else modal_dropout_probs
+        )  # IR, RGB, Fusion
+        self.modal_dropout_coordinate_contract = modal_dropout_coordinate_contract
+        self._validate_modal_dropout_config()
         self.use_tiling = use_tiling
         self.test_all_tiles = test_all_tiles  # Se True, restituisce tutti i 4 tile in fase di test
         if single_class:
@@ -411,6 +420,61 @@ class WiSARDDataset(Dataset):
             self.expanded_items = expanded_items
         else:
             self.expanded_items = None
+
+    def _validate_modal_dropout_config(self):
+        """Validate RT-DETR modal-dropout probabilities and geometry.
+
+        ``native`` preserves the historical behaviour: an IR-only draw uses
+        the native IR canvas and native IR annotations. ``paired_vis`` first
+        constructs the same paired VIS-coordinate sample used for fusion and
+        then masks input channels, retaining VIS annotations in every mode.
+        """
+        probs = self.modal_dropout_probs
+        if not isinstance(probs, (list, tuple)) or len(probs) != 3:
+            raise ValueError(
+                "modal_dropout_probs must contain exactly three values in "
+                "[IR-only, RGB-only, fusion] order."
+            )
+        self.modal_dropout_probs = [float(prob) for prob in probs]
+        if any(prob < 0.0 for prob in self.modal_dropout_probs):
+            raise ValueError("modal_dropout_probs values must be non-negative.")
+        if not np.isclose(sum(self.modal_dropout_probs), 1.0):
+            raise ValueError("modal_dropout_probs must sum to 1.0.")
+
+        contract = self.modal_dropout_coordinate_contract
+        if not isinstance(contract, str):
+            raise ValueError(
+                "modal_dropout_coordinate_contract must be 'native' or "
+                "'paired_vis'."
+            )
+        contract = contract.lower()
+        if contract not in self.MODAL_DROPOUT_COORDINATE_CONTRACTS:
+            raise ValueError(
+                "modal_dropout_coordinate_contract must be 'native' or "
+                f"'paired_vis', got {contract!r}."
+            )
+        self.modal_dropout_coordinate_contract = contract
+
+    @staticmethod
+    def _apply_paired_modal_dropout(img, mode):
+        """Mask a paired [RGB, IR] tensor without changing its geometry."""
+        if not isinstance(img, torch.Tensor) or img.ndim != 3 or img.shape[0] != 4:
+            shape = getattr(img, "shape", None)
+            raise ValueError(
+                "Paired-VIS modal dropout requires a transformed 4-channel "
+                f"tensor [RGB, IR], got shape {shape}."
+            )
+        if mode == "fusion":
+            return img
+
+        img = img.clone()
+        if mode == "ir":
+            img[:3].zero_()
+        elif mode == "rgb":
+            img[3:4].zero_()
+        else:
+            raise ValueError(f"Unsupported modal-dropout mode: {mode}")
+        return img
 
     def __len__(self):
         if self.expanded_items is not None:
@@ -573,7 +637,13 @@ class WiSARDDataset(Dataset):
             else:
                 mode = 'fusion'
 
-            if mode == 'fusion':
+            if (
+                mode == 'fusion'
+                or (
+                    mode == 'ir'
+                    and self.modal_dropout_coordinate_contract == 'paired_vis'
+                )
+            ):
                 img_vis_processed, img_ir_processed = adapt_ir2rgb(img_vis_pil, img_ir_pil)
                 inputs_vis = self.transform(img_vis_processed, annotations=targets_vis_raw, return_tensors="pt")
                 img_vis_tensor = inputs_vis['pixel_values'][0]
@@ -582,6 +652,8 @@ class WiSARDDataset(Dataset):
                 img_ir_tensor = inputs_ir['pixel_values'][0][0:1]
 
                 img = torch.cat([img_vis_tensor, img_ir_tensor], dim=0)  # [4, H, W]
+                if self.modal_dropout_coordinate_contract == 'paired_vis':
+                    img = self._apply_paired_modal_dropout(img, mode)
                 targets = inputs_vis['labels'][0]
 
             elif mode == 'rgb':

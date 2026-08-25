@@ -12,6 +12,7 @@ class TestWiSARDPhaseParameters(unittest.TestCase):
             "single_class": True,
             "modal_dropout": True,
             "modal_dropout_probs": [0.2, 0.2, 0.6],
+            "modal_dropout_coordinate_contract": "paired_vis",
             "use_tiling": False,
         }
 
@@ -25,6 +26,15 @@ class TestWiSARDPhaseParameters(unittest.TestCase):
         self.assertEqual(train_params["modal_dropout_probs"], [0.2, 0.2, 0.6])
         self.assertEqual(val_params["modal_dropout_probs"], [0.2, 0.2, 0.6])
         self.assertEqual(test_params["modal_dropout_probs"], [0.2, 0.2, 0.6])
+        self.assertEqual(
+            train_params["modal_dropout_coordinate_contract"], "paired_vis"
+        )
+        self.assertEqual(
+            val_params["modal_dropout_coordinate_contract"], "paired_vis"
+        )
+        self.assertEqual(
+            test_params["modal_dropout_coordinate_contract"], "paired_vis"
+        )
 
         # Splitting phase parameters must not mutate the shared YAML values.
         self.assertTrue(dataset_params["modal_dropout"])

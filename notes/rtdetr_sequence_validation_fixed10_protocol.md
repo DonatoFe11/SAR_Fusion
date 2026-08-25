@@ -157,6 +157,13 @@ condition but fails the frozen 4/5-win condition, so it is not confirmed as the
 final architecture and matched FAM is retained. This is an unstable positive
 signal, not evidence that RCRA is uniformly worse.
 
+The post-selection modality audit then exposed a coordinate-contract mismatch
+between historical native-IR Modal Dropout and paired masked-IR/VIS-GT
+evaluation. A backward-compatible, one-seed paired-VIS dropout ablation is now
+frozen in `notes/rtdetr_fam_paired_vis_modal_dropout_probe.md`. It is a new
+Stage-A robustness probe, not a reopening of the completed FAM/RCRA decision;
+MtErie remains disabled while it is screened on FHL validation.
+
 ## Two-stage policy for future models
 
 The whole-sequence split is a model-development instrument, not the final
