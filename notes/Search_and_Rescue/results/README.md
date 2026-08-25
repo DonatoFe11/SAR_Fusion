@@ -31,6 +31,26 @@ SHA-256:
 1402142280d299d94bffc8628a756e6d15d42867c260425bcce6c27bfd80357e
 ```
 
+## RT-DETR + FAM full-data: caratterizzazione appaiata delle modalità
+
+Il file
+[`rtdetr_fam_full_data_paired_modality_evaluation.csv`](rtdetr_fam_full_data_paired_modality_evaluation.csv)
+contiene i cinque checkpoint FAM Stage-B selezionati e le tre condizioni
+VIS+IR, VIS e IR, valutate sugli stessi 708 frame e sulle stesse annotazioni
+VIS. La fusione supera VIS in 5/5 seed: il delta appaiato mAP@50 è
+`+0.0373 +/- 0.0223`, IC95% `[+0.0095, +0.0650]`.
+
+Questa è una caratterizzazione post-selezione e non riapre la scelta del
+modello. Il protocollo, la cautela sull'interpretazione IR-only e le statistiche
+complete sono documentati in
+[`../../rtdetr_fam_full_data_paired_modality_evaluation.md`](../../rtdetr_fam_full_data_paired_modality_evaluation.md).
+L'aggregato JSON locale contiene 15 unità sperimentali, è marcato
+`protocol_complete: true` e ha SHA-256:
+
+```text
+28b767752de3b744e529dd7d281178a91cf08b5834414d772e706fda0012ddb5
+```
+
 ## RT-DETR Additive--FAM error analysis
 
 Il file

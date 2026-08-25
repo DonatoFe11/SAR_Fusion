@@ -230,6 +230,13 @@ does not transfer consistently to full-data epoch-10 training and the already
 used MtErie benchmark. No post-hoc LR, descriptor, threshold or checkpoint
 search will be used to rescue the candidate.
 
+After selection was closed, the retained current-code FAM checkpoints received
+a descriptive paired modality characterization documented in
+`notes/rtdetr_fam_full_data_paired_modality_evaluation.md`. VIS+IR exceeds VIS
+in 5/5 seeds by `+0.0373 +/- 0.0223` mAP@50 (IC95%
+`[+0.0095, +0.0650]`). This supports sensor complementarity but does not reopen
+architecture selection.
+
 ## Secondary metrics and computational cost
 
 Secondary metrics are descriptive and cannot override the primary frozen
