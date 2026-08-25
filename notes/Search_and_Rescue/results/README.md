@@ -65,6 +65,32 @@ ground truth. Il relativo aggregato locale è marcato
 7e0fce162d298f303a4bb602379d2b78df7ac420f65335df5851d0f85eaca034
 ```
 
+## RT-DETR + FAM: probe Modal Dropout paired-VIS
+
+Il file
+[`rtdetr_fam_paired_vis_modal_dropout_probe_evaluation.csv`](rtdetr_fam_paired_vis_modal_dropout_probe_evaluation.csv)
+confronta i `best` seed 40 della baseline e del training con IR-only adattato
+al canvas VIS. Le quattro condizioni usano gli stessi 896 frame FHL: tre
+interventi paired con ground truth VIS e un controllo IR nativo con ground
+truth IR.
+
+Il candidato mantiene la fusion (`+0.00475` mAP@50), ma il masked-IR paired
+migliora di appena `+0.00032` e l'IR nativo crolla di `-0.23664`. Fallisce
+quindi due dei tre criteri congelati e il pure paired-VIS replacement viene
+chiuso senza altri seed, MtErie o Stage B. Protocollo e interpretazione sono in
+[`../../rtdetr_fam_paired_vis_modal_dropout_probe.md`](../../rtdetr_fam_paired_vis_modal_dropout_probe.md).
+L'aggregato locale è marcato `protocol_complete: true` e ha SHA-256:
+
+```text
+4c93cc43f4bb3c4fcf8e6156d947981ac3ebd0ae89d97f76e23542630c87ac03
+```
+
+Il CSV compatto versionato ha SHA-256:
+
+```text
+4eca3eda8bb7113c896b801ae55fa27bee01b357b6b51fc5d70f695f4a692f68
+```
+
 ## RT-DETR Additive--FAM error analysis
 
 Il file

@@ -158,6 +158,23 @@ VIS+IR and mAR@100 from `0.2396` to `0.2617`, whereas mAP@75 is effectively
 unchanged (`0.0580` for both at four decimals). These observations are
 descriptive and do not alter the closed Stage-B selection.
 
+## Frozen follow-up training ablation
+
+The coordinate mismatch motivated a separate seed-40 Stage-A experiment,
+frozen before training in
+`notes/rtdetr_fam_paired_vis_modal_dropout_probe.md`. It replaced native
+IR/IR-GT dropout draws with the exact adapted-IR/VIS-GT intervention while
+leaving fusion, RGB-only, architecture and optimization unchanged.
+
+On the 896-pair FHL validation inventory, this changes paired masked-IR
+mAP@50 from `0.002519` to only `0.002836`, while native-IR/IR-GT falls from
+`0.263709` to `0.027067`. Fusion remains within the frozen tolerance. The
+candidate fails two of three predeclared checks and is closed without further
+seeds, MtErie or Stage B. This supports retaining the historical native
+dropout contract; it also shows why the low masked-IR value should be treated
+as an asymmetric missing-reference stress condition rather than optimized as
+if it were interchangeable with native IR detection.
+
 ## Artifacts and thesis treatment
 
 The compact versioned result is

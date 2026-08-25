@@ -159,10 +159,12 @@ signal, not evidence that RCRA is uniformly worse.
 
 The post-selection modality audit then exposed a coordinate-contract mismatch
 between historical native-IR Modal Dropout and paired masked-IR/VIS-GT
-evaluation. A backward-compatible, one-seed paired-VIS dropout ablation is now
-frozen in `notes/rtdetr_fam_paired_vis_modal_dropout_probe.md`. It is a new
-Stage-A robustness probe, not a reopening of the completed FAM/RCRA decision;
-MtErie remains disabled while it is screened on FHL validation.
+evaluation. The backward-compatible seed-40 paired-VIS dropout ablation in
+`notes/rtdetr_fam_paired_vis_modal_dropout_probe.md` has now completed. It
+preserves fusion mAP@50 (`+0.0048`) but improves paired masked-IR by only
+`+0.0003` and reduces native-IR mAP@50 by `-0.2366`. It fails two of its three
+frozen checks and is closed without further seeds, MtErie or Stage B. The
+completed FAM/RCRA decision remains unchanged.
 
 ## Two-stage policy for future models
 
