@@ -7,8 +7,8 @@ Wilderness Search and Rescue (SAR) requires locating missing or injured people
 over large and visually complex areas while time, personnel, visibility, and
 accessibility are constrained. Unmanned Aerial Vehicles (UAVs) can reduce the
 area that must be inspected from the ground and provide a viewpoint that is
-otherwise difficult or dangerous to obtain. Turning aerial imagery into a
-reliable detection signal is nevertheless challenging: a person may occupy
+otherwise difficult or dangerous to obtain. However, turning aerial images into a
+reliable detection signal is challenging since a person may occupy
 only a small fraction of the frame, vegetation and terrain create clutter, and
 appearance changes substantially with illumination, altitude, season, and
 weather.
@@ -16,7 +16,7 @@ weather.
 Visible and thermal infrared cameras provide complementary information. The
 visible stream contains texture, colour, and scene context, whereas the thermal
 stream responds to emitted radiation and can retain a useful human signature
-when visible contrast is weak. WiSARD was introduced specifically to support
+when visible contrast is weak. The WiSARD dataset was introduced specifically to support
 the study of visual--thermal perception for wilderness SAR across varied
 acquisition conditions~\cite{broyles2022wisard}. Complementarity, however,
 does not imply that using both streams is automatically beneficial. The two
@@ -36,20 +36,20 @@ particular training trajectory rather than a repeatable architectural effect.
 
 \section{Problem statement}
 
-This thesis investigates person detection from paired RGB and thermal imagery
+This thesis investigates person detection from paired RGB and thermal images
 on the WiSARD dataset. The main detector family is RT-DETR, adapted to a
 four-channel input through two independent backbones and feature-level fusion.
 The baseline sums corresponding RGB and infrared feature maps at the P3, P4,
 and P5 pyramid levels. The studied alternative transforms the infrared feature
-map with a Feature Alignment Module (FAM) before the same additive fusion.
+map with a Feature Alignment Module (FAM) before the same additive fusion is applied.
 
 The FAM uses RGB and IR features jointly to predict deformable-convolution
 offsets and modulation masks. This creates a spatially adaptive transformation
-of the infrared representation, but the module is not supervised by geometric
-registration labels. A higher detection score is consequently insufficient to
-claim that physical sensor registration has been learned. Establishing what the
-module does requires inspecting its internal variables and intervening on its
-levels, in addition to measuring the detector output.
+of the infrared representation, but the module receives no ground-truth supervision
+indicating the physical geometric correspondence between the RGB and IR images.
+Therefore a higher detection score is insufficient to claim that physical sensor
+registration has been learned. Establishing what the module does requires inspecting
+its internal variables and intervening on its levels, in addition to measuring the detector output.
 
 The study addresses four connected forms of robustness:
 
@@ -65,36 +65,29 @@ The study addresses four connected forms of robustness:
 
 \section{Research questions}
 
-The thesis is organized around the following questions.
+The thesis is organized around the following research questions.
 
-\paragraph{RQ1 --- Experimental reliability.}
-How do run-to-run variability, nondeterministic GPU operations, validation
-mismatch, checkpoint selection, and process isolation affect the reliability
-of RGB--IR detector comparisons?
+\paragraph{RQ1 --- Reliable RT-DETR effectiveness.}
+Under a locked paired-seed protocol that accounts for training variability,
+validation mismatch, and checkpoint selection, does FAM provide a consistent
+advantage over the baseline RT-DETR on MtErie, including when one input
+modality is unavailable?
 
-\paragraph{RQ2 --- RT-DETR effectiveness and missing modalities.}
-Under a locked paired-seed protocol, does FAM provide a consistent advantage
-over Additive fusion in RT-DETR, and how does it affect performance when one
-input modality is unavailable?
-
-\paragraph{RQ3 --- Mechanism and failure modes.}
+\paragraph{RQ2 --- Mechanism and failure modes.}
 What geometric-functional transformation does FAM learn across P3, P4, and P5,
 how stable is it across seeds and sessions, and which pyramid levels contribute
 to detection performance? Can a smooth bounded-offset constraint remove an
 observed internal collapse without reducing detection quality?
 
-\paragraph{RQ4 --- Operational relevance.}
-How does FAM change the detector's error profile, its behavior under severe
-sensor-scale mismatch, and its computational cost?
-
-\paragraph{RQ5 --- Architectural transferability.}
-Do the benefits observed with RT-DETR transfer to other detector families under
-comparable evaluation rules?
+\paragraph{RQ3 --- Operational and validity boundaries.}
+How do FAM's error profile, computational cost, behavior under severe
+sensor-scale mismatch, and transfer to another detector family delimit the
+operational relevance and generality of the RT-DETR result?
 
 \section{Scope and relationship with preceding coursework}
 
 This thesis continues two preceding course projects. The Deep Learning project
-studied DETR, Modal Dropout, RT-DETR Additive fusion, fixed tiling, and CMX. The
+studied DETR, Modal Dropout, RT-DETR Additive fusion baseline, fixed tiling, and CMX. The
 Computer Vision project subsequently introduced the FAM on RT-DETR, designed a
 Hybrid CMX variant, and adapted Deformable DETR to channel fusion with FAM.
 These components define the starting point of the present work.
@@ -107,43 +100,36 @@ performance across paired runs, its internal behavior, its failure modes, the
 effect of a targeted correction, and the extent to which the result transfers
 outside the original RT-DETR setting.
 
-The distinction also applies to the evidence. Early experiments were useful
-for discovering bugs and generating hypotheses, but many were individual runs
-produced before the final validation and checkpoint policy was defined. They
-are retained as an exploratory development history and are not mixed with the
-main multi-seed estimates.
+Early experiments were useful for discovering bugs and generating hypotheses, 
+but many were individual runs produced before the final validation and checkpoint 
+policy was defined. They are retained as an exploratory development history and are 
+not mixed with the main multi-seed estimates.
 
 \section{Contributions}
 
 The contributions developed after the preceding course projects are:
 
 \begin{enumerate}[label=\arabic*.]
-  \item an audit of variability, validation composition, checkpoint policy,
-        model initialization, GPU determinism, and process isolation;
-  \item a locked RT-DETR comparison of six configurations over five paired
-        seeds, including initialization and direct-warp ablations;
-  \item a multi-seed diagnostic study of offsets, masks, feature statistics,
-        PCA projections, and session dependence;
-  \item a factorial post-hoc ablation of FAM activity at P3, P4, and P5;
-  \item the identification of a compensated P5 collapse and a five-seed test
-        of a smooth bounded-offset correction;
-  \item a paired error analysis across confidence thresholds, including
-        size-stratified recall and predefined qualitative examples;
-  \item a frozen one-shot stress test on the Carnation acquisition and a
-        controlled detector-only compute benchmark;
-  \item a complete DINO implementation with Contrastive DeNoising, Mixed Query
-        Selection, and Look-Forward-Twice, reported as a negative exploratory
-        result for the studied configuration;
-  \item an extension of the Deformable DETR line with FAM and Stochastic
-        Spatial Jitter, retained as exploratory evidence;
-  \item a dual-backbone YOLOv10 implementation with Additive or FAM fusion and
-        feature-level modality gating, evaluated under a five-seed final
-        protocol.
+  \item a reliability-aware experimental framework for RGB--IR detection,
+        combining paired training seeds, fixed checkpoint rules, transferred
+        heads, training-only Modal Dropout, and isolated processes;
+  \item a controlled multi-seed evaluation of six RT-DETR configurations,
+        establishing the consistent internal advantage of standard FAM and its
+        behavior when either modality is unavailable;
+  \item a mechanistic study of FAM across pyramid levels, combining internal
+        diagnostics, factorial interventions, identification of a compensated
+        P5 collapse, and a five-seed bounded-offset test;
+  \item an explicit delimitation of the result through paired error analysis,
+        the frozen Carnation scale-mismatch stress test, a detector-only
+        compute benchmark, and a controlled negative transfer result on
+        dual-backbone YOLOv10.
 \end{enumerate}
 
-Negative results are part of these contributions. They delimit which
-mechanistic changes improve internal behavior without improving detection and
-which RT-DETR findings fail to transfer under the studied conditions.
+Exploratory DINO and Deformable DETR studies are retained as development
+evidence, but are not presented as central contributions. Negative results are
+integral to the final contribution: they delimit which mechanistic changes
+improve internal behavior without improving detection and which RT-DETR
+findings fail to transfer under the studied conditions.
 
 \section{Thesis organization}
 

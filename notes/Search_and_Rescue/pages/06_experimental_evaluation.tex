@@ -15,9 +15,9 @@ VIS+IR \mapfifty{} result for every experimental unit.
   \caption{Final RT-DETR VIS+IR \mapfifty{} by paired training seed.}
   \label{tab:rtdetr-raw}
   \begin{adjustbox}{max width=\textwidth}
-  \begin{tabular}{rrrrrrr}
+  \begin{tabular}{ccccccc}
     \toprule
-    Seed & Additive & FAM & FAM + IR Dropout & FAM + SSJ & Identity DCNv2 & Grid Sample \\
+    Seed & Base & FAM & FAM + IR Dropout & FAM + SSJ & Identity DCNv2 & Grid Sample \\
     \midrule
     40 & 0.2566 & 0.3783 & 0.4087 & 0.3663 & 0.4336 & 0.4050 \\
     41 & 0.4029 & 0.4335 & 0.3234 & 0.3734 & 0.2113 & 0.3483 \\
@@ -34,7 +34,7 @@ run is insufficient. Identity DCNv2 ranges from 0.2113 to 0.4336, and the
 highest value of several individual seeds belongs to a configuration that is
 not best on average or consistently paired with the reference.
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
   \caption{Aggregate final RT-DETR VIS+IR \mapfifty{}. Standard deviations are
   sample standard deviations across five checkpoints.}
@@ -44,7 +44,7 @@ not best on average or consistently paired with the reference.
     \toprule
     Configuration & Mean & Median & SD & Min--max & 95\% CI of mean \\
     \midrule
-    Additive & 0.3080 & 0.2958 & 0.0677 & 0.2372--0.4029 & 0.2239--0.3921 \\
+    Base & 0.3080 & 0.2958 & 0.0677 & 0.2372--0.4029 & 0.2239--0.3921 \\
     FAM & 0.3780 & 0.3783 & 0.0440 & 0.3129--0.4335 & 0.3234--0.4326 \\
     FAM + IR Dropout & \textbf{0.3871} & 0.3986 & 0.0469 & 0.3234--0.4452 & 0.3289--0.4453 \\
     FAM + SSJ & 0.3749 & 0.3734 & \textbf{0.0185} & 0.3528--0.4030 & 0.3519--0.3980 \\
@@ -55,18 +55,18 @@ not best on average or consistently paired with the reference.
   \end{adjustbox}
 \end{table}
 
-FAM increases mean \mapfifty{} over Additive by 0.0700 and wins in all five
+FAM increases mean \mapfifty{} over Base RT-DETR by 0.0700 and wins in all five
 paired seeds. Its mean COCO mAP also increases from
 \(0.1059\pm0.0243\) to \(0.1351\pm0.0096\), mAP@75 from
 \(0.0474\pm0.0128\) to \(0.0692\pm0.0043\), and mAR@100 from
 \(0.2474\pm0.0302\) to \(0.2798\pm0.0141\). The direction is therefore not
 limited to the primary IoU threshold.
 
-\begin{figure}[p]
+\begin{figure}[H]
   \centering
-  \thesisimage[\textwidth]{images/rtdetr_final_paired_map50.pdf}{Paired-seed plot for the six final RT-DETR configurations, emphasizing FAM versus Additive and the paired ablation contrasts.}
+  \thesisimage[0.95\textwidth]{images/rtdetr_final_paired_map50.pdf}{Paired-seed plot for the six final RT-DETR configurations.}
   \caption{Final RT-DETR VIS+IR \mapfifty{} from the \texttt{latest}
-  checkpoints. Panel A connects Additive and FAM runs initialized with the same
+  checkpoints. Panel A connects Base and FAM runs initialized with the same
   training seed; FAM wins all five pairs. Panel B reports, for each seed, the
   difference between a variant and standard FAM, with black bars denoting
   paired means. Each seed-specific run/checkpoint is an experimental unit;
@@ -76,7 +76,7 @@ limited to the primary IoU threshold.
 
 \subsection{Paired contrasts and model selection}
 
-\Cref{tab:rtdetr-contrasts} compares FAM with Additive and compares each FAM
+\Cref{tab:rtdetr-contrasts} compares FAM with Base RT-DETR and compares each FAM
 regularization or ablation with the standard FAM. With five pairs, the tests
 and intervals are exploratory and are not used as a binary decision rule.
 
@@ -86,11 +86,11 @@ and intervals are exploratory and are not used as a binary decision rule.
   configuration exceeds its reference for the same training seed.}
   \label{tab:rtdetr-contrasts}
   \begin{adjustbox}{max width=\textwidth}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lccccc}
     \toprule
     Contrast & Mean delta & SD delta & 95\% CI & Wins & Paired (t) / Wilcoxon (p) \\
     \midrule
-    FAM -- Additive & +0.0700 & 0.0531 & [+0.0040,+0.1359] & 5/5 & 0.0421 / 0.0625 \\
+    FAM -- Base & +0.0700 & 0.0531 & [+0.0040,+0.1359] & 5/5 & 0.0421 / 0.0625 \\
     FAM + IR Dropout -- FAM & +0.0091 & 0.0869 & [-0.0988,+0.1171] & 3/5 & 0.8260 / 0.8125 \\
     FAM + SSJ -- FAM & -0.0031 & 0.0369 & [-0.0488,+0.0427] & 3/5 & 0.8617 / 1.0000 \\
     Identity DCNv2 -- FAM & -0.0501 & 0.1170 & [-0.1953,+0.0952] & 2/5 & 0.3928 / 0.6250 \\
@@ -113,8 +113,11 @@ channel mixing. Its result supports the relevance of a geometric component,
 but does not causally assign all FAM improvement to physical alignment.
 
 The main model for subsequent analysis is therefore standard FAM with DCNv2,
-without SSJ and without IR Dropout. The decision favors the consistent paired
-gain over Additive rather than the highest numerical mean.
+without SSJ and without IR feature dropout. Standard FAM is the only final
+configuration that exceeds Base in all five paired seeds. The variants are
+compared directly with FAM because those contrasts isolate the effect of the
+additional intervention: IR feature dropout does not provide a consistent
+increment over FAM despite its higher raw mean.
 
 \subsection{Missing-modality evaluation}
 
@@ -131,7 +134,7 @@ are reported in \Cref{tab:rtdetr-modalities}.
     \toprule
     Configuration & VIS & IR & VIS+IR \\
     \midrule
-    Additive & 0.1543 \(\pm\) 0.0331 & 0.1567 \(\pm\) 0.0464 & 0.3081 \(\pm\) 0.0677 \\
+    Base & 0.1543 \(\pm\) 0.0331 & 0.1567 \(\pm\) 0.0464 & 0.3081 \(\pm\) 0.0677 \\
     FAM & 0.2442 \(\pm\) 0.0307 & 0.2028 \(\pm\) 0.0635 & 0.3780 \(\pm\) 0.0439 \\
     FAM + IR Dropout & 0.2368 \(\pm\) 0.0428 & 0.2079 \(\pm\) 0.0267 & 0.3870 \(\pm\) 0.0466 \\
     FAM + SSJ & 0.2312 \(\pm\) 0.0163 & 0.1794 \(\pm\) 0.0416 & 0.3751 \(\pm\) 0.0185 \\
@@ -147,7 +150,7 @@ between 0.1067 and 0.1454. This is the most uniform result of the main
 campaign: on MtErie, complementary information remains useful even though the
 individual modality scores vary substantially.
 
-FAM also improves Additive in VIS-only in 5/5 seeds, with a mean delta of
+FAM also improves Base RT-DETR in VIS-only in 5/5 seeds, with a mean delta of
 0.0899, and in IR-only in 4/5, with a mean delta of 0.0462. In RT-DETR, a
 missing input is zero-filled while both backbones and the FAM path remain in
 the model. The unimodal difference therefore measures the robustness of the
@@ -178,7 +181,7 @@ Forward hooks capture RGB and IR features before FAM, the transformed IR
 feature, and the predicted offsets and masks. Offset components are converted
 to input-image pixels by multiplying them by the level stride. Feature maps are
 projected to three shared PCA components for visualization. These pseudo-colour
-maps are abstract feature projections, not registered RGB and thermal images.
+maps are abstract feature projections and not registered RGB and thermal images.
 
 \subsection{Offset behavior across levels and seeds}
 
@@ -228,12 +231,12 @@ collapse. The diagnostic conclusion agrees with the detection result: SSJ
 changes the learned module in a repeatable way at P3, but that change does not
 improve final detection accuracy.
 
-Grid Sample has smaller and less dispersed P3/P4 offsets and preserves the
-input feature more closely. Its same-cell cosine similarity increases slightly
-after the warp. DCNv2 instead reduces same-cell cosine similarity and increases
-standardized RMSE because it also filters and mixes channels. This does not
-show that DCNv2 worsens physical alignment; it shows that its output is not
-merely the IR tensor shifted to resemble RGB at the same cell.
+Grid Sample has smaller and less dispersed P3/P4 offsets. Unlike DCNv2, it
+performs only a bilinear warp, without learned post-sampling filtering or
+channel mixing. Its output can therefore be interpreted more directly as a
+spatially transformed IR feature, whereas the DCNv2 output is a broader
+feature-space transformation. Neither operation establishes physical camera
+alignment.
 
 \subsection{P5 collapse in seed 41}
 \label{sec:p5-collapse}
@@ -246,7 +249,7 @@ learned DCNv2 bias at every location.
 
 \begin{figure}[p]
   \centering
-  \thesisimage[0.9\textwidth]{images/fam_p5_seed41_collapse.png}{Mechanistic diagnostic for MtErie sample 35 at P5 in FAM seed 41, showing shared-basis PCA projections, qualitative blends, and offset, mask, and output statistics.}
+  \thesisimage[0.9\textwidth]{images/fam_p5_seed41_collapse.png}{Mechanistic diagnostic of the P5 collapse in FAM seed 41.}
   \caption{Mechanistic diagnostic of the collapsed P5 branch in FAM seed 41
   for the prespecified MtErie sample 35. Panels (a)--(c) are pseudo-colour PCA
   projections obtained with a basis shared across the standardized feature
@@ -270,7 +273,7 @@ deformable-convolution bias.
 The detector nevertheless obtains 0.4335 \mapfifty{}, the highest of the five
 FAM checkpoints. High output accuracy therefore does not guarantee that every
 internal alignment level behaves sensibly. The main FAM advantage is not
-created by the anomaly: after excluding seed 41, FAM still beats Additive in
+created by the anomaly: after excluding seed 41, FAM still beats Base RT-DETR in
 4/4 paired seeds with mean delta (+0.0799).
 
 \subsection{Factorial P3/P4/P5 ablation}
@@ -366,12 +369,14 @@ the selected model.
 
 \subsection{Protocol}
 
-The error analysis compares the five Additive and five standard-FAM final
+The error analysis compares the five Base RT-DETR and five standard-FAM final
 checkpoints on all 708 MtErie frames and 1,770 objects. Predictions are matched
-one-to-one to annotations at IoU at least 0.50. Threshold 0.01, already used to
-collect predictions for the final evaluations, is the primary collection
-threshold; 0.05, 0.10, 0.25, and 0.50 form a predefined sensitivity analysis.
-The analysis does not select a deployment threshold.
+one-to-one to annotations at IoU at least 0.50. The primary evaluation retains
+all predictions with confidence at least 0.01, as in the final mAP evaluation.
+For the predefined sensitivity analysis, this same prediction set is
+additionally thresholded at 0.05, 0.10, 0.25, and 0.50 when reporting
+precision, recall, and false positives. These thresholds are not used for model
+selection or to select a deployment threshold.
 
 Of the 1,770 objects, 1,451 are COCO-small, 301 medium, and 18 large at the
 evaluation resolution. Large-object results are therefore particularly
@@ -389,15 +394,15 @@ uncertain.
     \toprule
     Threshold & Model & Precision & Recall & FP/image & Non-empty frames with FN \\
     \midrule
-    0.01 & Additive & 0.0418 \(\pm\) 0.0175 & 0.7677 \(\pm\) 0.0490 & 51.006 \(\pm\) 21.591 & 0.4508 \(\pm\) 0.0777 \\
+    0.01 & Base & 0.0418 \(\pm\) 0.0175 & 0.7677 \(\pm\) 0.0490 & 51.006 \(\pm\) 21.591 & 0.4508 \(\pm\) 0.0777 \\
     0.01 & FAM & 0.0443 \(\pm\) 0.0132 & 0.8044 \(\pm\) 0.0328 & 47.623 \(\pm\) 17.873 & 0.4009 \(\pm\) 0.0524 \\
-    0.05 & Additive & 0.2713 \(\pm\) 0.0909 & 0.5932 \(\pm\) 0.1134 & 4.844 \(\pm\) 3.199 & 0.6476 \(\pm\) 0.1155 \\
+    0.05 & Base & 0.2713 \(\pm\) 0.0909 & 0.5932 \(\pm\) 0.1134 & 4.844 \(\pm\) 3.199 & 0.6476 \(\pm\) 0.1155 \\
     0.05 & FAM & 0.3010 \(\pm\) 0.0940 & 0.6539 \(\pm\) 0.0972 & 4.336 \(\pm\) 2.191 & 0.5835 \(\pm\) 0.0775 \\
-    0.10 & Additive & 0.4721 \(\pm\) 0.0923 & 0.4582 \(\pm\) 0.1535 & 1.513 \(\pm\) 1.115 & 0.7466 \(\pm\) 0.1223 \\
+    0.10 & Base & 0.4721 \(\pm\) 0.0923 & 0.4582 \(\pm\) 0.1535 & 1.513 \(\pm\) 1.115 & 0.7466 \(\pm\) 0.1223 \\
     0.10 & FAM & 0.5194 \(\pm\) 0.1148 & 0.5507 \(\pm\) 0.1333 & 1.447 \(\pm\) 0.792 & 0.6554 \(\pm\) 0.0725 \\
-    0.25 & Additive & 0.7290 \(\pm\) 0.0866 & 0.2340 \(\pm\) 0.1468 & 0.249 \(\pm\) 0.218 & 0.8682 \(\pm\) 0.0879 \\
+    0.25 & Base & 0.7290 \(\pm\) 0.0866 & 0.2340 \(\pm\) 0.1468 & 0.249 \(\pm\) 0.218 & 0.8682 \(\pm\) 0.0879 \\
     0.25 & FAM & 0.7715 \(\pm\) 0.0742 & 0.3330 \(\pm\) 0.1506 & 0.276 \(\pm\) 0.168 & 0.7858 \(\pm\) 0.0525 \\
-    0.50 & Additive & 0.9140 \(\pm\) 0.0536 & 0.1088 \(\pm\) 0.0705 & 0.029 \(\pm\) 0.033 & 0.9257 \(\pm\) 0.0588 \\
+    0.50 & Base & 0.9140 \(\pm\) 0.0536 & 0.1088 \(\pm\) 0.0705 & 0.029 \(\pm\) 0.033 & 0.9257 \(\pm\) 0.0588 \\
     0.50 & FAM & 0.9350 \(\pm\) 0.0504 & 0.1627 \(\pm\) 0.0663 & 0.036 \(\pm\) 0.037 & 0.8790 \(\pm\) 0.0359 \\
     \bottomrule
   \end{tabular}
@@ -413,7 +418,7 @@ The gain is not limited to the 18 large objects. At threshold 0.25, mean recall
 increases by 0.0815 for small and 0.1781 for medium targets. False positives do
 not improve uniformly: FAM produces slightly fewer on average at low
 thresholds and slightly more at 0.25 and 0.50, with signs that vary across
-seeds. The thesis therefore does not claim that FAM reduces false positives.
+seeds.
 
 \begin{figure}[htbp]
   \centering
@@ -432,16 +437,16 @@ of candidates for AP computation but is not an operational alarm threshold.
 
 The qualitative manifest was built from ground-truth annotations before
 inference. For each of the three MtErie sequences, it selects one frame with a
-small target and one empty frame. Seed 43 is used because its FAM--Additive
+small target and one empty frame. Seed 43 is used because its FAM--Base
 \mapfifty{} difference equals the median of the five paired differences; it is
 neither the best nor worst pair.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{images/rtdetr_error_qualitative_conf_025.jpg}
   \caption{Predefined qualitative examples at confidence 0.25. Each row
   contains one small-target frame and one empty frame from a MtErie sequence.
-  The same frames and display rules are used for Additive and FAM. These
+  The same frames and display rules are used for Base RT-DETR and FAM. These
   examples illustrate, but do not replace, the aggregate analysis.}
   \label{fig:error-qualitative-025}
 \end{figure}
@@ -449,7 +454,7 @@ neither the best nor worst pair.
 The corresponding threshold-0.01 montage is retained in the appendix because
 the large number of low-confidence boxes makes it difficult to read. In the
 three predefined small-target frames at 0.25, FAM recovers one target missed by
-Additive in one frame; both models miss the targets in the other two. No
+Base RT-DETR in one frame; both models miss the targets in the other two. No
 general conclusion is drawn from these six examples.
 
 \section{Carnation scale-mismatch stress test}
@@ -459,7 +464,7 @@ general conclusion is drawn from these six examples.
 
 Carnation contains a paired visual and thermal acquisition with a substantially
 stronger scale mismatch than the main splits. Its protocol was frozen before
-inference and admits only the five final Additive and five final FAM
+inference and admits only the five final Base RT-DETR and five final FAM
 checkpoints. The intersection of frame identifiers contains 739 examples.
 Each checkpoint is evaluated in VIS+IR, VIS, and IR, yielding thirty
 evaluations without training, tuning, checkpoint selection, or threshold
@@ -477,7 +482,7 @@ general domain generalization.
   \label{tab:carnation-results}
   \begin{tabular}{lrrrr}
     \toprule
-    Input & Additive & FAM & Mean paired delta & FAM wins \\
+    Input & Base RT-DETR & FAM & Mean paired delta & FAM wins \\
     \midrule
     VIS+IR & 0.1445 \(\pm\) 0.0709 & 0.2408 \(\pm\) 0.0380 & +0.0962 & 4/5 \\
     VIS & 0.1555 \(\pm\) 0.0669 & 0.3196 \(\pm\) 0.0518 & +0.1641 & 5/5 \\
@@ -486,7 +491,7 @@ general domain generalization.
   \end{tabular}
 \end{table}
 
-FAM is more tolerant than Additive in the fusion condition, with a mean gain
+FAM is more tolerant than Base RT-DETR in the fusion condition, with a mean gain
 of 0.0962 and four paired wins. This is not sufficient to make fusion the best
 input condition. For the FAM checkpoints, VIS-only exceeds VIS+IR in all five
 seeds by a mean of 0.0789. Adding the strongly mismatched IR signal is therefore
@@ -508,8 +513,9 @@ the main benchmark but does not survive this extreme acquisition.
 \section{Computational cost}
 \label{sec:compute}
 
-The compute comparison uses the seed-43 Additive and FAM checkpoints, chosen in
-advance as the same typical pair used for qualitative illustrations. Each
+The compute comparison uses the seed-43 Base RT-DETR and FAM RT-DETR
+checkpoints, chosen in advance as the same typical pair used for qualitative
+illustrations. Each
 configuration is measured in three isolated processes on an NVIDIA GeForce RTX
 4070 Laptop GPU with PyTorch 2.4.0, CUDA 12.1, batch size one, FP32 input of
 \(640\times640\), thirty warm-up iterations, and one hundred timed forward
@@ -518,7 +524,7 @@ excluded.
 
 \begin{table}[htbp]
   \centering
-  \caption{Detector-only computational benchmark. The operation count is a
+  \caption{RT-DETR detector-only computational benchmark. The operation count is a
   proxy and the latency uncertainty is the sample standard deviation across
   three trial means.}
   \label{tab:compute-results}
@@ -527,14 +533,14 @@ excluded.
     \toprule
     Model & Parameters & Proxy GFLOPs & Latency & Throughput & CUDA peak \\
     \midrule
-    Additive & 66.20 M & 208.37 & 66.91 \(\pm\) 0.30 ms & 14.95 image/s & 436.26 MiB \\
+    Base & 66.20 M & 208.37 & 66.91 \(\pm\) 0.30 ms & 14.95 image/s & 436.26 MiB \\
     FAM & 117.49 M & 304.54 & 78.87 \(\pm\) 0.37 ms & 12.68 image/s & 712.18 MiB \\
     \bottomrule
   \end{tabular}
   \end{adjustbox}
 \end{table}
 
-Relative to Additive, FAM adds 77.5\% parameters, 46.2\% proxy computation,
+Relative to Base RT-DETR, FAM adds 77.5\% parameters, 46.2\% proxy computation,
 17.9\% detector latency, and 275.92 MiB of total peak CUDA memory. The proxy
 adds an analytical dense-convolution equivalent for DCNv2 because the profiler
 does not count that operator fully; it still omits parts of bilinear sampling,
@@ -554,23 +560,9 @@ the unmeasured cost of the full UAV pipeline.
 The YOLOv10-s transfer model receives a four-channel paired tensor and splits
 it into a three-channel RGB stream and one-channel IR stream. Two independent
 backbones produce P3, P4, and P5 features at strides 8, 16, and 32. The
-Additive configuration sums each pair; the FAM configuration applies the same
+Base configuration sums each pair; the FAM configuration applies the same
 standard DCNv2 module to IR before addition. The resulting features enter the
 shared YOLOv10 FPN/PAN neck and detection head.
-
-\begin{figure}[p]
-  \centering
-  \thesisimage[0.92\textwidth]{images/yolov10_dual_backbone_fam.pdf}{Diagram of the implemented YOLOv10 dual backbones, P3/P4/P5 Additive or FAM fusion, FPN/PAN neck, and v10Detect head.}
-  \caption{Implemented YOLOv10-s transfer architecture. The controlled
-  comparison changes the P3/P4/P5 fusion operation while retaining the dual
-  backbones, feature gating, FPN/PAN neck, detection head, and final protocol.
-  The FAM operation is the same as the one expanded in
-  \Cref{fig:fam-architecture} and is therefore not duplicated internally.
-  During unimodal inference the excluded backbone is not executed and FAM is
-  bypassed; consequently, unimodal Additive--FAM differences are indirect
-  effects of training rather than direct alignment effects.}
-  \label{fig:yolo-architecture}
-\end{figure}
 
 Missing modalities are implemented through feature gating. During training,
 one branch or both are selected with probabilities 0.2/0.2/0.6. In standalone
@@ -578,6 +570,20 @@ VIS or IR evaluation, the excluded backbone is not executed and FAM is
 bypassed because a paired reference is unavailable. Unimodal differences
 therefore reflect how training with FAM shaped the remaining weights, not a
 direct alignment operation at inference.
+
+\begin{figure}[H]
+  \centering
+  \thesisimage[0.92\textwidth]{images/yolov10_dual_backbone_fam.pdf}{Diagram of the implemented YOLOv10 dual-backbone Base and FAM configurations.}
+  \caption{Implemented YOLOv10-s transfer architecture. The controlled
+  comparison changes the P3/P4/P5 fusion operation while retaining the dual
+  backbones, feature gating, FPN/PAN neck, detection head, and final protocol.
+  The FAM operation is the same as the one expanded in
+  \Cref{fig:fam-architecture} and is therefore not duplicated internally.
+  During unimodal inference the excluded backbone is not executed and FAM is
+  bypassed Consequently, unimodal Base--FAM differences are indirect
+  effects of training rather than direct alignment effects.}
+  \label{fig:yolo-architecture}
+\end{figure}
 
 \subsection{Exploratory history and checkpoint problem}
 
@@ -587,7 +593,7 @@ fusion-only training, input-level modality masking, feature gating, FAM, and
 SSJ. These runs helped identify feature-level gating as the appropriate
 missing-modality contract but do not provide a final transfer claim.
 
-The historical seed-42 Additive and FAM checkpoints were selected at epochs 16
+The historical seed-42 Base and FAM checkpoints were selected at epochs 16
 and 89 and achieved higher MtErie values than the final 200-epoch checkpoints.
 Because FHL is small and strongly shifted, its curve does not define a stable
 general rule. Selecting 100 epochs, reusing \texttt{best.pt}, or choosing a new
@@ -595,15 +601,13 @@ epoch after observing MtErie would be retrospective test tuning.
 
 \subsection{Final YOLOv10 protocol}
 
-The final comparison fixes two configurations: dual-backbone Additive and
-dual-backbone standard FAM, both with feature gating 20/20/60. Each uses paired
-seeds 40--44, an isolated Python process, 200 fixed epochs, disabled early
-stopping, no validation-based selection, and the final \texttt{last.pt}
-checkpoint. The 200-epoch horizon was retained because it was declared in the
-historical YAML schedule before the final results were observed.
+The final comparison fixes two configurations: dual-backbone Base and
+dual-backbone with FAM, both with feature gating 20/20/60. Each uses paired
+seeds 40--44, 200 fixed epochs, disabled early stopping, no validation-based selection, 
+and the final \texttt{last.pt} checkpoint. The 200-epoch horizon was retained 
+because it was declared in the historical YAML schedule before the final results were observed.
 
-All ten runs completed 200 epochs. Their automatic VIS+IR results are shown in
-\Cref{tab:yolo-raw}.
+All ten runs completed 200 epochs. Their VIS+IR results are shown in \Cref{tab:yolo-raw}.
 
 \begin{table}[htbp]
   \centering
@@ -611,7 +615,7 @@ All ten runs completed 200 epochs. Their automatic VIS+IR results are shown in
   \label{tab:yolo-raw}
   \begin{tabular}{rrrr}
     \toprule
-    Seed & Additive & FAM & FAM -- Additive \\
+    Seed & Base & FAM & FAM -- Base \\
     \midrule
     40 & 0.2304 & 0.1883 & -0.0421 \\
     41 & 0.2740 & 0.2749 & +0.0009 \\
@@ -634,14 +638,14 @@ benefit.
 The same standalone evaluator was used for all three input conditions on the
 ten final checkpoints. Its results are in \Cref{tab:yolo-modalities}.
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
   \caption{Final standalone YOLOv10 \mapfifty{} by modality, mean \(\pm\) SD
   over five checkpoints.}
   \label{tab:yolo-modalities}
   \begin{tabular}{lrrrr}
     \toprule
-    Input & Additive & FAM & Mean delta & FAM wins \\
+    Input & Base & FAM & Mean delta & FAM wins \\
     \midrule
     VIS+IR & 0.2498 \(\pm\) 0.0254 & 0.2213 \(\pm\) 0.0441 & -0.0285 & 2/5 \\
     VIS & 0.1964 \(\pm\) 0.0218 & 0.1929 \(\pm\) 0.0407 & -0.0035 & 2/5 \\
@@ -655,7 +659,7 @@ stable benefit. IR improves in all seeds but remains too low to be operationally
 useful, and FAM is bypassed in that condition. The difference is an indirect
 training effect on the learned backbones and neck.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{images/yolov10_final_modality_paired_map50.png}
   \caption{Final YOLOv10 paired modality evaluation. The favorable but very
@@ -673,9 +677,9 @@ result.
 
 \subsection{Training-horizon interpretation}
 
-At seed 42, the historical early Additive checkpoint obtained 0.3469 at epoch
+At seed 42, the historical early Base checkpoint obtained 0.3469 at epoch
 16 and the historical FAM checkpoint 0.2965 at epoch 89, compared with 0.2494
-and 0.1947 at epoch 200. Additive training losses and learning rate match the
+and 0.1947 at epoch 200. Base YOLOv10 training losses and learning rate match the
 old run exactly until its early stop, after which the final run continues.
 Training losses keep decreasing while the final test score is lower than the
 historical early score.

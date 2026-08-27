@@ -3,14 +3,13 @@
 
 \section{UAV-based RGB--thermal detection for Search and Rescue}
 
-Person detection in aerial wilderness imagery differs from conventional
+Person detection in aerial wilderness images differs from conventional
 street-level pedestrian detection. Subjects are frequently small, partially
 occluded, and observed from changing altitudes and viewing angles. Natural
 backgrounds provide repeated textures, warm rocks may resemble thermal human
 signatures, and targets may exhibit weak visible or thermal contrast. The
-WiSARD dataset addresses this setting with labeled visual and thermal imagery
-collected from UAV flights over diverse terrains and acquisition
-conditions~\cite{broyles2022wisard}.
+WiSARD dataset addresses this setting with labeled visual and thermal images
+collected from UAV flights over diverse terrains and acquisition conditions~\cite{broyles2022wisard}.
 
 RGB--thermal sensing seeks to reduce dependence on a single observation
 channel. Multispectral pedestrian benchmarks have long shown the potential of
@@ -46,66 +45,255 @@ recall and tens of false positives per image.
 
 \section{Detection Transformer families}
 
+\subsection{Transformer encoder--decoder and attention}
+
+The Transformer was originally introduced as an encoder--decoder architecture
+built around attention rather than recurrent processing~\cite{vaswani2017attention}.
+For a set of query, key, and value vectors, scaled dot-product attention is
+
+\begin{equation}
+  \operatorname{Attention}(Q,K,V)=
+  \operatorname{softmax}\!\left(\frac{QK^{\mathsf T}}{\sqrt{d_k}}\right)V,
+  \label{eq:scaled-dot-product-attention}
+\end{equation}
+
+where \(d_k\) is the key dimension. The dot products measure which values are
+relevant to each query, while the softmax produces normalized aggregation
+weights. Multi-head attention repeats this operation in several learned
+subspaces and combines their outputs, allowing different heads to represent
+different relationships.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.62\textwidth]{images/transformer_architecture_vaswani.png}
+  \caption{The original Transformer encoder--decoder architecture. The encoder
+  (left) alternates multi-head self-attention and feed-forward sublayers. The
+  autoregressive decoder (right) adds masked self-attention and cross-attention
+  over the encoder output. Residual connections and normalization surround
+  every sublayer, while positional encodings retain sequence order. Source:
+  Vaswani et al.~\cite{vaswani2017attention}.}
+  \label{fig:original-transformer-architecture}
+\end{figure}
+
+\Cref{fig:original-transformer-architecture} shows the original
+sequence-to-sequence model. Its encoder builds contextual representations of
+the complete input sequence, while the autoregressive decoder combines its
+previous output tokens with the encoder representation through cross-attention.
+The original model therefore uses a causal mask in decoder self-attention, while
+vision-detection variants modify this setup according to their prediction task.
+
 \subsection{DETR}
 
-DETR formulates detection as direct set prediction~\cite{carion2020detr}. A
-convolutional backbone produces image features, a Transformer encoder--decoder
-processes them together with a fixed number of object queries, and a bipartite
-matching loss assigns predictions to ground-truth objects. This removes the
-need for anchor design and non-maximum suppression in the original model, but
-training converges slowly and small-object performance is challenging.
+DETR applies this architecture to direct set prediction~\cite{carion2020detr}.
+After the backbone and a channel projection, the original model flattens a
+single feature map into a sequence and passes it through the Transformer
+encoder. A fixed number of learned object queries enters the decoder, and each
+query produces either one object prediction or the special no-object class.
+The output size is therefore fixed, while the number of real objects can vary
+between images.
 
-The Deep Learning project that precedes this thesis used DETR to establish the
+Unlike the original sequence-to-sequence Transformer, DETR replaces input-word
+embeddings with image features and shifted output tokens with object queries, while
+class and box heads replace the vocabulary softmax. Image tokens are augmented
+with positional encodings to retain their two-dimensional locations. The object
+queries are decoded in parallel, so DETR does not use an autoregressive causal
+mask. Decoder self-attention models relations among candidate objects, whereas
+cross-attention retrieves relevant evidence from the encoded image features.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{images/detr_original.png}
+  \caption{DETR architecture. A CNN backbone produces image features that are
+  combined with positional encodings, contextualized by a Transformer encoder,
+  and decoded from learned object queries into class and bounding-box
+  predictions. Reproduced from Fig.~2 of Carion et al.~\cite{carion2020detr}.}
+  \label{fig:detr-architecture}
+\end{figure}
+
+Training must decide which predicted query corresponds to which ground-truth
+object. DETR solves this with one-to-one bipartite matching: the Hungarian
+algorithm selects the assignment with minimum classification and localization
+cost, after which matched pairs receive classification and box-regression
+losses and unmatched queries are trained as no-object. Because every target is
+assigned to only one query, duplicate predictions are discouraged by the
+training objective itself. The original inference pipeline consequently does
+not require handcrafted anchors or non-maximum suppression.
+
+This simplification has costs. Dense encoder self-attention compares all
+spatial tokens, so its memory and computation grow quadratically with feature
+resolution. The use of a relatively coarse, single-scale feature map also
+limits the detail available for small objects. Moreover, one-to-one matching
+is initially unstable because object queries do not yet specialize, leading to
+the slow convergence reported for the original DETR. These limitations
+motivate the later variants used or explored in this project.
+
+In the work that preceded this thesis DETR was used to establish the
 value of stochastic missing-modality training. DETR is not rerun in the final
-campaign: its role is to motivate the training regime inherited by later
+campaign, its role is to motivate the training regime inherited by later
 architectures.
 
 \subsection{Deformable DETR}
 
 Deformable DETR replaces dense attention over all spatial locations with
 multi-scale deformable attention around learned reference
-points~\cite{zhu2021deformable}. Each query attends to a small set of sampled
-locations across multiple feature levels, improving convergence and making
-multi-scale processing tractable. In this project, however, its CUDA backward
-path also exposed substantial run-to-run variability. The Deformable DETR
-experiments are therefore treated as exploratory because they predate the
-locked RT-DETR checkpoint and initialization protocol.
+points~\cite{zhu2021deformable}. Instead of comparing every query with every
+feature location, each attention head predicts a small number of sampling
+offsets around a reference point at each feature level. Values at fractional
+coordinates are obtained by bilinear interpolation and combined through
+learned attention weights. The sampling cost therefore depends on the small
+number of selected points rather than on all spatial cells.
+
+The model consumes a feature pyramid rather than only the deepest backbone
+map. High-resolution levels retain spatial detail for small targets, while
+lower-resolution levels provide wider context. Reference points also give each
+query an explicit spatial anchor, and iterative box refinement can update this
+reference as it passes through decoder layers. Together, sparse sampling,
+multi-scale features, and spatial references improve convergence and are
+particularly relevant to aerial images, where a person may occupy very few
+pixels.
+
+The configuration used in this thesis provides four feature levels to the
+detector. The three native ResNet-50 outputs, \(C3\), \(C4\), and \(C5\), are
+fused across RGB and IR; a fourth, coarser level is derived from the fused
+\(C5\) feature by stride-2 projection. FAM operates only at the three native
+levels before the fourth is formed.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.88\textwidth,trim=0 0.72in 0 0,clip]{images/deformable_detr_original.png}
+  \caption{Deformable DETR uses multi-scale deformable self-attention in the
+  encoder and deformable cross-attention in the decoder. Each attention module
+  samples a sparse set of learned locations instead of attending densely over
+  every feature-map cell. Reproduced from Fig.~1 of Zhu et al.~\cite{zhu2021deformable}.}
+  \label{fig:deformable-detr-architecture}
+\end{figure}
+
+Deformable attention should not be confused with the deformable convolution
+used by the FAM. The former is an attention rule that samples multi-scale
+features for each query, while the latter transforms a dense IR feature map before
+fusion. They share the idea of learned sampling offsets but act at different
+places in the detector and have different parameters and outputs.
 
 \subsection{DINO}
 
-DINO extends DETR-like detectors through three principal mechanisms:
-Contrastive DeNoising (CDN), Mixed Query Selection (MQS), and
-Look-Forward-Twice (LFT) box refinement~\cite{zhang2023dino}. The project
-initially contained a legacy CDN variant that was historically labeled DINO,
-although MQS and effective LFT were absent. A complete implementation was
-developed after the course projects and is documented separately in
-\Cref{sec:dino-exploration}. Its low base performance under the studied budget
-prevented an informative follow-up with FAM; this is a configuration-specific
-negative result, not a general assessment of DINO.
+DINO builds on the multi-scale deformable DETR line and targets two remaining
+problems: unstable matching early in training and the quality of decoder query
+initialization~\cite{zhang2023dino}. Contrastive DeNoising (CDN) adds noisy
+copies of known labels and boxes during training and asks the decoder to
+reconstruct them. Positive and harder negative denoising queries teach the
+model how small perturbations should affect classification and localization,
+providing a more direct learning signal than Hungarian matching alone at the
+start of training.
+
+Mixed Query Selection (MQS) initializes the positional part of decoder queries
+from selected encoder features while retaining learned content queries. This
+separates the questions of \emph{where} a candidate object may be and
+\emph{what} it represents. Look-Forward-Twice (LFT) strengthens iterative box
+refinement by allowing the parameters involved in one refinement step to
+receive supervision from the following decoder layer as well. These mechanisms
+are complementary: CDN stabilizes training queries, MQS improves their spatial
+initialization, and LFT improves the learning signal across refinement stages.
+A complete implementation was developed and is documented separately in
+\Cref{sec:dino-exploration}.
+It retains the same four-level multi-scale representation as the Deformable
+DETR adaptation.
 
 \subsection{RT-DETR}
 
-RT-DETR targets end-to-end real-time detection with an efficient hybrid encoder
-and uncertainty-minimal query selection~\cite{zhao2024rtdetr}. Its encoder
-separates within-scale interaction from cross-scale fusion, reducing the cost
-of processing multi-scale features. The implementation used here starts from
-the pretrained RT-DETR R50vd checkpoint and exposes three backbone outputs,
-denoted P3, P4, and P5 with strides 8, 16, and 32.
+RT-DETR retains end-to-end set prediction while redesigning the multi-scale
+encoder for lower latency~\cite{zhao2024rtdetr}. Its efficient hybrid encoder
+separates two operations that a standard multi-scale Transformer would perform
+together. Attention-based intra-scale feature interaction is applied only to
+the deepest, lowest-resolution feature level, where global semantic
+interaction is comparatively inexpensive. A convolutional cross-scale feature
+fusion module then propagates information through the feature pyramid. This
+division reduces the cost of applying self-attention densely at several
+resolutions.
 
-The term ``real-time'' is not inferred from the architecture name. This thesis
-reports latency for the detector forward pass on one specified GPU and excludes
-preprocessing and postprocessing. Any broader real-time claim would require an
-end-to-end deployment measurement.
+The decoder is initialized through uncertainty-minimal query selection. The
+encoder scores candidate features and selects high-quality spatial locations
+for the initial queries, seeking candidates whose classification and
+localization estimates are reliable. Decoder layers then refine these
+queries into the final detection set. Since the decoder is the repeated part
+of the detection head, its number of layers can also be adjusted to trade
+accuracy for latency without retraining the encoder.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{images/rtdetr_original.png}
+  \caption{RT-DETR architecture. Its efficient hybrid encoder combines
+  attention-based intra-scale interaction with convolutional cross-scale
+  fusion, while IoU-aware query selection initializes the Transformer decoder~\cite{zhao2024rtdetr}.}
+  \label{fig:rtdetr-architecture}
+\end{figure}
+
+The implementation used here starts from the pretrained RT-DETR R50vd
+checkpoint and exposes three backbone outputs, denoted P3, P4, and P5 with
+strides 8, 16, and 32. The dual-backbone adaptation preserves the downstream
+hybrid encoder and decoder: the experimental variable is how corresponding RGB
+and IR features are transformed and fused before entering them.
+
+RT-DETR is designed for real-time object detection. In this thesis, computational
+efficiency is characterized through detector-only forward-pass latency measured
+on a specified GPU. Preprocessing and postprocessing are excluded, so these
+measurements compare the computational cost of the detector configurations
+rather than establish end-to-end real-time deployment performance.
 
 \subsection{YOLOv10}
 
 YOLOv10 is an end-to-end member of the YOLO family that combines consistent
-dual assignments with an efficiency-oriented architecture~\cite{wang2024yolov10}.
-It provides a structurally different transfer target from RT-DETR: the feature
-extractor and FPN/PAN neck are convolutional, while detection uses the YOLOv10
-one-to-many and one-to-one training branches. The thesis adapts YOLOv10-s to
-two modality-specific backbones and fuses their P3, P4, and P5 outputs before
-the shared neck.
+dual assignments with an efficiency-oriented convolutional
+architecture~\cite{wang2024yolov10}. As in other one-stage YOLO detectors, a
+backbone extracts a feature pyramid, a neck combines fine spatial detail with
+coarser semantic information, and a dense head predicts classes and boxes at
+multiple locations, which is structurally different from decoding a small fixed
+set of object queries.
+
+Traditional dense detectors can produce several boxes for the same object and
+therefore rely on non-maximum suppression. YOLOv10 instead trains two
+assignment branches consistently: a one-to-many branch supplies abundant
+positive matches for optimization, while a one-to-one branch learns the
+non-redundant predictions used for end-to-end inference. The matching rules are
+coordinated so that the richer supervision of the first branch benefits the
+second rather than teaching incompatible rankings. At inference time, the
+one-to-one output removes the need for NMS.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{images/yolov10_dual_assignment_original.png}
+  \caption{YOLOv10 consistent dual assignments. A shared backbone and PAN
+  support one-to-many and one-to-one detection heads during training; only the
+  one-to-one branch is retained for NMS-free inference.~\cite{wang2024yolov10}.}
+  \label{fig:yolov10-dual-assignments}
+\end{figure}
+
+The thesis adapts YOLOv10-s to two modality-specific backbones and fuses their
+P3, P4, and P5 outputs before the shared FPN/PAN neck. It therefore provides a
+useful transfer target: both detector families receive corresponding
+multi-scale RGB and IR features, but RT-DETR processes them with a hybrid
+encoder and query decoder, whereas YOLOv10 processes them through a
+convolutional neck and dense detection head.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Conceptual role of the detector families in this thesis. The table
+  summarizes architectural distinctions rather than the project-specific
+  fusion implementations.}
+  \label{tab:detector-family-comparison}
+  \begin{adjustbox}{max width=\textwidth}
+  \begin{tabular}{llll}
+    \toprule
+    Family & Image representation & Prediction mechanism & Role in this thesis \\
+    \midrule
+    DETR & single-scale tokens & learned object queries & inherited starting point \\
+    Deformable DETR & sparse multi-scale samples & reference-point queries & exploratory extension \\
+    DINO & deformable multi-scale features & denoised and mixed queries & exploratory negative result \\
+    RT-DETR & efficient hybrid pyramid & uncertainty-selected queries & primary detector \\
+    YOLOv10 & convolutional pyramid and neck & consistent dense assignments & transfer detector \\
+    \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
 
 \section{Multimodal fusion}
 
@@ -137,7 +325,7 @@ that implementation, not as a general rejection of attention-based fusion.
 
 \section{Missing modalities and Modal Dropout}
 
-ModDrop was proposed to preserve modality-specific representations by randomly
+Modal Dropout was proposed to preserve modality-specific representations by randomly
 dropping input channels during multimodal training~\cite{neverova2016moddrop}.
 The project applies the same principle at the modality level. For a paired
 sample \((x_{\mathrm{RGB}},x_{\mathrm{IR}})\), training draws one of three
@@ -161,9 +349,15 @@ audit conducted for this thesis found that modality dropout was also being
 applied during validation and test. The pipeline was corrected so that the
 sampling in \Cref{eq:modal-dropout} is active only during training.
 
-\section{Feature-level geometric transformation}
+\section{Feature-level alignment and fusion}
 
-\subsection{Deformable convolution}
+\subsection{Deformable convolution in the FAM}
+
+This subsection introduces DCNv2, the operation used by the Feature Alignment
+Module (FAM) described next to transform IR feature maps before fusion. It is
+distinct from the multi-scale deformable attention used inside Deformable DETR:
+DCNv2 is a convolutional operation on a dense feature map, whereas deformable
+attention samples encoder or decoder features for a query.
 
 Standard convolution samples a fixed grid \(\mathcal{R}\) around each spatial
 position \(p\). Modulated deformable convolution augments every kernel point
@@ -203,29 +397,32 @@ initialization. Consequently, the standard FAM does \emph{not} start as a
 mathematical identity: null offsets preserve the initial sampling geometry but
 do not make the filtered output equal to the input.
 
-\begin{figure}[p]
+Because there is no ground-truth displacement field, the thesis uses the term
+\emph{geometric-functional transformation}. Nonzero offsets show that the
+geometric path is active, while they do not prove recovery of the physical mapping
+between the cameras. This distinction motivates the internal diagnostics in
+\Cref{sec:fam-diagnostics}.
+
+\begin{figure}[H]
   \centering
   \thesisimage[0.92\textwidth]{images/rtdetr_fam_architecture.pdf}{Diagram of the dual-backbone RT-DETR pipeline and the inherited FAM at P3, P4, and P5.}
   \caption{Dual-backbone RT-DETR and the inherited Feature Alignment Module.
   At each pyramid level, RGB and IR features jointly predict 18 offset
-  components and nine modulation masks; DCNv2 then transforms the IR feature
+  components and nine modulation masks, DCNv2 then transforms the IR feature
   before additive fusion. In the final data path, training-only Modal Dropout
   zero-pads the missing input channels while preserving the four-channel
-  interface. The FAM is the starting point inherited from the preceding
-  Computer Vision project, not a new architecture introduced by this thesis.}
+  interface.}
   \label{fig:fam-architecture}
 \end{figure}
-
-Because there is no ground-truth displacement field, the thesis uses the term
-\emph{geometric-functional transformation}. Nonzero offsets show that the
-geometric path is active; they do not prove recovery of the physical mapping
-between the cameras. This distinction motivates the internal diagnostics in
-\Cref{sec:fam-diagnostics}.
 
 \section{Dataset organization and evaluation conditions}
 
 All final comparisons use synchronized WiSARD RGB--IR pairs. The effective
-split audit is summarized in \Cref{tab:dataset-splits}.
+split audit is summarized in \Cref{tab:dataset-splits}. Earlier project
+experiments also used unpaired visible or thermal folders to vary the training
+inventory. The final study instead restricts training and primary evaluation to
+paired samples, so that a modality comparison does not also change the set of
+scenes or annotations.
 
 \begin{table}[htbp]
   \centering
@@ -248,36 +445,44 @@ Its median target area is approximately twelve times smaller than in training.
 It is informative as evidence of a strong distribution shift, but it is not a
 representative selector for performance on the three MtErie sequences.
 
-MtErie is called the \emph{internal development benchmark}. It was consulted
-during architectural development and is not an untouched holdout. Final paired
-comparisons remain useful, particularly after the protocol was frozen, but may
-be optimistic with respect to a new acquisition. Carnation is evaluated once
-as a predefined external stress case and is not substituted for a general
-domain-generalization benchmark.
+MtErie denotes the three synchronized WiSARD VIS--IR sequences used for the
+main 708-frame benchmark. Their VIS annotations define the common reference
+coordinate system and ground truth for the final comparisons. MtErie was
+consulted during architectural development and is therefore an \emph{internal
+development benchmark}. Final paired comparisons remain useful, particularly
+after the protocol was frozen, but may be optimistic with respect to a new acquisition.
+Carnation denotes a separate paired WiSARD acquisition used once as a predefined
+739-frame external stress case: its visible camera is substantially more zoomed-in
+than its thermal camera, creating a severe cross-modal scale mismatch. It is not a new
+validation set or an estimate of general domain generalization.
 
 At evaluation time, the three modality conditions retain a common dataset and
 annotation set:
 
-\begin{description}[style=nextline]
-  \item[VIS+IR] both synchronized streams are provided;
-  \item[VIS] the infrared input or branch contribution is disabled according
-        to the architecture's modality contract;
-  \item[IR] the visible input or branch contribution is disabled.
+\begin{description}
+  \item[VIS+IR] both streams from each synchronized pair are supplied;
+  \item[VIS] the same paired frame and VIS annotations are retained, but its
+        thermal input is masked, so no IR signal is available to the model;
+  \item[IR] the same paired frame and VIS annotations are retained, but its
+        visible input is masked, so no RGB signal is available to the model.
 \end{description}
 
-The exact missing-modality path differs between RT-DETR and YOLOv10 and is
-reported with their results rather than assumed to be architecturally
-equivalent.
+Thus, VIS and IR are controlled missing-input evaluations rather than datasets
+in which the opposite sensor file is absent. RT-DETR represents the missing
+stream as zero-filled input while retaining its four-channel interface; the
+YOLOv10 evaluator uses an explicit modality mask and bypasses the excluded
+backbone and FAM path. The conditions therefore share images and annotations,
+but their internal execution is not architecturally identical.
 
 \section{Inherited experimental starting point}
 
-The Deep Learning project established DETR with Modal Dropout, the RT-DETR
-Additive baseline, a fixed \(2\times2\) tiling experiment related to
-slicing-aided small-object detection~\cite{akyon2022sahi}, and the initial CMX
-comparison. The Computer Vision project introduced FAM on RT-DETR, Hybrid CMX,
-and Deformable DETR with nonlinear channel fusion and FAM. Their historical
-scores were based primarily on the earlier checkpoint policy and, for several
-RT-DETR variants, on individual executions.
+Previous work established DETR with Modal Dropout, the RT-DETR Additive
+baseline, a fixed \(2\times2\) tiling experiment related to slicing-aided
+small-object detection~\cite{akyon2022sahi}, and the initial CMX comparison.
+It subsequently introduced FAM on RT-DETR, Hybrid CMX, and Deformable DETR
+with nonlinear channel fusion and FAM. The resulting historical scores were
+based primarily on the earlier checkpoint policy and, for several RT-DETR
+variants, on individual executions.
 
 Those results generated the central hypothesis that transforming IR features
 before fusion could be preferable to direct addition. They did not yet answer

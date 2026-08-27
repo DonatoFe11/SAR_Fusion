@@ -19,15 +19,14 @@ initialization, and aggregate reporting. The distinction is retained throughout
 the thesis: exploratory evidence motivates a test, whereas locked-protocol
 evidence supports the principal comparison.
 
-\begin{figure}[p]
+\begin{figure}[H]
   \centering
   \thesisimage[\textwidth]{images/experimental_timeline.pdf}{Timeline from the inherited course-project baseline, through post-coursework exploration and the variability audit, to the final RT-DETR and YOLOv10 protocols.}
   \caption{Chronology and evidential status of the study. The first two stages
   establish the inherited starting point and record hypothesis-generating work
-  conducted under the previous protocol. The audit motivates the redesign; the
+  conducted under the previous protocol. The audit motivates the redesign, while the
   horizontal separator marks the transition to the locked RT-DETR and YOLOv10
-  multi-seed evaluations. Vertical placement indicates narrative order, not
-  elapsed time.}
+  multi-seed evaluations.}
   \label{fig:experimental-timeline}
 \end{figure}
 
@@ -84,10 +83,10 @@ return to the original sensor displacement.
 \Cref{tab:fam-historical} reports the single-run results that generated the
 SSJ hypothesis. They are deliberately separated from the final comparison.
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
-  \caption{Historical single-run FAM development results. These values belong
-  to the exploratory phase and do not determine the final model selection.}
+  \caption{Historical single-run FAM development results. These values represent the \mapfifty{}
+  scores of the exploratory phase and do not determine the final model selection.}
   \label{tab:fam-historical}
   \begin{adjustbox}{max width=\textwidth}
   \begin{tabular}{lccc}
@@ -129,29 +128,57 @@ block:
   \label{eq:defdetr-channel-fusion}
 \end{equation}
 
+The model retains the standard four-scale Deformable DETR configuration. The
+three native ResNet levels (C3,C4,C5) are fused explicitly; a fourth level is
+then derived from the fused (C5) feature through a stride-2 projection. This
+is the usual multi-scale construction of Deformable DETR, rather than an
+additional backbone output. The pretrained configuration retains six
+deformable-attention encoder layers and six decoder layers.
+
 This preserves the spatial dimensions required by the pretrained attention
 reference points. It replaced an unsuccessful spatial-concatenation attempt
 that doubled feature-map height, forced a reduction in pyramid levels because
 of memory use, and produced near-zero detection performance.
 
-The Computer Vision project had already integrated FAM before the channel
-fusion block. The post-coursework extension added SSJ under the same previous
+In a previous project we had already integrated FAM before the channel
+fusion block, while here we extend it by adding SSJ under the same previous
 experimental regime. Five runs are available for each configuration, but they
 precede the final RT-DETR head initialization, checkpoint rule, and validation
 policy. Their median and range are reported in
 \Cref{tab:defdetr-exploratory} as exploratory transfer evidence.
 
-\begin{figure}[htbp]
+The architecture is divided across
+\Cref{fig:defdetr-fusion-frontend,fig:defdetr-backend} to keep both the
+multimodal processing and the standard detector components legible. The first
+diagram follows the RGB--IR streams through the optional FAM, channel fusion,
+four-level projection, and multi-scale flattening. The second continues from
+that token sequence through the standard single-stage Deformable DETR encoder,
+learned queries, decoder, and prediction heads. SSJ is not shown because it is
+used only during training and does not modify the inference graph.
+
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{images/defDetr_schema.png}
-  \caption{Deformable DETR dual-backbone fusion architecture. The fourth
-  encoder level is derived from the fused deepest native feature and does not
-  receive a separate fourth FAM. This diagram documents an exploratory line
-  that precedes the final RT-DETR protocol.}
-  \label{fig:defdetr-fusion}
+  \includegraphics[width=\textwidth]{images/frontend_defdetr.png}
+  \caption{RGB--IR frontend of the dual-backbone Deformable DETR adaptation.
+  FAM is applied independently to the three native feature levels when
+  enabled, otherwise the raw IR features bypass it. Each RGB--IR pair is then
+  fused along the channel dimension. The fourth encoder level is generated
+  from the fused C5 feature and therefore does not receive a separate FAM.}
+  \label{fig:defdetr-fusion-frontend}
 \end{figure}
 
-\begin{table}[htbp]
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{images/backend_defdetr.png}
+  \caption{Standard single-stage Deformable DETR backend used after the
+  multimodal frontend. The four flattened feature levels enter the
+  deformable-attention encoder. Learned query content, positional embeddings,
+  and reference points then condition the decoder, whose final outputs feed
+  the classification and bounding-box heads.}
+  \label{fig:defdetr-backend}
+\end{figure}
+
+\begin{table}[H]
   \centering
   \caption{Exploratory Deformable DETR results, reported as median
   [minimum--maximum] \mapfifty{} over five runs.}
@@ -168,7 +195,7 @@ policy. Their median and range are reported in
 \end{table}
 
 FAM has the highest observed median, but the ranges overlap substantially.
-SSJ does not reproduce the gain suggested by its historical RT-DETR run and
+SSJ does not reproduce the gain suggested by the preliminary RT-DETR run and
 has the widest VIS+IR range. A definitive cross-architecture ranking would
 require retraining these models under a protocol aligned with the final
 RT-DETR study.
@@ -177,39 +204,38 @@ RT-DETR study.
 \label{sec:dino-exploration}
 
 The complete DINO implementation retains the dual-backbone and channel-fusion
-base of Deformable DETR and activates all three defining mechanisms. MQS uses
-the top encoder proposals as spatial anchors while drawing query content from
-an independent learned embedding. LFT keeps the refined reference passed to
-the next attention layer detached while preserving a graph-connected copy for
-the following prediction loss. CDN inserts noisy positive and negative target
+base of Deformable DETR: four feature levels, six encoder layers, and six
+decoder layers. It activates all three defining mechanisms. MQS uses the top
+encoder proposals as spatial anchors while drawing query content from an
+independent learned embedding. LFT keeps the refined reference passed to the
+next attention layer detached while preserving a graph-connected copy for the
+following prediction loss. CDN inserts noisy positive and negative target
 queries during training and applies the required decoder attention mask.
 
-Earlier runs labeled ``DINO'' in project reports were a CDN legacy variant:
-box refinement was disabled, MQS was absent, and the CDN mask did not reach the
-decoder self-attention. They are not ablations of the complete model and are
-excluded from the main conclusion.
-
-The complete base was trained five times and produced the values in
+The complete implementation was trained five times and produced the values in
 \Cref{tab:dino-exploratory}. Since even its maximum fusion result remained
 below the median of the historical Deformable DETR base, complete FAM and SSJ
 variants were not launched without a new diagnostic hypothesis.
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
-  \caption{Complete DINO base result under the previous protocol, reported as
+  \caption{DINO base result under the previous protocol, reported as
   median [minimum--maximum] \mapfifty{} over five runs.}
   \label{tab:dino-exploratory}
-  \begin{tabular}{lccc}
+  \begin{tabularx}{\textwidth}{@{}l *{3}{>{\centering\arraybackslash}X}@{}}
     \toprule
     Configuration & VIS & IR & VIS+IR \\
     \midrule
-    Complete DINO base & 0.0565 [0.0232--0.1091] & 0.0881 [0.0671--0.1473] & 0.1088 [0.0669--0.1635] \\
+    Complete DINO base
+      & \shortstack{0.0565\\{\footnotesize [0.0232--0.1091]}}
+      & \shortstack{0.0881\\{\footnotesize [0.0671--0.1473]}}
+      & \shortstack{0.1088\\{\footnotesize [0.0669--0.1635]}} \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
 \end{table}
 
 This is a negative result for the implemented configuration and training
-budget. It does not show that DINO is intrinsically unsuitable for WiSARD.
+budget, while it does not show that DINO is intrinsically unsuitable for WiSARD.
 
 \section{Reproducibility investigation}
 \label{sec:reproducibility}
@@ -247,7 +273,7 @@ person head. The maximum range decreased from 20.8075 to 1.6424. The change is
 therefore a mitigation and a more controlled transfer-learning initialization,
 not a determinism guarantee.
 
-\subsection{DCNv2 limitation}
+\subsection{DCNv2 deterministic limitation}
 
 The strict FAM probe stops at the first backward pass because the CUDA backward
 of \texttt{torchvision.ops.DeformConv2d} has no deterministic implementation in
@@ -261,7 +287,7 @@ through a strictly deterministic full campaign.
 The data pipeline originally sampled Modal Dropout during validation and test
 as well as training. This made evaluation inputs stochastic and inconsistent
 with the intended VIS, IR, and VIS+IR conditions. The loader was corrected and
-regression-tested so that dropout is active only in training. All final
+regression-tested so that dropout is active only in training while all final
 evaluations disable it.
 
 \subsection{Validation and checkpoint policy}
@@ -276,16 +302,8 @@ Using that split for early stopping does not provide a representative rule for
 MtErie. Conversely, choosing an epoch from MtErie would tune directly on the
 internal test. The final RT-DETR protocol resolves the immediate comparison by
 fixing ten epochs in advance and evaluating the final \texttt{latest}
-checkpoint. Validation is not run as a selector. This does not replace the need
+checkpoint. Validation is not run as a selector and this does not replace the need
 for a future representative train-derived validation set.
-
-\subsection{Process isolation}
-
-Sequential grids in one Python process showed progressive slowdowns and could
-retain allocator or framework state. Each seed in the final campaigns is
-therefore launched in a new process. The same principle is applied to compute
-benchmark trials, where an initial in-process memory result was rejected after
-cumulative allocations were detected.
 
 \section{Locked RT-DETR protocol}
 \label{sec:locked-rtdetr-protocol}
@@ -293,13 +311,20 @@ cumulative allocations were detected.
 The final RT-DETR comparison uses six independently trained configurations:
 
 \begin{enumerate}[label=\arabic*.]
-  \item Additive fusion;
+  \item Base (direct additive fusion);
   \item standard FAM with DCNv2;
   \item FAM with IR feature dropout probability 0.4;
   \item FAM with SSJ standard deviation 0.5;
   \item an identity-initialized DCNv2 FAM;
   \item a direct bilinear Grid Sample warp.
 \end{enumerate}
+
+IR feature dropout is active only during training. Immediately after FAM has
+transformed the IR feature map and before additive fusion, \texttt{Dropout2d}
+independently zeros complete IR feature channels with probability 0.4 at each
+pyramid level; the remaining channels are rescaled in the usual way. It does
+not remove complete frames or disable the IR sensor, and it is inactive during
+all evaluations.
 
 The identity DCNv2 ablation retains the standard FAM structure but initializes
 the central kernel as a channel-wise identity with weight two, exactly
@@ -309,7 +334,7 @@ without a learned post-sampling convolution. It is exactly the identity at
 zero offset through a correction that subtracts numerical sampling of the base
 grid.
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
   \caption{Locked RT-DETR protocol used by all six final configurations.}
   \label{tab:rtdetr-protocol}
@@ -322,6 +347,7 @@ grid.
     Training horizon & 10 fixed epochs \\
     Checkpoint & Final \texttt{latest}; no test-based or validation-based selection \\
     Initialization & Pretrained RT-DETR R50vd and transferred COCO person heads \\
+    Transformer depth & One AIFI encoder layer and six decoder layers \\
     Modal Dropout & VIS/IR/fusion probabilities 0.2/0.2/0.6, training only \\
     Validation & Not used during training or for checkpoint selection \\
     Primary benchmark & MtErie internal development benchmark \\
@@ -332,7 +358,7 @@ grid.
 \end{table}
 
 The same seed index is paired across configurations to reduce the noise in
-architectural contrasts. It does not make native executions deterministic.
+architectural contrasts, while it does not make native executions deterministic.
 
 \section{Statistical reporting}
 

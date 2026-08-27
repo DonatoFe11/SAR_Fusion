@@ -27,7 +27,7 @@ and repeatable selection of standard FAM.
 
 \subsection{RQ2: RT-DETR effectiveness and missing modalities}
 
-On the locked MtErie benchmark, standard FAM improves Additive fusion in every
+On the locked MtErie benchmark, standard FAM improves Base RT-DETR fusion in every
 paired seed and raises mean \mapfifty{} by 0.0700. The improvement is supported
 by COCO mAP, mAP@75, mAR, and the later recall analysis. IR Dropout and SSJ do
 not provide a reliable mean gain over standard FAM; Identity DCNv2 is highly
@@ -40,7 +40,7 @@ of both signals. On the internal benchmark, multimodal information remains
 valuable.
 
 The answer is scoped to the internal development benchmark. It establishes a
-consistent paired advantage for FAM over Additive under the selected protocol,
+consistent paired advantage for FAM over Base RT-DETR under the selected protocol,
 not a universal expected gain for all seeds, datasets, sensor geometries, or
 implementations.
 
@@ -81,7 +81,7 @@ do not decrease consistently, however, and the 0.01 threshold used for AP
 collection is not operational because it produces roughly fifty false
 positives per image.
 
-Carnation exposes a geometric boundary. FAM is more tolerant than Additive
+Carnation exposes a geometric boundary. FAM is more tolerant than Base RT-DETR
 fusion under the severe scale mismatch, but adding IR remains worse than using
 VIS alone in every FAM checkpoint. FAM mitigates the damage of that mismatch;
 it does not solve arbitrary scale differences between sensors.
@@ -110,7 +110,7 @@ unsuitable for RGB--thermal detection.
 
 The most defensible conclusion is narrower than the historical narrative but
 better supported. Standard FAM is the strongest studied RT-DETR configuration
-because it improves Additive consistently on the internal benchmark, not
+because it improves Base RT-DETR consistently on the internal benchmark, not
 because it achieves the largest single score or because its offsets reproduce a
 known camera transform. Its main observed detection benefit is higher recall.
 
@@ -249,7 +249,7 @@ Alignment Module and replaced a single-run architectural narrative with a
 paired multi-seed comparison, direct inspection of learned transformations,
 level interventions, external stress testing, and transfer analysis.
 
-Standard FAM improves Additive RT-DETR on the internal MtErie benchmark in all
+Standard FAM improves Base RT-DETR on the internal MtErie benchmark in all
 five paired seeds and consistently increases recall at practical sensitivity
 thresholds. It remains the selected RT-DETR model. The internal evidence,
 however, supports a learned geometric-functional transformation rather than
