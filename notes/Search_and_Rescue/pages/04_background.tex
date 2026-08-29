@@ -125,7 +125,7 @@ resolution. The use of a relatively coarse, single-scale feature map also
 limits the detail available for small objects. Moreover, one-to-one matching
 is initially unstable because object queries do not yet specialize, leading to
 the slow convergence reported for the original DETR. These limitations
-motivate the later variants used or explored in this project.
+motivate the later variants used or explored in this study.
 
 In the work that preceded this thesis DETR was used to establish the
 value of stochastic missing-modality training. DETR is not rerun in the final
@@ -277,7 +277,7 @@ convolutional neck and dense detection head.
 \begin{table}[htbp]
   \centering
   \caption{Conceptual role of the detector families in this thesis. The table
-  summarizes architectural distinctions rather than the project-specific
+  summarizes architectural distinctions rather than the study-specific
   fusion implementations.}
   \label{tab:detector-family-comparison}
   \begin{adjustbox}{max width=\textwidth}
@@ -317,7 +317,7 @@ sensor displacement or scale difference violates this assumption. More complex
 interaction does not automatically solve the problem: multimodal networks can
 overfit or optimize their modalities at different rates~\cite{wang2020multimodal}.
 
-The preceding projects also examined CMX, a cross-modal rectification and
+Previous work also examined CMX, a cross-modal rectification and
 fusion framework originally proposed for RGB-X semantic
 segmentation~\cite{zhang2023cmx}. The specific RT-DETR integration was not
 competitive on WiSARD. This finding is retained as an exploratory result of
@@ -327,7 +327,7 @@ that implementation, not as a general rejection of attention-based fusion.
 
 Modal Dropout was proposed to preserve modality-specific representations by randomly
 dropping input channels during multimodal training~\cite{neverova2016moddrop}.
-The project applies the same principle at the modality level. For a paired
+This study applies the same principle at the modality level. For a paired
 sample \((x_{\mathrm{RGB}},x_{\mathrm{IR}})\), training draws one of three
 conditions:
 
@@ -344,10 +344,14 @@ conditions:
 The inherited schedule uses
 \(p_{\mathrm{VIS}}=0.2\), \(p_{\mathrm{IR}}=0.2\), and
 \(p_{\mathrm{fusion}}=0.6\). It is a motivated exploratory choice from the
-preceding DETR study, not a statistically demonstrated optimum. A software
-audit conducted for this thesis found that modality dropout was also being
-applied during validation and test. The pipeline was corrected so that the
-sampling in \Cref{eq:modal-dropout} is active only during training.
+preceding DETR study, not a statistically demonstrated optimum. The equation
+specifies which sensor is present, but not its coordinate contract. In the
+RT-DETR data loader used here, an IR-only draw uses the native IR canvas and
+native IR annotations. This distinction becomes important in
+\Cref{sec:coordinate-contracts}. A software audit conducted for this thesis
+also found that modality dropout was being applied during validation and test.
+The pipeline was corrected so that the sampling in
+\Cref{eq:modal-dropout} is active only during training.
 
 \section{Feature-level alignment and fusion}
 
@@ -418,32 +422,76 @@ between the cameras. This distinction motivates the internal diagnostics in
 \section{Dataset organization and evaluation conditions}
 
 All final comparisons use synchronized WiSARD RGB--IR pairs. The effective
-split audit is summarized in \Cref{tab:dataset-splits}. Earlier project
+split audit is summarized in \Cref{tab:dataset-splits}. Earlier
 experiments also used unpaired visible or thermal folders to vary the training
 inventory. The final study instead restricts training and primary evaluation to
 paired samples, so that a modality comparison does not also change the set of
 scenes or annotations.
 
+\subsection{WiSARD acquisitions and experimental roles}
+
+WiSARD is organized into acquisition sequences identified by location and by
+the corresponding VIS and IR stream numbers. These names identify different
+recorded sequences. The subsets used in this thesis and their experimental
+roles are summarized in \Cref{tab:wisard-acquisitions}.
+
 \begin{table}[htbp]
   \centering
-  \caption{Effective dataset composition after the project filters. Median box
-  area is expressed as a percentage of the evaluation image area.}
+  \caption{WiSARD paired acquisitions used in the study. Frame counts are
+  reported after matching the VIS and IR streams.}
+  \label{tab:wisard-acquisitions}
+  \begin{tabularx}{\textwidth}{@{}l r X@{}}
+    \toprule
+    Acquisition & Paired frames & Experimental role \\
+    \midrule
+    FHL 0401/0402 & 896
+      & Stage-A validation; restored to the training inventory in Stage B. \\
+    FHL 0405/0406 & 943
+      & Training in both Stage A and Stage B. \\
+    Baker pair 1 & 2,180
+      & Training in both Stage A and Stage B. \\
+    FHL 0134/0135 & 273
+      & Pre-existing validation sequence used by the historical runs; retained
+        as evidence of distribution shift rather than for current checkpoint selection. \\
+    MtErie, three pairs & 708
+      & Previously consulted internal development benchmark used for the main
+        paired comparisons. \\
+    Carnation & 739
+      & Separately frozen stress test for severe cross-modal scale mismatch. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The full paired training inventory contains 4,019 frames: 896 from FHL
+0401/0402, 943 from FHL 0405/0406, and 2,180 from Baker pair 1. Stage A holds
+out the complete FHL 0401/0402 sequence, leaving 3,123 frames for optimization.
+Stage B restores that sequence and trains on all 4,019 pairs. FHL 0134/0135 is
+the much smaller validation sequence inherited from the earlier protocol and
+is not part of either training inventory.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Effective composition of the historical full-data split after
+  preprocessing and pairing filters. Median box area is expressed as a
+  percentage of the evaluation image area.}
   \label{tab:dataset-splits}
   \begin{tabular}{lrrrrr}
     \toprule
     Split & Sessions & Frames & Empty frames & Boxes/frame & Median box area \\
     \midrule
-    Train & 3 & 4,022 & 17.85\% & 2.464 & 0.1641\% \\
+    Train & 3 & 4,019 & 17.82\% & 2.465 & 0.1640\% \\
     Validation & 1 & 273 & 67.40\% & 0.542 & 0.0133\% \\
     Internal test & 3 & 708 & 2.68\% & 2.500 & 0.0764\% \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-The validation set contains one FHL session, 184 empty frames, and 148 boxes.
-Its median target area is approximately twelve times smaller than in training.
-It is informative as evidence of a strong distribution shift, but it is not a
-representative selector for performance on the three MtErie sequences.
+The pre-existing 273-frame validation set contains one FHL session, 184 empty
+frames, and 148 boxes. Its median target area is approximately twelve times
+smaller than in training. It is informative as evidence of a strong
+distribution shift, but it is not a representative selector for performance on
+the three MtErie sequences. This is distinct from the 896-frame complete-video
+validation introduced for Stage A.
 
 MtErie denotes the three synchronized WiSARD VIS--IR sequences used for the
 main 708-frame benchmark. Their VIS annotations define the common reference

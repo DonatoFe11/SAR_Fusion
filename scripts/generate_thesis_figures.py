@@ -288,14 +288,14 @@ def generate_timeline():
         (
             LIGHT_BLUE,
             BLUE,
-            "1  Preceding coursework",
+            "1  Previous work",
             "Inherited starting point",
             "DETR + Modal Dropout\nRT-DETR Additive; tiling and CMX\nFAM on RT-DETR\nDeformable DETR + FAM",
         ),
         (
             LIGHT_ORANGE,
             ORANGE,
-            "2  Post-coursework exploration",
+            "2  Exploratory development",
             "Previous protocol",
             "Lazy / Eager / Frozen FAM\nSpatial Dropout and SSJ\nDeformable DETR + FAM + SSJ\nComplete DINO baseline",
         ),
@@ -309,49 +309,56 @@ def generate_timeline():
         (
             LIGHT_TEAL,
             TEAL,
-            "4  Locked-protocol evaluation",
-            "Principal thesis evidence",
-            "RT-DETR: six configurations × five seeds\nDiagnostics, level ablation, bounded offsets\nError analysis, Carnation, compute\nYOLOv10: Additive versus FAM × five seeds",
+            "4  Historical locked evaluation",
+            "FAM reference evidence",
+            "RT-DETR: six configurations × five seeds\nDiagnostics, bounded offsets and error analysis\nCarnation stress test and compute\nYOLOv10 transfer: Additive versus FAM",
+        ),
+        (
+            LIGHT_GREEN,
+            GREEN,
+            "5  Validation-led extension",
+            "Stage A / Stage B",
+            "Whole-video validation and best checkpoints\nP2, resolution, gating and RCRA ablations\nMatched full-data FAM versus RCRA\nPaired 708-frame modality characterization",
         ),
     ]
 
-    card_x, card_w, card_h = 92, 545, 165
-    card_y = [28, 225, 422, 660]
-    line(ctx, 53, 54, 53, 807, colour=NAVY, width=2.5)
-    arrow(ctx, 53, 807, 53, 830, colour=NAVY, width=2.5, head=10)
+    card_x, card_w, card_h = 92, 545, 130
+    card_y = [18, 170, 322, 506, 690]
+    line(ctx, 53, 42, 53, 812, colour=NAVY, width=2.5)
+    arrow(ctx, 53, 812, 53, 834, colour=NAVY, width=2.5, head=10)
 
     for index, ((fill, stroke, heading, tag, body), y) in enumerate(zip(phases, card_y)):
         centre_y = y + card_h / 2
         circle(ctx, 53, centre_y, 9, fill=stroke, stroke=WHITE, width=2)
         arrow(ctx, 62, centre_y, card_x, centre_y, colour=stroke, width=1.8, head=8)
         box(ctx, card_x, y, card_w, card_h, "", fill=fill, stroke=stroke, radius=14, line_width=2)
-        draw_text(ctx, heading, card_x + 22, y + 31, size=18, bold=True, colour=stroke)
+        draw_text(ctx, heading, card_x + 22, y + 28, size=16, bold=True, colour=stroke)
         box(
             ctx,
             card_x + card_w - 190,
-            y + 14,
+            y + 12,
             170,
-            32,
+            29,
             tag,
             fill=WHITE,
             stroke=stroke,
-            size=13,
+            size=12,
             bold=True,
-            radius=16,
+            radius=15,
         )
-        line(ctx, card_x + 22, y + 55, card_x + card_w - 22, y + 55, colour=stroke, width=1.1)
-        draw_text(ctx, body, card_x + 26, y + 82, size=15, line_height=22, max_width=card_w - 52)
+        line(ctx, card_x + 22, y + 48, card_x + card_w - 22, y + 48, colour=stroke, width=1.1)
+        draw_text(ctx, body, card_x + 26, y + 68, size=12.5, line_height=17, max_width=card_w - 52)
 
         if index == 2:
             boundary_y = y + card_h + 28
             line(ctx, 32, boundary_y, 648, boundary_y, colour=RED, width=2.2, dashed=True)
             box(
                 ctx,
-                232,
+                180,
                 boundary_y - 18,
-                216,
+                320,
                 36,
-                "LOCKED PROTOCOL",
+                "CONTROLLED MULTI-SEED EVIDENCE",
                 fill=LIGHT_RED,
                 stroke=RED,
                 size=14,

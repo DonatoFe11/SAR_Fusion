@@ -1,7 +1,7 @@
 \chapter{Experimental Evaluation}
 \label{chap:evaluation}
 
-\section{Main RT-DETR multi-seed study}
+\section{Historical locked RT-DETR multi-seed study}
 \label{sec:rtdetr-main-results}
 
 \subsection{Raw and aggregate VIS+IR results}
@@ -119,16 +119,21 @@ compared directly with FAM because those contrasts isolate the effect of the
 additional intervention: IR feature dropout does not provide a consistent
 increment over FAM despite its higher raw mean.
 
-\subsection{Missing-modality evaluation}
+\subsection{Historical native-sensor modality evaluation}
 
-Each final checkpoint was evaluated in VIS, IR, and VIS+IR with a fixed
-evaluation seed and Modal Dropout disabled. The aggregate \mapfifty{} results
-are reported in \Cref{tab:rtdetr-modalities}.
+Each checkpoint was also evaluated with Modal Dropout disabled using the
+historical native-sensor protocol. VIS and IR use their respective native
+images and annotations, whereas VIS+IR uses paired visible-coordinate samples.
+The aggregate \mapfifty{} results are reported in \Cref{tab:rtdetr-modalities}.
+Comparisons between configurations within one column remain meaningful, but the
+three columns do not describe the same frame population or ground truth.
 
 \begin{table}[htbp]
   \centering
-  \caption{Final RT-DETR \mapfifty{} by input condition, mean \(\pm\) sample
-  standard deviation across five checkpoints.}
+  \caption{Historical native-sensor RT-DETR \mapfifty{} by input
+  condition, mean \(\pm\) sample standard deviation across five checkpoints.
+  Columns use their original evaluation populations and should not be ranked
+  against one another as a same-frame modality ablation.}
   \label{tab:rtdetr-modalities}
   \begin{tabular}{lccc}
     \toprule
@@ -144,18 +149,252 @@ are reported in \Cref{tab:rtdetr-modalities}.
   \end{tabular}
 \end{table}
 
-VIS+IR exceeds the better single modality of the same checkpoint in all thirty
-cases. Depending on the configuration, the mean within-checkpoint margin is
-between 0.1067 and 0.1454. This is the most uniform result of the main
-campaign: on MtErie, complementary information remains useful even though the
-individual modality scores vary substantially.
+FAM improves Base RT-DETR within the historical VIS population in 5/5
+seeds, with a mean delta of 0.0899, and within the native IR population in 4/5,
+with a mean delta of 0.0462. These are valid cross-model contrasts because each
+column holds its evaluator fixed. Native VIS, native IR, and paired fusion use
+different inventories and annotations, so their numerical ordering
+does not support a direct cross-modality ranking or a claim of same-frame
+complementarity.
 
-FAM also improves Base RT-DETR in VIS-only in 5/5 seeds, with a mean delta of
-0.0899, and in IR-only in 4/5, with a mean delta of 0.0462. In RT-DETR, a
-missing input is zero-filled while both backbones and the FAM path remain in
-the model. The unimodal difference therefore measures the robustness of the
-complete learned system under missing input, not alignment between two real
-signals during that inference.
+In RT-DETR, a missing input is zero-filled while both backbones and the FAM path
+remain in the model. A unimodal result therefore measures robustness of the
+complete learned system under a specified coordinate contract. The later
+post-selection audit in \Cref{sec:paired-modality-audit} provides the required
+same-population comparison.
+
+\section{Validation-led RT-DETR extension campaign}
+\label{sec:validation-led-campaign}
+
+\subsection{Stage-A checkpoint baseline}
+
+The complete-video split and checkpoint rule in
+\Cref{sec:two-stage-protocol} were first applied to standard FAM for seeds
+40--44. All runs completed ten epochs. The selected epochs were 1, 4, 6, 1,
+and 1, showing that the decline after early epochs was repeatable rather than a
+logging anomaly.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Stage-A FAM checkpoint audit. Validation uses the complete FHL
+  0401/0402 video. MtErie is evaluated only after all five runs are complete.}
+  \label{tab:stage-a-checkpoint-audit}
+  \begin{tabular}{rrrrrr}
+    \toprule
+    Seed & Best epoch & Val best & Val latest & MtErie best & MtErie latest \\
+    \midrule
+    40 & 1 & 0.1521 & 0.0397 & 0.3490 & 0.2132 \\
+    41 & 4 & 0.1424 & 0.1030 & 0.3354 & 0.2887 \\
+    42 & 6 & 0.1655 & 0.0946 & 0.3077 & 0.2740 \\
+    43 & 1 & 0.1939 & 0.0790 & 0.3994 & 0.2876 \\
+    44 & 1 & 0.1689 & 0.1037 & 0.4036 & 0.2811 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Across seeds, validation-selected \texttt{best} obtains
+\(0.3590\pm0.0416\) MtErie \mapfifty{}, whereas epoch-10 \texttt{latest}
+obtains \(0.2689\pm0.0317\). The paired gain is
+\(0.0901\pm0.0466\), positive in 5/5 seeds, with a 95\% \(t\)-interval of
+[0.0323, 0.1479]. This supports the selector for Stage-A development. It does
+not show that the new split improves absolute performance over historical FAM:
+the Stage-A model optimizes only 3,123 frames, while the historical
+\(0.3780\pm0.0440\) result optimizes all 4,019 and uses epoch 10.
+
+\subsection{Stage-A candidate screening}
+
+\Cref{tab:stage-a-candidates} summarizes the ablations performed under the
+common complete-video validation protocol. FAM is the paired reference for
+every delta.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Stage-A best-validation \mapfifty{} across five seeds. A promotion
+  requires mean delta at least +0.01 and at least four paired wins.}
+  \label{tab:stage-a-candidates}
+  \begin{adjustbox}{max width=\textwidth}
+  \begin{tabular}{lrrrrl}
+    \toprule
+    Candidate & Mean \(\pm\) SD & Mean delta & Wins & 95\% CI of delta & Decision \\
+    \midrule
+    FAM reference & 0.1646 \(\pm\) 0.0196 & -- & -- & -- & reference \\
+    FAM + P2 & 0.0991 \(\pm\) 0.0207 & -0.0655 & 0/5 & [-0.1032,-0.0278] & reject \\
+    FAM at \(800\times800\) & 0.1447 \(\pm\) 0.0151 & -0.0199 & 1/5 & [-0.0484,+0.0087] & reject \\
+    Post-FAM reliability gate & 0.1662 \(\pm\) 0.0087 & +0.0016 & 3/5 & [-0.0242,+0.0274] & reject \\
+    Gate with \(10\times\) LR & 0.1546 \(\pm\) 0.0200 & -0.0099 & 3/5 & [-0.0512,+0.0314] & reject \\
+    Scalar residual control & 0.1603 \(\pm\) 0.0127 & -0.0043 & 2/5 & [-0.0284,+0.0199] & reject \\
+    RCRA & \textbf{0.1825 \(\pm\) 0.0257} & \textbf{+0.0179} & \textbf{4/5} & [-0.0350,+0.0709] & promote \\
+    \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
+
+P2 loses to FAM in every seed. A matched seed-40 FAM run using P2's smaller
+micro-batch and gradient accumulation obtains 0.1593, compared with 0.1521 for
+direct-batch FAM and 0.1014 for P2, ruling out the changed micro-batch as the
+main explanation under the declared control. Increasing global input
+resolution also fails its rule. The shared-LR reliability gate remains within
+approximately 0.002 of neutral weight, while the higher gate learning rate
+activates the mechanism without improving detection reliably.
+
+RCRA is the only candidate to pass both frozen Stage-A requirements. Its paired
+gain is positive in four seeds, although the confidence interval includes both
+signs. Its mechanism audit shows mean fusion \(\alpha\) values of 0.9469,
+0.9079, and 0.9887 at P3--P5: the model mainly suppresses part of the FAM
+residual at P3 and P4 while leaving P5 close to ordinary FAM. Removing either
+modality changes the mean coefficient by at least 0.01 in all five seeds. The
+gate is therefore active and condition-dependent.
+
+The three-parameter scalar control also moves away from identity, with mean
+coefficients 0.9576, 0.9788, and 0.9950, but fails to improve FAM. This rules
+out an inactive control and supports carrying the conditional RCRA candidate
+to Stage B. It does not establish statistical superiority over the scalar
+model, which RCRA beats in only 3/5 direct pairs.
+
+\subsection{Matched full-data Stage B}
+
+Stage B restores all 4,019 training frames and trains RCRA and a current-code
+FAM baseline for ten epochs, without validation or automatic MtErie testing.
+The primary evaluation uses the same 708 paired MtErie frames and epoch-10
+\texttt{latest} checkpoints.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Matched full-data Stage-B VIS+IR \mapfifty{}.}
+  \label{tab:stage-b-rcra}
+  \begin{tabular}{rrrr}
+    \toprule
+    Seed & Matched FAM & RCRA & RCRA -- FAM \\
+    \midrule
+    40 & \textbf{0.4291} & 0.3969 & -0.0323 \\
+    41 & 0.3498 & \textbf{0.3737} & +0.0239 \\
+    42 & 0.3233 & \textbf{0.4185} & +0.0952 \\
+    43 & \textbf{0.3308} & 0.2835 & -0.0474 \\
+    44 & 0.3513 & \textbf{0.4038} & +0.0525 \\
+    \midrule
+    Mean \(\pm\) SD
+      & 0.3569 \(\pm\) 0.0422
+      & 0.3753 \(\pm\) 0.0538
+      & +0.0184 \(\pm\) 0.0591 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+RCRA passes the required mean-gain condition but wins only 3/5 seeds, rather
+than the required 4/5. Its paired 95\% interval is
+[-0.0550, 0.0918]. The frozen decision therefore retains matched FAM as the
+final performance baseline. This is not evidence that RCRA is uniformly worse:
+its mean and median effects are positive, but the improvement is too unstable
+to support replacement.
+
+Secondary results point in the same uncertain direction. COCO mAP changes from
+0.1244 to 0.1336 and mAP@75 from 0.0581 to 0.0701; RCRA wins 3/5 and 4/5 pairs,
+respectively. Mean training time increases from approximately 2 h 22 min to
+3 h 28 min per run. These secondary observations do not override the frozen
+mAP@50 rule. The historical FAM mean of 0.3780 remains close in absolute
+scale, but the current matched value of 0.3569 is the valid Stage-B comparator.
+
+\section{Post-selection paired modality characterization}
+\label{sec:paired-modality-audit}
+
+After model selection was closed, the retained five FAM checkpoints were
+evaluated in three conditions on exactly the same 708 MtErie pairs and the same
+1,770 VIS boxes. The VIS condition zeros IR, while paired masked-IR zeros RGB
+after adapting IR to the VIS canvas.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Paired modality characterization of the selected current-code FAM
+  checkpoints. Every column uses the same frames and VIS ground truth.}
+  \label{tab:paired-fam-modalities}
+  \small
+  \begin{tabular}{@{}ccccc@{}}
+    \toprule
+    Seed & VIS+IR & VIS & Masked IR / VIS GT & Fusion -- VIS \\
+    \midrule
+    40 & 0.4291 & 0.3764 & 0.0213 & +0.0527 \\
+    41 & 0.3498 & 0.3054 & 0.0333 & +0.0444 \\
+    42 & 0.3233 & 0.3174 & 0.0170 & +0.0059 \\
+    43 & 0.3308 & 0.3077 & 0.0093 & +0.0232 \\
+    44 & 0.3513 & 0.2911 & 0.0265 & +0.0602 \\
+    \midrule
+    Mean \(\pm\) SD
+      & 0.3569 \(\pm\) 0.0422
+      & 0.3196 \(\pm\) 0.0331
+      & 0.0215 \(\pm\) 0.0091
+      & +0.0373 \(\pm\) 0.0223 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Fusion exceeds VIS in 5/5 seeds. The paired difference has a 95\% interval of
+[0.0095, 0.0650], supporting a thermal contribution beyond VIS on this fixed
+internal population. The masked-IR value does not represent general native-IR
+performance. It removes the RGB reference used by the asymmetric FAM while
+still requesting VIS-coordinate boxes, and the IR adaptation is only a
+resize-and-pad operation.
+
+A post-hoc diagnostic therefore evaluates the same 708 IR counterparts on
+their native canvas with 1,824 native IR boxes. Native IR obtains
+\(0.5618\pm0.0498\) \mapfifty{} with a 95\% interval of
+[0.5001, 0.6236], compared with \(0.0215\pm0.0091\) under paired masked-IR/VIS
+ground truth. This rules out a collapsed IR branch, but it does not show that
+native IR is better than fusion: the coordinate systems and annotations differ.
+It also cannot replace the historical native-IR benchmark, which uses a
+broader test population.
+
+\subsection{Modal Dropout coordinate-system ablation}
+
+The paired-modality audit revealed that the missing-RGB condition used at
+evaluation time did not reproduce the IR-only examples used by the original
+Modal Dropout. During the original training, an IR-only draw contains the
+native IR image and its native IR annotations. In the paired evaluation,
+instead, IR is adapted to the VIS canvas, the RGB channels are set to zero, and
+detections are compared with VIS annotations. The very low masked-IR result
+therefore measures a condition that the detector was not trained to reproduce
+exactly.
+
+To test whether this discrepancy explains the result, one additional Stage-A
+training was performed with seed 40. Only the IR-only branch of Modal Dropout
+was changed: it first constructs the same paired sample used for fusion, then
+sets the RGB channels to zero while retaining the adapted IR channel and the
+VIS annotations. The fusion and RGB-only branches, detector architecture,
+optimizer, data split, and ten-epoch budget remain unchanged. This is a
+single-seed diagnostic ablation, not a new final model comparison.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Effect of changing the IR-only Modal Dropout coordinate convention
+  in the seed-40 Stage-A experiment, evaluated on the 896-pair validation
+  sequence.}
+  \label{tab:paired-vis-dropout-probe}
+  \begin{tabular}{lrrr}
+    \toprule
+    Condition & Original dropout & VIS-coordinate variant & Delta \\
+    \midrule
+    Paired VIS+IR / VIS GT & 0.152148 & 0.156899 & +0.004752 \\
+    Paired VIS / VIS GT & 0.151107 & 0.143206 & -0.007901 \\
+    Paired masked-IR / VIS GT & 0.002519 & 0.002836 & +0.000317 \\
+    Native IR / IR GT & 0.263709 & 0.027067 & -0.236642 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Fusion changes only from 0.152148 to 0.156899 \mapfifty{}, while masked-IR with
+VIS annotations changes from 0.002519 to 0.002836. The modification therefore
+does not solve localization in VIS coordinates when RGB is missing. At the
+same time, native-IR performance falls from 0.263709 to 0.027067, consistently
+with the removal of IR-only supervision in the native IR coordinate system.
+The IR-only sampling trace remains close to the configured
+20\%, ruling out the possibility that this outcome is caused by an inactive
+training branch.
+
+The ablation consequently fails the predeclared masked-IR improvement and
+native-IR preservation requirements. It is rejected after the single screening
+seed and is not extended to seeds 41--44, MtErie, or Stage B. The result
+supports retaining the original native-IR Modal Dropout in the final FAM
+baseline: matching the paired evaluation convention removes useful native-IR
+supervision without making the detector robust to a missing RGB reference.
 
 \section{Mechanistic validation of the FAM}
 \label{sec:fam-diagnostics}
@@ -367,6 +606,11 @@ the selected model.
 \section{Detection error analysis}
 \label{sec:error-analysis}
 
+This analysis uses the historical locked Base and FAM checkpoints from
+\Cref{sec:rtdetr-main-results}. It characterizes the established FAM gain over
+additive fusion and is not a post-selection comparison of RCRA and the
+current-code Stage-B baseline.
+
 \subsection{Protocol}
 
 The error analysis compares the five Base RT-DETR and five standard-FAM final
@@ -506,9 +750,9 @@ harmful relative to the available visible stream even after FAM transformation.
   \label{fig:carnation-paired}
 \end{figure}
 
-The result also bounds the internal MtErie finding that VIS+IR was always
-better than the strongest single modality. That conclusion is stable within
-the main benchmark but does not survive this extreme acquisition.
+The Carnation result defines a boundary of the internal paired-modality
+finding: fusion can outperform VIS on the matched MtErie population, but not
+under this extreme cross-sensor scale mismatch.
 
 \section{Computational cost}
 \label{sec:compute}
@@ -603,7 +847,7 @@ epoch after observing MtErie would be retrospective test tuning.
 
 The final comparison fixes two configurations: dual-backbone Base and
 dual-backbone with FAM, both with feature gating 20/20/60. Each uses paired
-seeds 40--44, 200 fixed epochs, disabled early stopping, no validation-based selection, 
+seeds 40--44, 200 fixed epochs, disabled early stopping, no validation-based selection,
 and the final \texttt{last.pt} checkpoint. The 200-epoch horizon was retained 
 because it was declared in the historical YAML schedule before the final results were observed.
 
@@ -687,9 +931,9 @@ historical early score.
 This pattern is compatible with late overfitting or specialization to the
 training sessions, but training loss alone does not establish the cause. The
 valid conclusion is that the declared 200-epoch protocol yields a negative FAM
-transfer result. A new YOLO study would first require a representative
-validation set constructed only from training sessions and a checkpoint rule
-fixed before observing MtErie.
+transfer result. A new YOLO study should reuse the complete-video Stage-A split
+defined in this thesis and freeze a YOLO-specific checkpoint rule before any
+new MtErie evaluation.
 
 \section{Cross-architecture summary}
 

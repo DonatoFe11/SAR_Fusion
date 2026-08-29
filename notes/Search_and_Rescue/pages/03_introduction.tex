@@ -67,38 +67,48 @@ The study addresses four connected forms of robustness:
 
 The thesis is organized around the following research questions.
 
-\paragraph{RQ1 --- Reliable RT-DETR effectiveness.}
-Under a locked paired-seed protocol that accounts for training variability,
-validation mismatch, and checkpoint selection, does FAM provide a consistent
-advantage over the baseline RT-DETR on MtErie, including when one input
-modality is unavailable?
+\paragraph{RQ1 --- Experimental reliability.}
+How strongly do run-to-run variability, validation design, and checkpoint
+selection affect the ranking of RGB--thermal detectors, and which protocol can
+support a fair architecture-development campaign?
 
-\paragraph{RQ2 --- Mechanism and failure modes.}
+\paragraph{RQ2 --- RT-DETR effectiveness and modality use.}
+Does FAM provide a repeatable advantage over additive RT-DETR fusion, and does
+the selected detector obtain a measurable benefit from the thermal stream when
+all modality conditions are evaluated on the same paired frames and ground
+truth?
+
+\paragraph{RQ3 --- Mechanism and improved alignment.}
 What geometric-functional transformation does FAM learn across P3, P4, and P5,
-how stable is it across seeds and sessions, and which pyramid levels contribute
-to detection performance? Can a smooth bounded-offset constraint remove an
-observed internal collapse without reducing detection quality?
+which failure modes does it exhibit, and can a reliability-conditioned local
+selection between raw and aligned IR improve it more consistently than simpler
+alignment, resolution, or gating interventions?
 
-\paragraph{RQ3 --- Operational and validity boundaries.}
-How do FAM's error profile, computational cost, behavior under severe
-sensor-scale mismatch, and transfer to another detector family delimit the
-operational relevance and generality of the RT-DETR result?
+\paragraph{RQ4 --- Operational relevance.}
+How do the detector's error profile, computational cost, and behavior under a
+severe sensor-scale mismatch delimit its usefulness for UAV Search and Rescue?
 
-\section{Scope and relationship with preceding coursework}
+\paragraph{RQ5 --- Architectural transferability.}
+Does the FAM advantage observed in RT-DETR transfer to other detector families
+under the implemented Deformable DETR, DINO, and YOLOv10 configurations?
 
-This thesis continues two preceding course projects. The Deep Learning project
-studied DETR, Modal Dropout, RT-DETR Additive fusion baseline, fixed tiling, and CMX. The
-Computer Vision project subsequently introduced the FAM on RT-DETR, designed a
-Hybrid CMX variant, and adapted Deformable DETR to channel fusion with FAM.
-These components define the starting point of the present work.
+\section{Scope and relationship with previous work}
+
+This thesis builds on previous work on RGB--thermal detection. That
+work examined DETR, Modal Dropout, the RT-DETR Additive fusion baseline, fixed
+tiling, and CMX. Subsequent work introduced FAM on RT-DETR, developed a Hybrid
+CMX variant, and adapted Deformable DETR to channel fusion with FAM. These
+components define the starting point of the present work.
 
 The FAM is therefore \emph{not} presented as a new architecture invented in
 this thesis. It is described in full so that the document remains
 self-contained, but its provenance is stated explicitly. The present
 contribution is the reliability-aware validation of that module: its
 performance across paired runs, its internal behavior, its failure modes, the
-effect of a targeted correction, and the extent to which the result transfers
-outside the original RT-DETR setting.
+effect of targeted corrections, and the extent to which the result transfers
+outside the original RT-DETR setting. The thesis additionally develops
+Reliability-Conditioned Residual Alignment (RCRA), an extension developed in
+this thesis that locally selects how much of the FAM correction to retain.
 
 Early experiments were useful for discovering bugs and generating hypotheses, 
 but many were individual runs produced before the final validation and checkpoint 
@@ -107,18 +117,24 @@ not mixed with the main multi-seed estimates.
 
 \section{Contributions}
 
-The contributions developed after the preceding course projects are:
+The contributions developed in the present work are:
 
 \begin{enumerate}[label=\arabic*.]
   \item a reliability-aware experimental framework for RGB--IR detection,
-        combining paired training seeds, fixed checkpoint rules, transferred
-        heads, training-only Modal Dropout, and isolated processes;
+        combining paired training seeds, transferred heads, training-only
+        Modal Dropout, isolated processes, complete-video validation, and a
+        two-stage checkpoint policy;
   \item a controlled multi-seed evaluation of six RT-DETR configurations,
         establishing the consistent internal advantage of standard FAM and its
         behavior when either modality is unavailable;
   \item a mechanistic study of FAM across pyramid levels, combining internal
         diagnostics, factorial interventions, identification of a compensated
         P5 collapse, and a five-seed bounded-offset test;
+  \item a validation-led comparison of tiny-object, resolution, reliability,
+        and residual-alignment hypotheses, followed by a configuration-matched
+        full-data comparison of RCRA and FAM;
+  \item a coordinate-controlled modality audit on the same 708 paired frames,
+        distinguishing paired missing-RGB robustness from native-IR detection;
   \item an explicit delimitation of the result through paired error analysis,
         the frozen Carnation scale-mismatch stress test, a detector-only
         compute benchmark, and a controlled negative transfer result on
@@ -135,10 +151,12 @@ findings fail to transfer under the studied conditions.
 
 \Cref{chap:background} introduces the dataset, detector families, multimodal
 fusion, missing-modality training, and the inherited architectural starting
-point. \Cref{chap:methodology} reconstructs the post-coursework exploratory
-development and explains how the variability investigation led to the final
-protocol. \Cref{chap:evaluation} presents the main RT-DETR results, internal
-FAM diagnostics, bounded-offset intervention, error analysis, Carnation stress
-test, computational cost, and YOLOv10 transfer study. Finally,
+point. \Cref{chap:methodology} reconstructs the subsequent exploratory
+development and explains how the variability investigation led first to the
+historical locked comparison and then to the two-stage development protocol.
+\Cref{chap:evaluation} presents the main RT-DETR results, the validation-led
+architecture campaign and modality audit, internal FAM diagnostics,
+bounded-offset intervention, error analysis, Carnation stress test,
+computational cost, and YOLOv10 transfer study. Finally,
 \Cref{chap:discussion} answers the research questions, states the validity
 boundaries, and outlines future work.

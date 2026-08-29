@@ -1,36 +1,53 @@
 \chapter{Exploratory Development and Experimental Methodology}
 \label{chap:methodology}
 
-\section{Two phases of evidence}
+\section{Evidence phases and protocol generations}
 
-The project contains two qualitatively different forms of evidence. During the
+The project contains qualitatively different forms of evidence. During the
 \emph{exploratory phase}, individual runs were used to expose implementation
 problems, compare broad architectural directions, and generate new hypotheses.
 This phase produced the evolution of the FAM, the SSJ regularizer, extensions
 to Deformable DETR, and a complete DINO implementation. Its numerical results
 describe the development history but do not estimate run-to-run variability
-under a common final protocol.
+under a common protocol.
 
-The subsequent \emph{locked-protocol phase} was motivated by the observation
-that repeated executions could change the ranking of configurations. In this
-phase, the main RT-DETR hypotheses were evaluated with five paired seeds,
-fixed training duration, final checkpoints, isolated processes, consistent
-initialization, and aggregate reporting. The distinction is retained throughout
-the thesis: exploratory evidence motivates a test, whereas locked-protocol
-evidence supports the principal comparison.
+The first \emph{locked-protocol phase} was motivated by the observation that
+repeated executions could change the ranking of configurations. It compared
+six RT-DETR variants using five paired seeds, fixed ten-epoch training,
+epoch-10 checkpoints, isolated processes, consistent initialization, and
+aggregate reporting. These experiments remain the main evidence that standard
+FAM improves the inherited additive RT-DETR baseline.
+
+A later \emph{validation-led experimental phase} introduces a two-stage
+comparison procedure. The procedure itself changes the data split, checkpoint
+rule, and decision process. In Stage A, standard FAM and each alternative
+detector configuration are trained independently for ten epochs using the
+same 3,123 training frames and the same 896-frame validation video.
+The validation score is used only to select the \texttt{best} checkpoint.
+Every run still completes the fixed ten-epoch training budget.
+The alternatives are separate experiments evaluated through this common
+procedure. Only RCRA meets the predeclared Stage-A promotion rule. In Stage
+B, RCRA and a freshly trained FAM baseline are independently retrained
+on all 4,019 training frames and compared using their epoch-10 \texttt{latest}
+checkpoints. Results are compared within a protocol generation, never by
+directly ranking Stage-A validation-selected checkpoints against historical
+full-data final checkpoints. The historical locked study establishes the
+FAM baseline, while the two-stage procedure evaluates whether a separately
+implemented alternative can replace it.
 
 \begin{figure}[H]
   \centering
-  \thesisimage[\textwidth]{images/experimental_timeline.pdf}{Timeline from the inherited course-project baseline, through post-coursework exploration and the variability audit, to the final RT-DETR and YOLOv10 protocols.}
-  \caption{Chronology and evidential status of the study. The first two stages
-  establish the inherited starting point and record hypothesis-generating work
-  conducted under the previous protocol. The audit motivates the redesign, while the
-  horizontal separator marks the transition to the locked RT-DETR and YOLOv10
-  multi-seed evaluations.}
+  \thesisimage[\textwidth]{images/experimental_timeline.pdf}{Timeline from the inherited baseline through exploration, audit, historical locked evaluation, and the validation-led Stage-A/Stage-B campaign.}
+  \caption{Chronology and evidential status of the study. The inherited and
+  exploratory stages precede the reproducibility audit. The first locked
+  campaign establishes FAM as the RT-DETR reference, the later validation-led
+  campaign evaluates the alternative configurations in Stage A. After RCRA
+  alone satisfies the promotion rule, Stage B compares it with a retrained FAM
+  baseline.}
   \label{fig:experimental-timeline}
 \end{figure}
 
-\section{Post-coursework evolution of the FAM}
+\section{Evolution of the FAM}
 \label{sec:fam-history}
 
 \subsection{Lazy registration bug}
@@ -292,23 +309,36 @@ evaluations disable it.
 
 \subsection{Validation and checkpoint policy}
 
-The effective validation split contains 273 FHL frames, of which 184 are
-empty, and only 148 boxes. Its objects are substantially smaller than those in
-training and MtErie. Near-zero validation metrics are therefore evidence of a
-domain and scale mismatch, not proof that the validator is defective or that
-the split has no information.
+The official FHL validation split contains 273 frames, of which 184 are empty,
+and only 148 boxes. Its objects are substantially smaller than those in the
+training sessions and MtErie. Near-zero scores on this split are evidence of a
+strong domain and scale mismatch, rather than a validator defect. It could not
+provide a stable checkpoint ranking for the detector studied here.
 
-Using that split for early stopping does not provide a representative rule for
-MtErie. Conversely, choosing an epoch from MtErie would tune directly on the
-internal test. The final RT-DETR protocol resolves the immediate comparison by
-fixing ten epochs in advance and evaluating the final \texttt{latest}
-checkpoint. Validation is not run as a selector and this does not replace the need
-for a future representative train-derived validation set.
+A first train-derived pilot instead reserved the temporal tail of every
+training video after a 30-frame embargo. Its seed-40 validation score was high,
+but the split retained near-adjacent content from the same continuous clips
+and its person distribution was dominated by Baker. The validation-selected
+epoch was also worse than epoch 10 on the already-consulted MtErie benchmark.
+The pilot was therefore retired before running seeds 41--44.
 
-\section{Locked RT-DETR protocol}
+The definitive Stage-A split holds out the complete paired FHL 0401/0402
+video. Training uses 3,123 frames from FHL 0405/0406 and Baker pair 1, while
+validation uses all 896 paired FHL 0401/0402 frames. This removes direct
+same-video temporal adjacency. It remains an internal split because the two
+FHL videos belong to the same acquisition campaign.
+
+Every run still completes ten epochs: validation does not implement early
+stopping. It only retains \texttt{best}, defined as the highest validation
+\mapfifty{} with a minimum improvement of 0.001, while \texttt{latest} always
+stores epoch 10. MtErie is disabled during training and is not used to choose
+an epoch or Stage-A candidate.
+
+\section{Historical locked RT-DETR protocol}
 \label{sec:locked-rtdetr-protocol}
 
-The final RT-DETR comparison uses six independently trained configurations:
+The first locked RT-DETR comparison uses six independently trained
+configurations:
 
 \begin{enumerate}[label=\arabic*.]
   \item Base (direct additive fusion);
@@ -336,7 +366,8 @@ grid.
 
 \begin{table}[H]
   \centering
-  \caption{Locked RT-DETR protocol used by all six final configurations.}
+  \caption{Historical locked RT-DETR protocol used by all six
+  configurations in the original multi-seed comparison.}
   \label{tab:rtdetr-protocol}
   \begin{tabularx}{\textwidth}{lX}
     \toprule
@@ -359,10 +390,142 @@ grid.
 
 The same seed index is paired across configurations to reduce the noise in
 architectural contrasts, while it does not make native executions deterministic.
+This campaign remains valid evidence about the six configurations under its
+frozen full-data, epoch-10 policy. It is not used as the direct comparator for
+new validation-selected candidates trained at a later code revision.
+
+\section{Validation-led two-stage protocol}
+\label{sec:two-stage-protocol}
+
+The extension campaign separates architectural development from final
+full-data confirmation. The two stages are summarized in
+\Cref{tab:two-stage-protocol}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Frozen protocol for the validation-led RT-DETR extension campaign.}
+  \label{tab:two-stage-protocol}
+  \begin{tabularx}{\textwidth}{lXX}
+    \toprule
+    Component & Stage A: development & Stage B: confirmation \\
+    \midrule
+    Optimization data
+      & 3,123 paired frames: FHL 0405/0406 and Baker pair 1
+      & all 4,019 paired training frames \\
+    Validation
+      & complete FHL 0401/0402 video, 896 pairs
+      & none; all frames restored to optimization \\
+    Horizon
+      & 10 epochs, no early stopping
+      & 10 epochs, no early stopping \\
+    Primary checkpoint
+      & validation-selected \texttt{best}; \texttt{latest} diagnostic
+      & epoch-10 \texttt{latest} \\
+    Role of MtErie
+      & disabled during training and candidate selection
+      & evaluated only after all matched runs exist \\
+    Comparison
+      & candidate versus FAM under the same split
+      & selected candidate versus current-code matched FAM \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+All Stage-A variants use paired seeds 40--44, input \(640\times640\), direct
+batch four unless a memory-matched control is declared, the same optimizer and
+Modal Dropout schedule, and validation after every epoch. Advancement requires
+a mean paired validation gain of at least 0.01 and positive differences in at
+least four of five seeds. These engineering thresholds are frozen before each
+five-seed decision; uncertainty intervals are still reported and may remain
+wide.
+
+Stage B restores the held-out video and retrains both the selected candidate
+and standard FAM with the current code. It deliberately returns to the
+historical full-data, ten-epoch \texttt{latest} recipe. Confirmation requires
+both a mean paired MtErie gain of at least 0.01 and at least four wins in five
+seeds. The historical FAM mean remains a useful reference for the earlier implementation,
+but it cannot replace the matched Stage-B baseline. Although the FAM architecture
+is unchanged, Stage B retrains FAM using the same current training and evaluation pipeline.
+
+\section{Alignment-extension hypotheses}
+
+The Stage-A campaign tests several separable hypotheses rather than introducing
+all changes simultaneously. A P2 variant adds a stride-4 feature level to
+increase spatial detail for tiny targets. A resolution control instead keeps
+P3--P5 unchanged and increases the input from \(640\times640\) to
+\(800\times800\). Two post-FAM reliability gates test whether RGB and thermal
+contributions should be modulated after fusion, first at the shared detector
+learning rate and then with a dedicated ten-times-larger gate rate.
+
+The principal new candidate is Reliability-Conditioned Residual Alignment
+(RCRA). Related work already combines feature alignment and reliability-aware
+fusion for weakly aligned multispectral detection \cite{zhang2019arcnn,chen2024oafa},
+while uncertainty-conditioned modulation has also been studied for unaligned
+RGB--thermal fusion \cite{wang2026umfnet}.
+
+At pyramid level \(l\), let \(I_{\mathrm{raw}}^{(l)}\) be the IR-backbone
+feature, \(I_{\mathrm{aligned}}^{(l)}\) the FAM output, and
+\(R^{(l)}=I_{\mathrm{aligned}}^{(l)}-I_{\mathrm{raw}}^{(l)}\) the alignment
+residual. RCRA predicts a spatial coefficient
+\(\alpha^{(l)}\in(0,2)\):
+
+\begin{equation}
+\begin{aligned}
+  \alpha^{(l)} &= 2\,\sigma\!\left(g^{(l)}(d^{(l)})\right),\\
+  I_{\mathrm{selected}}^{(l)}
+    &= I_{\mathrm{aligned}}^{(l)}
+       + \left(\alpha^{(l)}-1\right)R^{(l)},\\
+  F_{\mathrm{fused}}^{(l)}
+    &= F_{\mathrm{RGB}}^{(l)}+I_{\mathrm{selected}}^{(l)}.
+\end{aligned}
+\label{eq:rcra}
+\end{equation}
+
+Thus \(\alpha=0\) recovers raw IR, \(\alpha=1\) retains the ordinary FAM
+output, and \(\alpha>1\) amplifies its correction. Each level uses local means,
+RMS magnitudes, RGB--IR agreement, alignment-residual magnitude, agreement
+gain, and modality-presence indicators as descriptors. They enter a
+\(3\times3\) convolution with 16 hidden channels and a \(1\times1\) output.
+The three predictors add 5,283 parameters. Their final convolution is
+zero-initialized, making RCRA exactly equivalent to standard FAM at
+initialization, and their dedicated learning rate is \(2\times10^{-4}\) while
+all existing parameters retain \(2\times10^{-5}\).
+
+A frozen attribution control replaces the descriptors and spatial predictors
+with one input-independent coefficient per pyramid level, for only three new
+parameters. It uses the same residual equation, neutral initialization, and
+dedicated learning rate. This tests whether any RCRA gain can be reproduced by
+simple global per-level calibration rather than conditional local selection.
+
+\section{Coordinate contracts for modality evaluation}
+\label{sec:coordinate-contracts}
+
+Two distinct modality evaluations are required. A \emph{native-sensor}
+evaluation presents VIS or IR on its own native canvas with the corresponding
+native annotations. It describes standalone deployment on each sensor, but VIS,
+IR, and fusion may then contain different frame populations, coordinate systems,
+and ground-truth boxes. Their AP values cannot by themselves establish
+same-frame sensor complementarity.
+
+The post-selection \emph{paired intervention} instead fixes the population to
+the 708 common MtErie pairs and keeps the same 1,770 VIS boxes in every
+condition. VIS-only zeros the adapted IR channel, while paired masked-IR
+zeros RGB after IR has been adapted to the VIS canvas. The existing
+\texttt{adapt\_ir2rgb} operation resizes and pads IR to the visible canvas but
+does not implement calibrated geometric registration. Since FAM predicts its
+offsets jointly from RGB and IR and transforms IR toward RGB, paired masked-IR
+also removes the reference used by this asymmetric alignment path.
+
+Historical RT-DETR Modal Dropout uses the native coordinate contract for an
+IR-only training draw: native IR image, native IR canvas, and native IR
+annotations. A separately frozen seed-40 ablation changes only those draws to
+the paired VIS-coordinate convention. The experiment tests the effect of this
+coordinate mismatch; it is not a new five-seed performance campaign. Its result
+cannot be presented as interchangeable with native IR evaluation.
 
 \section{Statistical reporting}
 
-For every final configuration, the thesis reports all five seed values, mean,
+For every five-seed configuration, the thesis reports all seed values, mean,
 median, sample standard deviation, minimum--maximum range, and a Student
 \(t\)-interval for the mean. Architectural contrasts use within-seed
 differences, their mean and interval, and the number of paired wins. Paired
@@ -372,7 +535,10 @@ summaries.
 With only five pairs, intervals are imprecise, p-values are discrete or
 sensitive to assumptions, and no correction is applied for the many possible
 comparisons. Conclusions therefore prioritize effect size, sign consistency,
-and agreement across metrics over a binary significance threshold.
+and agreement across metrics over a binary significance threshold. In the
+validation-led campaign, predeclared mean-gain and paired-win rules govern
+promotion and confirmation. Confidence intervals communicate uncertainty but
+do not retroactively change those engineering decisions.
 
 The experimental unit for architectural comparison is the independently
 trained run/checkpoint. Frames, bounding boxes, samples used in a diagnostic,

@@ -19,11 +19,14 @@ La validation e il test non provengono dalla stessa distribuzione:
 
 | Split | Sequenze | Frame | Frame vuoti | Box/frame | Area mediana box |
 |---|---:|---:|---:|---:|---:|
-| train | 3 | 4022 | 17.85% | 2.464 | 0.1641% |
+| train | 3 | 4019 | 17.82% | 2.465 | 0.1640% |
 | validation | 1 | 273 | 67.40% | 0.542 | 0.0133% |
 | test | 3 | 708 | 2.68% | 2.500 | 0.0764% |
 
-La validation contiene una sola sequenza e oggetti circa 12 volte più piccoli
+Il conteggio train riporta le coppie effettivamente prodotte dallo `zip` del
+loader: tre frame VIS terminali senza controparte IR sono esclusi, riducendo
+l'inventario grezzo da 4.022 stream VIS a 4.019 coppie. La validation contiene
+una sola sequenza e oggetti circa 12 volte più piccoli
 rispetto al train in termini di area mediana. Non va usata per scegliere il
 checkpoint degli esperimenti correnti. Il checkpoint finale (`latest`, epoca
 fissata a priori) è una scelta più corretta del `best` finché non viene definito
