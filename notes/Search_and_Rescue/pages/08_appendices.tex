@@ -56,12 +56,19 @@ with the thesis source:
   \path{results/rtdetr_error_analysis_checkpoints.csv} & Fifty checkpoint--threshold summaries for Additive and FAM on MtErie. \\
   \path{results/rtdetr_carnation_stress_test.csv} & Thirty checkpoint--modality units from the frozen Carnation stress test. \\
   \path{results/rtdetr_compute_benchmark.csv} & Parameter, operation-proxy, latency, throughput, and CUDA-memory summary. \\
+  \path{results/rtdetr_fam_sequence_checkpoint_evaluation.csv} & Five-seed Stage-A FAM comparison of validation-selected \texttt{best} and epoch-10 \texttt{latest}. \\
+  \path{results/rtdetr_fam_residual_alignment_stage_a_validation.csv} & Paired Stage-A FAM--RCRA validation results. \\
+  \path{results/rtdetr_fam_scalar_alignment_control_stage_a_validation.csv} & Three-parameter residual-control attribution results. \\
+  \path{results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv} & Matched full-data FAM--RCRA Stage-B comparison. \\
+  \path{results/rtdetr_fam_full_data_paired_modality_evaluation.csv} & Selected-FAM modality interventions on the 708 common paired frames. \\
+  \path{results/rtdetr_fam_full_data_native_ir_coordinate_diagnostic.csv} & Post-hoc native-IR coordinate diagnostic on the corresponding 708 IR frames. \\
+  \path{results/rtdetr_fam_paired_vis_modal_dropout_probe_evaluation.csv} & Seed-40 Modal Dropout coordinate-system ablation. \\
   \path{results/yolo_final_modality_evaluation.csv} & Thirty final YOLOv10 checkpoint--modality evaluations. \\
   \path{images/rtdetr_additive_fam_error_summary.png} & Paired error summary at confidence 0.01. \\
   \path{images/rtdetr_additive_fam_threshold_sensitivity.png} & Multi-threshold error sensitivity analysis. \\
   \path{images/rtdetr_carnation_paired_map50.png} & Carnation paired-seed plot. \\
   \path{images/yolov10_final_modality_paired_map50.png} & Final YOLOv10 paired modality plot. \\
-  \path{images/experimental_timeline.pdf} & Vector chronology separating inherited, exploratory, audit, and locked-protocol stages. \\
+  \path{images/experimental_timeline.pdf} & Vector chronology separating inherited, exploratory, audit, historical locked, and validation-led stages. \\
   \path{images/rtdetr_fam_architecture.pdf} & Vector diagram of the implemented dual-backbone RT-DETR and per-level FAM. \\
   \path{images/rtdetr_final_paired_map50.pdf} & Final paired-seed RT-DETR comparison generated from the primary training outputs. \\
   \path{images/fam_p5_seed41_collapse.png} & Thesis-readable P5 collapse diagnostic assembled from the saved feature diagnostic and JSON statistics. \\

@@ -135,7 +135,23 @@ class FusionDetr(BaseDetr):
         )
 
 class FusionRTDetr(BaseDetr):
-    def __init__(self, id2label, threshold=0.9, use_fam=False, freeze_fam=False, ir_dropout_rate=0.0, spatial_jitter_std=0.0, fam_variant="current_dcnv2", reuse_pretrained_class_head=False):
+    def __init__(
+        self,
+        id2label,
+        threshold=0.9,
+        use_fam=False,
+        freeze_fam=False,
+        ir_dropout_rate=0.0,
+        spatial_jitter_std=0.0,
+        fam_variant="current_dcnv2",
+        reuse_pretrained_class_head=False,
+        use_p2=False,
+        use_reliability_gating=False,
+        reliability_gate_hidden_channels=16,
+        use_residual_alignment_gating=False,
+        residual_alignment_hidden_channels=16,
+        use_scalar_residual_alignment=False,
+    ):
         super(FusionRTDetr, self).__init__(
             processor_class=RTDetrImageProcessor,
             model_class=RTDetrFusionForObjectDetection,
@@ -147,6 +163,12 @@ class FusionRTDetr(BaseDetr):
             ir_dropout_rate=ir_dropout_rate, # Pass ir_dropout_rate to model
             spatial_jitter_std=spatial_jitter_std, # Pass spatial_jitter_std to model
             fam_variant=fam_variant,
+            use_p2=use_p2,
+            use_reliability_gating=use_reliability_gating,
+            reliability_gate_hidden_channels=reliability_gate_hidden_channels,
+            use_residual_alignment_gating=use_residual_alignment_gating,
+            residual_alignment_hidden_channels=residual_alignment_hidden_channels,
+            use_scalar_residual_alignment=use_scalar_residual_alignment,
             reuse_pretrained_class_head=reuse_pretrained_class_head,
         )
         # Force the processor to accept 4 channels
@@ -156,6 +178,20 @@ class FusionRTDetr(BaseDetr):
         self.ir_dropout_rate = ir_dropout_rate
         self.spatial_jitter_std = spatial_jitter_std
         self.fam_variant = fam_variant
+        self.use_p2 = use_p2
+        self.use_reliability_gating = use_reliability_gating
+        self.reliability_gate_hidden_channels = int(
+            reliability_gate_hidden_channels
+        )
+        self.use_residual_alignment_gating = bool(
+            use_residual_alignment_gating
+        )
+        self.residual_alignment_hidden_channels = int(
+            residual_alignment_hidden_channels
+        )
+        self.use_scalar_residual_alignment = bool(
+            use_scalar_residual_alignment
+        )
         self.reuse_pretrained_class_head = reuse_pretrained_class_head
 
 

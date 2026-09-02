@@ -72,7 +72,13 @@ def tile_wisard(data):
     default=None,
     help="Override experiment.start_from_run without editing the YAML.",
 )
-def experiment(parameters, parallel, only_create, yolo, start_from_run):
+@click.option(
+    "--max-runs",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Execute at most this many grid items after --start-from-run.",
+)
+def experiment(parameters, parallel, only_create, yolo, start_from_run, max_runs):
     from sarfusion.experiment.experiment import experiment as run_experiment
     run_experiment(
         param_path=parameters,
@@ -80,6 +86,7 @@ def experiment(parameters, parallel, only_create, yolo, start_from_run):
         only_create=only_create,
         yolo=yolo,
         start_from_run=start_from_run,
+        max_runs=max_runs,
     )
 
 

@@ -223,6 +223,7 @@ class FAMCapture:
     SUPPORTED_CLASS_NAMES = {
         "FeatureAlignmentModule",
         "BoundedFeatureAlignmentModule",
+        "BoxGuidedCommonOffsetFeatureAlignmentModule",
         "IdentityInitializedFeatureAlignmentModule",
         "GridSampleFeatureAlignmentModule",
     }
@@ -275,7 +276,22 @@ class FAMCapture:
             ):
                 raw_offset = rec["offset"]
                 rec["raw_offset"] = raw_offset
-                rec["offset"] = module.transform_offset(raw_offset)
+                effective_offset = module.transform_offset(raw_offset)
+                if type(module).__name__ == (
+                    "BoxGuidedCommonOffsetFeatureAlignmentModule"
+                ):
+                    guidance = module.last_guidance_flow
+                    if guidance is None:
+                        raise RuntimeError(
+                            "Box-guided FAM did not expose its guidance flow"
+                        )
+                    guidance = guidance.detach().cpu()
+                    rec["residual_offset"] = effective_offset
+                    rec["guidance_flow"] = guidance
+                    effective_offset = effective_offset + guidance.repeat(
+                        1, 9, 1, 1
+                    )
+                rec["offset"] = effective_offset
         return hook
 
     def _make_offset_hook(self, level_idx, module_class):

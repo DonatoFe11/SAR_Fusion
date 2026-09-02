@@ -1,0 +1,46 @@
+# Post-hoc coordinate-contract diagnostic created after observing the very low
+# paired masked-IR/VIS-ground-truth result. It is not a frozen model-selection
+# experiment and cannot be used to select a checkpoint or architecture.
+
+protocol:
+  id: rtdetr_fam_full_data_native_ir_coordinate_diagnostic_v1
+  recorded_on: "2026-08-25"
+  status: post_hoc_diagnostic
+  purpose: distinguish_native_ir_capability_from_vis_coordinate_missing_rgb_robustness
+
+  paired_ablation_protocol: parameters/RTDETR/rtdetr_fam_full_data_paired_modality_evaluation.yaml
+  project: RTDETR_FAM_FullData_StageB_FiveSeed
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+
+  dataset_root: dataset/WiSARD
+  source:
+    native_ir_folders:
+      - 210417_MtErie_Enterprise_IR_0004
+      - 210417_MtErie_Enterprise_IR_0006
+      - 210417_MtErie_Enterprise_IR_0008
+    corresponding_vis_folders:
+      - 210417_MtErie_Enterprise_VIS_0003
+      - 210417_MtErie_Enterprise_VIS_0005
+      - 210417_MtErie_Enterprise_VIS_0007
+    expected_frames: 708
+    expected_ir_boxes: 1824
+    expected_ir_empty_frames: 3
+    paired_inventory_sha256: d6ceca387baaa22b63c31d762c2cb636b52e78acdaa9d8c33e668948a0718900
+    preprocessing: native_ir_without_adapt_ir2rgb
+    ground_truth: ir
+    input_contract: zero_rgb_channels_plus_native_ir_channel
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_fam_full_data_native_ir_coordinate_diagnostic
+
+  interpretation:
+    model_selection_allowed: false
+    checkpoint_selection_allowed: false
+    threshold_tuning_allowed: false
+    architecture_tuning_allowed: false
+    claim_blind_test_allowed: false
+    direct_numeric_comparison_with_vis_ground_truth_allowed: false

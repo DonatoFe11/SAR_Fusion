@@ -30,6 +30,34 @@ class TestExperimentCLI(unittest.TestCase):
             only_create=False,
             yolo=True,
             start_from_run=1,
+            max_runs=None,
+        )
+
+    def test_max_runs_is_forwarded_for_single_seed_pilots(self):
+        runner = CliRunner()
+
+        with patch("sarfusion.experiment.experiment.experiment") as run_experiment:
+            result = runner.invoke(
+                main,
+                [
+                    "experiment",
+                    "--parameters",
+                    "protocol.yaml",
+                    "--start-from-run",
+                    "0",
+                    "--max-runs",
+                    "1",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        run_experiment.assert_called_once_with(
+            param_path="protocol.yaml",
+            parallel=False,
+            only_create=False,
+            yolo=False,
+            start_from_run=0,
+            max_runs=1,
         )
 
 

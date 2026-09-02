@@ -1,0 +1,8 @@
+protocol_id: rtdetr_fam_scalar_alignment_control_audit_v1
+project: RTDETR_FAM_ScalarAlignmentControl_SequenceVal_FiveSeed
+training_config: parameters/RTDETR/rtdetr_fam_scalar_alignment_control_sequence_validation_five_seed.yaml
+seeds: [40, 41, 42, 43, 44]
+checkpoint: best
+level_labels: [P3, P4, P5]
+output_json: notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.json
+output_csv: notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.csv

@@ -1,6 +1,6 @@
 # Audit sperimentale per la tesi
 
-Ultimo aggiornamento: 8 agosto 2026.
+Ultimo aggiornamento: 31 agosto 2026.
 
 ## Decisione generale
 
@@ -77,8 +77,10 @@ I dettagli tecnici, gli identificativi delle run e i risultati completi sono in
 | Lazy FAM, Frozen FAM e Spatial Dropout | singole run; il Lazy contiene un bug | analisi storica che ha motivato i controlli successivi | non ripetere il bug né il Frozen Random |
 | Ablation Identity DCNv2 e Grid Sample | cinque seed ciascuna nel protocollo finale | ablation quantitativa valida sul benchmark interno | completa |
 | Diagnostica degli offset RT-DETR | FAM, SSJ e Grid Sample, cinque seed e 30 campioni per checkpoint; ablation fattoriale P3/P4/P5; variante bounded-offset su cinque seed | evidenza meccanicistica principale; identifica il failure mode P5 e verifica una correzione mirata | completa; il bounding elimina il collasso osservato ma non migliora la detection |
+| RT-DETR FAM box-guided P3 | matched control e candidata seed 40 completi; audit su 3.123 frame train e controfattuale su 896 frame validation | studio negativo informativo: la geometria viene appresa, ma il contributo diretto alla detection è trascurabile | chiusa: delta `+0,00810 < +0,01`; niente seed 41--44 o Stage B |
 | Error analysis e figure Additive--FAM | dieci checkpoint, cinque soglie e sei frame GT-only mostrati a due soglie | evidenza finale sui failure mode di detection; sostituisce il confronto storico Lazy--SSJ | completa |
 | Stress test Carnation Additive--FAM | dieci checkpoint, tre modalità e 739 frame comuni; protocollo congelato prima dell'inferenza | test esterno mirato al forte mismatch di scala, non stima rappresentativa di generalizzazione | completo; FAM attenua il danno in fusione ma VIS-only resta superiore a VIS+IR in 5/5 checkpoint FAM |
+| Conferma WiSARD su Carnation 0025/0026 e FHL 0407/0408 | quattro configurazioni, cinque seed, 50 valutazioni; inventari, attestazione e checkpoint congelati prima dell'inferenza | conferma su acquisizioni interne precedentemente inutilizzate, non holdout esterno | completa; FAM storico supera Additive in 10/10 confronti, l'IR Stage B non aiuta uniformemente e RCRA resta instabile |
 | Costo RT-DETR Additive--FAM | parametri, proxy GFLOPs, tre trial di latenza e memoria in processi isolati | quantifica il trade-off del modello principale sul solo forward del detector | completo; FAM migliora la detection ma aggiunge 77,5% parametri e 17,9% latenza sulla GPU misurata |
 | Tiling, CMX e CMX ibrido | singole run | studi di fattibilità negativi della specifica implementazione | non ripetere; evitare spiegazioni causali non misurate |
 | Deformable DETR | cinque run per variante, protocollo precedente | evidenza esplorativa di trasferibilità e instabilità | non ripetere salvo che si voglia sostenere una superiorità quantitativa cross-architettura |
@@ -344,7 +346,177 @@ FLOPs resta una proxy convenzionale e la latenza esclude preprocessing e
 postprocessing. Risultati e limiti sono in
 [`rtdetr_compute_benchmark.md`](rtdetr_compute_benchmark.md).
 
-### 6. Aggiornamento della tesi
+### 6. Conferma su acquisizioni WiSARD inutilizzate — completata
+
+Il protocollo `rtdetr_unused_acquisition_confirmation_v1` è stato congelato il
+30 agosto 2026 prima dell'inferenza. L'autore ha attestato di non avere mai
+visionato manualmente Carnation 0025/0026 e FHL 0407/0408; l'audit non ne ha
+rilevato l'uso nei parametri versionati o nelle run conservate. Sono state
+incluse 1.313 coppie Carnation e 1.035 coppie FHL con ground truth VIS. L'audit
+del pairing ha escluso quattro ID asimmetrici Carnation che avrebbero prodotto
+661 associazioni posizionali errate.
+
+Le 50 valutazioni congelate sono complete. FAM storico supera Additive in
+5/5 seed su entrambe le acquisizioni: delta mAP@50 medio `+0.0960` su
+Carnation e `+0.1554` su FHL. La macro-media descrittiva a peso uguale è
+`+0.1257`, ancora positiva in 5/5 seed.
+
+La diagnostica Stage B limita l'interpretazione: FAM fusion meno VIS-only è
+`+0.0019` su Carnation ma `−0.0256` su FHL; RCRA meno FAM è `−0.0184` e
+`+0.0366`, con deviazioni standard rispettivamente `0.1149` e `0.1201` e
+frequenti inversioni fra seed. La conferma rafforza quindi FAM rispetto ad
+Additive ma non dimostra che l'IR aiuti sempre né riapre la decisione RCRA.
+Risultati, test esplorativi, hash e limiti sono in
+[`rtdetr_unused_acquisition_confirmation.md`](rtdetr_unused_acquisition_confirmation.md).
+
+### 7. Stress geometrico sintetico controllato — completato
+
+Lo stress Carnation 0023/0024 già chiuso misura un mismatch di scala nativo e
+non sostituisce una perturbazione sintetica controllata. Il passo successivo è
+un protocollo separato che trasformi soltanto il canale IR, lasciando RGB e
+ground truth VIS invariati, e riporti il calo rispetto all'identità anziché
+cercare la trasformazione migliore. Traslazioni, scale, direzioni, gestione dei
+bordi, famiglie di checkpoint e regole di aggregazione sono stati fissati nel
+protocollo `rtdetr_synthetic_geometric_stress_v1`. Il runner, quattro test
+automatici, il preflight completo e uno smoke GPU su un solo batch in `/tmp`
+sono stati completati prima della campagna. L'esecuzione resumable ha prodotto
+560/560 inferenze perturbate e 600/600 punti includendo le identità congelate.
+
+La metrica con segno non conferma una superiore tolleranza generale di FAM.
+Su Carnation i contrasti FAM--Additive per le traslazioni restano piccoli e
+incerti; su FHL il contrasto favorisce Additive a 8, 16 e 32 pixel in 0/5 seed
+per FAM, ma perché Additive **migliora** rispetto alla propria identità fino al
+6,93%, non perché FAM subisca un crollo. Le perturbazioni stanno quindi
+probabilmente compensando parte di un mismatch nativo o modificando
+favorevolmente le feature. RCRA non mostra un vantaggio stabile su FAM: tutti
+gli IC95% dei contrasti aggregati includono zero. Il risultato non modifica la
+scelta del FAM standard e vieta di attribuirne il vantaggio di accuratezza a
+una robustezza geometrica universale. CSV, figura, hash e limiti sono in
+[`rtdetr_synthetic_geometric_stress.md`](rtdetr_synthetic_geometric_stress.md).
+
+### 8. FAM con Modal Dropout misto e consistency training — chiuso
+
+Dopo la chiusura delle valutazioni naturali e sintetiche, l'unico nuovo
+candidato autorizzato è una modifica del training FAM. Il percorso
+supervisionato conserva esattamente il Modal Dropout storico, inclusi esempi IR
+nativi con ground truth IR; un percorso aggiuntivo abbina mediante Hungarian
+matching un teacher fusion pulito senza gradiente e uno student paired-VIS con
+RGB oppure IR mascherata.
+
+Il seed 40 `hghkalag` ha completato dieci epoch e 7.810 step senza errori. La
+prima epoca è durata `11:15`, mentre le successive circa 34--40 minuti: il
+salto è previsto, perché la prima salta interamente la consistency e dalla
+seconda ogni batch aggiunge teacher e student. Il `best` è rimasto all'epoch 1
+con fusion mAP@50 `0,125263`; dopo l'attivazione della loss la validation è
+scesa a `0,065633` e poi `0,036052` nei due epoch successivi.
+
+Il gate congelato sulle 896 coppie FHL è fallito in tutti i requisiti: delta
+fusion `-0,026884` contro limite `-0,01`, delta paired masked-IR `+0,001829`
+contro minimo `+0,03` e delta IR nativa `-0,050581` contro limite `-0,03`.
+Il candidato è quindi chiuso fail-closed dopo un seed; seed 41--44, Stage B e
+MtErie non vengono eseguiti. Il FAM standard resta il modello principale.
+Dettagli, tabella e limiti interpretativi sono in
+[`rtdetr_fam_mixed_consistency_stage_a.md`](rtdetr_fam_mixed_consistency_stage_a.md).
+
+### 9. FAM Box-Guided Common-Offset P3 — screen seed 40 chiuso
+
+La candidata successiva aggiunge soltanto a P3 un campo comune `(dy, dx)`
+supervisionato debolmente dai centri dei box VIS/IR mutual-nearest. Il campo è
+sommato ai nove offset residui del FAM storico; P4 e P5 restano
+`current_dcnv2`. Il ramo nuovo usa una proiezione condivisa a 32 canali e
+aggiunge esattamente **53.410 parametri**, senza modificare decoder e teste. La
+loss usa Smooth L1 sui match conservativi, con soglia normalizzata `0,05`,
+`lambda=0,2`, warm-up di due epoche e limite `±4` celle applicato soltanto alla
+guida comune.
+
+L'inventario Stage A è stato ricostruito indipendentemente sui 3.123 frame di
+train. Contiene 5.209 match distribuiti su 2.306 frame; 817 frame non hanno
+target. La distribuzione per numero di match è `0:817`, `1:801`, `2:543`,
+`3:526`, `4:436`. Ordinando frame e righe in modo canonico e serializzando i
+tensori `[x_VIS, y_VIS, dy, dx]` come `float32` little-endian, lo SHA-256 è:
+
+```text
+d519574962e81ae5b492248113247cca20d7ef15b2d189d1e3b58aebf218f3c0
+```
+
+È stato corretto prima del training un confondente RNG: l'allocazione del ramo
+nuovo consumava estrazioni casuali e avrebbe cambiato l'inizializzazione dei
+FAM condivisi successivi. Il costruttore usa ora un RNG fork locale e impedisce
+al `post_init` Hugging Face di reinizializzare il subtree nuovo. Il test di
+regressione conferma, per lo stesso seed, pesi di tutti i FAM condivisi
+bit-identici e stato RNG globale bit-identico fra baseline e candidata.
+
+Le quattro configurazioni scientifiche della campagna dichiarano inoltre il
+manifest sorgente `rtdetr_box_guided_training_source_v1`, composto da 22 file
+critici, con SHA-256 aggregato:
+
+```text
+b06ea1328be206a9f7c64b3412f64ed7bb95b884da591c476584a90403592412
+```
+
+Il training è fail-closed: prima della run ricalcola il manifest, richiede una
+trace attiva e scrivibile e registra hash aggregato e per-file nel primo evento.
+Audit meccanicistico e controfattuale legano poi checkpoint, configurazione
+W&B/YAML, trace originale e sorgenti correnti. Il probe `j37qaj8r`, precedente
+a questo vincolo, resta soltanto ingegneristico. Il manifest non sostituisce il
+fingerprint delle dipendenze o gli inventari del dataset.
+
+Il probe tecnico, escluso da ogni confronto scientifico, è completato nella
+run `j37qaj8r`, directory
+[`wandb/run-20260831_122623-j37qaj8r`](../wandb/run-20260831_122623-j37qaj8r/).
+Ha eseguito 20 step e la validation completa di 896 frame in 132 secondi, con
+loss media `17,44285` e valori finiti. All'ultimo step la loss guida raw è
+`1,18184`, quella pesata `0,11818` e la scala di warm-up `0,5`. La validation
+mAP@50 `0,07828` è una diagnostica non scientifica e non entra nei gate.
+
+Il matched control `2fx2ozwm` completa dieci epoche/7.810 step e ottiene best
+mAP@50 `0,147388741` all'epoch 3. La candidata `2jvqs9mr` completa lo stesso
+protocollo e ottiene `0,155485332` all'epoch 1. Il delta appaiato
+`+0,008096591` è positivo, ma manca di `0,001903409` il gate preregistrato
+`+0,01`; il vecchio FAM seed 40 `0,152148` resta soltanto descrittivo.
+
+L'audit meccanicistico sui 3.123 frame/5.209 match passa tutti i gate. La
+Smooth L1 della guida è `0,437972`, contro `1,006123` di zero e `0,884058` del
+miglior vettore costante; i miglioramenti relativi sono `56,47%` e `50,46%`.
+La correlazione centrata guida--target è `0,786072`, la saturazione è nulla e
+la quota di vettori cancellati almeno a metà dagli offset residui è soltanto
+`0,006911`.
+
+Il controfattuale sugli stessi 896 frame FHL riproduce esattamente la best W&B
+e misura mAP@50 `0,155485332` con guida attiva contro `0,155478507` con guida
+azzerata: delta `+0,000006825`. Il vincolo non negativo passa formalmente, ma
+l'effetto diretto è trascurabile; AP50:95 e AP75 risultano persino lievemente
+inferiori con la guida attiva. Il risultato indica quindi che la regressione
+geometrica è apprendibile, ma non fornisce un vantaggio di detection sufficiente.
+
+La candidata è chiusa fail-closed: seed 41--44, authorization manifest, audit
+aggregato e Stage B non vengono eseguiti. Protocollo, artefatti, hash e il fix
+non scientifico del controllo runtime dell'inventario sono in
+[`rtdetr_fam_box_guided_stage_a.md`](rtdetr_fam_box_guided_stage_a.md).
+
+Come controllo interpretativo non selettivo, l'audit confronta anche `g` col
+miglior vettore costante `(dy, dx)` che minimizza esattamente la Smooth L1
+`beta=0,25` sui medesimi target train congelati. Il confronto non modifica i
+gate: se la candidata vince in mAP ma la guida non migliora strettamente questa
+costante, il modello resta promuovibile secondo il protocollo prestazionale ma
+il meccanismo va descritto come calibrazione globale, non come allineamento
+input-conditioned. Se la batte, supporta soltanto un fit non globale sui target
+train, non esclude una mappa spaziale o una memoria dell'acquisizione e non
+prova generalizzazione. Zero e costante misurano fit sul train; il
+controfattuale validation misura invece l'effetto prestazionale fuori dal
+train della loss.
+
+Era stato congelato anche l'audit Stage A v2 per l'eventuale espansione: combina
+seed 40 dai progetti dello screen e seed 41--44 dai progetti condizionali,
+verifica le quattro sorgenti YAML, indici del grid, metadati di lancio,
+manifest/trace e ambiente comune delle dieci run, richiede i due risultati seed
+40 già passati e applica automaticamente delta seed 40, delta medio, 4/5
+vittorie e meccanismo 5/5. Il `best_map_50` W&B resta la metrica primaria del
+protocollo storico; soltanto la candidata seed 40 dispone già del replay
+validation indipendente. Resta come traccia del protocollo condizionale, ma non
+viene eseguito perché lo screen seed 40 non ha autorizzato l'espansione.
+
+### 10. Aggiornamento della tesi
 
 Solo dopo le attività precedenti:
 
@@ -380,7 +552,12 @@ esplorativi.
 
 ## Ordine operativo
 
-1. Non avviare nuove architetture.
+I punti 1--17 ricostruiscono il piano precedente: il loro vincolo era chiudere
+la campagna allora attiva prima di aprire nuove architetture, ed è stato
+soddisfatto. I punti 18 e successivi costituiscono l'estensione ora autorizzata.
+
+1. Chiudere la campagna allora attiva prima di avviare nuove architetture.
+   **Fatto.**
 2. Estendere `fam_alignment_check.py` per JSON, repliche e Grid Sample. **Fatto:**
    runner `scripts/run_rtdetr_fam_diagnostics.py`, test automatici e output
    aggregato per checkpoint/seed.
@@ -420,8 +597,74 @@ esplorativi.
 10. Eseguire il benchmark computazionale Additive--FAM già congelato.
     **Fatto:** tre trial e 300 forward per configurazione in processi isolati;
     risultato completo e riepilogo versionato.
-11. Consolidare risultati e figure nei Markdown.
-12. Aggiornare `notes/Search_and_Rescue/main.tex`.
+11. Confermare Additive/FAM e diagnosticare fusion/RCRA sulle due acquisizioni
+    WiSARD inutilizzate. **Fatto:** 50/50 unità, FAM storico favorevole in
+    10/10 confronti acquisizione/seed; fusion Stage B e RCRA non uniformi.
+12. Congelare ed eseguire lo stress geometrico sintetico, senza usare i
+    risultati della conferma per scegliere le perturbazioni. **Fatto:**
+    protocollo congelato, preflight e smoke completati, 560/560 inferenze e
+    600/600 punti curva; nessuna trasformazione selezionata post-hoc.
+13. Consolidare risultati e figure nei Markdown. **Fatto:** CSV e curva dello
+    stress versionati; risultati, hash e limiti interpretativi documentati.
+14. Implementare e congelare il candidato FAM con Modal Dropout misto e
+    consistency training. **Fatto:** configurazioni seed 40/cinque seed, loss
+    matched, suite completa di 206 test, probe GPU di due batch senza OOM o NaN
+    e valutatore automatico seed 40 con inventario FHL verificato.
+15. Eseguire soltanto il seed 40 Stage A e applicare i tre gate congelati.
+    **Fatto:** run completa; tutti i gate falliti, candidato chiuso.
+16. Se e solo se lo screen passa, eseguire i seed 41--44 senza ripetere il 40
+    e applicare la regola Stage A a cinque seed. **Non applicabile:** lo screen
+    è fallito; l'espansione è vietata dal protocollo.
+17. Preparare ed eseguire Stage B soltanto dopo una promozione Stage A. **Non
+    applicabile:** nessuna promozione Stage A.
+18. Implementare e congelare il FAM Box-Guided Common-Offset P3. **Fatto:**
+    architettura, pseudo-target, loss, fix RNG, test, inventario canonico e
+    probe tecnico `j37qaj8r` completati; manifest fail-closed di 22 sorgenti
+    applicato ai quattro YAML scientifici.
+19. Eseguire per primo il nuovo FAM matched control seed 40. **Fatto:** run
+    `2fx2ozwm`, best epoch 3, mAP@50 `0,147388741`.
+20. Solo dopo il controllo, eseguire la candidata box-guided seed 40 con la
+    configurazione già congelata. **Fatto:** run `2jvqs9mr`, best epoch 1,
+    mAP@50 `0,155485332`; delta `+0,008096591`, inferiore al gate `+0,01`.
+21. Dopo il training candidato, eseguire l'audit meccanicistico sul checkpoint
+    `best` e applicare il gate candidata meno matched control `>= +0,01` insieme
+    ai gate del campo guida e della cancellazione residua; riportare anche il
+    confronto descrittivo col miglior predittore costante. **Fatto:** tutti i
+    gate meccanicistici passano; Smooth L1 `0,437972`, miglioramento `56,47%`
+    contro zero e `50,46%` contro la migliore costante. Il gate prestazionale
+    fra run fallisce.
+22. Eseguire il controfattuale validation active-vs-zero sullo stesso
+    checkpoint, con delta mAP@50 non negativo. **Fatto:** active
+    `0,155485332`, zero `0,155478507`, delta `+0,000006825`; formalmente passa,
+    ma l'effetto diretto è trascurabile.
+23. Congelare un protocollo meccanicistico multi-run che unisca il seed 40 del
+    progetto screen ai quattro seed del progetto di espansione. **Fatto:** il
+    v2 lega dieci run, prerequisiti seed 40, ambiente, checkpoint e gate Stage A.
+24. Se tutti i gate seed 40 passano, scrivere prima del lancio un authorization
+    manifest con gli hash dei due JSON seed 40; solo allora eseguire i seed
+    41--44 insieme ai
+    matched control FAM freschi 41--44 già congelati; non usare le run storiche
+    come riferimento primario e applicare l'audit aggregato a tutti e cinque i
+    checkpoint. **Non applicabile:** gate primario seed 40 fallito; espansione
+    vietata.
+25. Preparare Stage B soltanto dopo una promozione Stage A, congelando e
+    addestrando anche un nuovo FAM matched control full-data con stesso codice,
+    manifest e ambiente. **Non applicabile:** nessuna promozione Stage A.
+26. Se la guida non apprende la geometria, passare a un candidato P3 distinto
+    con proiezione condivisa 32 canali, normalizzazione L2, cost volume `9×9`
+    a raggio quattro e regressione/soft-argmax, lasciando libero il residuo FAM.
+    Se invece la geometria è appresa ma la mAP non migliora, chiudere questa
+    classe di interventi e valutare RT-DETRv2 + FAM; D-FINE con FDR/GO-LSD resta
+    la terza scelta detector-level. **Decisione applicata:** la guida apprende
+    la geometria ma non migliora abbastanza la detection; il cost-volume non è
+    giustificato e la prossima linea da valutare è RT-DETRv2 + FAM.
+27. Aggiornare `notes/Search_and_Rescue/main.tex` dopo la chiusura della nuova
+    campagna oppure dopo il suo arresto fail-closed.
+
+Nota operativa per gli eventuali fallback: l'ambiente locale `sarfusion` usa
+Transformers `4.43.3` e non contiene classi o moduli RT-DETRv2/D-FINE. Un loro
+screen richiederà un ambiente separato o un port esplicito, non una modifica
+trasparente del costruttore attuale.
 
 Ogni deviazione da questo ordine o dal protocollo va annotata prima di vedere
 le metriche interessate.

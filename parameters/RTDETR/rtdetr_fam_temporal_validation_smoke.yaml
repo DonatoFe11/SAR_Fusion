@@ -1,0 +1,86 @@
+# Technical smoke test for the train-derived temporal validation protocol.
+#
+# This run is deliberately NOT part of the scientific five-seed campaign. It
+# verifies one complete train/validation cycle, best/latest checkpoint writes
+# and W&B metadata before the frozen campaign configuration is launched.
+
+experiment:
+  name: RTDETR_FAM_TemporalVal_Smoke
+  group: RTDETR_temporal_validation_smoke
+  continue_with_errors: false
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: [40]
+  repetition: [0]
+  task: [detection]
+  run_test: [false]
+  test_checkpoint: [best]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, FAM, TemporalValidation, SmokeTest]]
+
+  train:
+    max_epochs: [2]
+    run_validation: [true]
+    compute_validation_loss: [false]
+    val_frequency: [1]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    early_stopping_patience: [5]
+    checkpoint_min_delta: [0.001]
+    compile: [false]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map_50]
+    greater_is_better: [true]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    temporal_split_manifest: [parameters/RTDETR/rtdetr_temporal_validation_split.json]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

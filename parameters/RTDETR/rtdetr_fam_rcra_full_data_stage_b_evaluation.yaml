@@ -1,0 +1,80 @@
+# Frozen before either Stage-B campaign is trained or evaluated. This protocol
+# compares configuration-matched epoch-10 checkpoints on the same 708 paired
+# MtErie frames and VIS annotations. MtErie is an already-used internal
+# benchmark, not a newly blind test set.
+
+protocol:
+  id: rtdetr_fam_rcra_full_data_stage_b_evaluation_v1
+  frozen_on: "2026-08-24"
+  status: frozen_before_training_and_inference
+  purpose: matched_full_data_rcra_confirmation
+
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+  dataset_root: dataset/WiSARD
+  training_config: parameters/RTDETR/rtdetr_fam_full_data_stage_b_five_seed.yaml
+
+  training_source:
+    paired_folders:
+      - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+      - [210924_FHL_Enterprise_VIS_0405, 210924_FHL_Enterprise_IR_0406]
+      - [220109_Baker_Enterprise_VIS_1, 220109_Baker_Enterprise_IR_1]
+    expected_frames: 4019
+    inventory_manifest: parameters/RTDETR/rtdetr_temporal_validation_split.json
+    expected_inventory_sha256: 5f684ff047c2fd41e5e6440daa4e5ca61a89b34d907f6f156638bb7f740ca8eb
+
+  configurations:
+    fam:
+      display_name: RT-DETR + FAM
+      training_config: parameters/RTDETR/rtdetr_fam_full_data_stage_b_five_seed.yaml
+      project: RTDETR_FAM_FullData_StageB_FiveSeed
+      use_residual_alignment_gating: false
+      alignment_gate_lr: null
+    rcra:
+      display_name: RT-DETR + FAM + RCRA
+      training_config: parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_five_seed.yaml
+      project: RTDETR_FAM_RCRA_FullData_StageB_FiveSeed
+      use_residual_alignment_gating: true
+      alignment_gate_lr: 0.0002
+
+  source:
+    paired_folders:
+      - [210417_MtErie_Enterprise_VIS_0003, 210417_MtErie_Enterprise_IR_0004]
+      - [210417_MtErie_Enterprise_VIS_0005, 210417_MtErie_Enterprise_IR_0006]
+      - [210417_MtErie_Enterprise_VIS_0007, 210417_MtErie_Enterprise_IR_0008]
+    pairing: existing_wisard_sorted_zip
+    ground_truth: vis
+    expected_frames: 708
+    expected_vis_boxes: 1770
+    expected_vis_empty_frames: 19
+    expected_inventory_sha256: d6ceca387baaa22b63c31d762c2cb636b52e78acdaa9d8c33e668948a0718900
+
+  primary_comparison:
+    metric: map_50
+    delta: rcra_minus_fam
+    minimum_mean_gain: 0.01
+    minimum_positive_seed_wins: 4
+    rule: both_conditions_required
+    confidence_interval_role: uncertainty_report_not_decision_override
+    if_pass: retain_rcra_as_final_architecture
+    if_fail: retain_fam_as_final_performance_baseline
+
+  historical_reference:
+    project: RTDETR_FAM_Protocol
+    mean_map50: 0.3780
+    role: secondary_sanity_check_only
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_fam_rcra_full_data_stage_b_evaluation
+
+  interpretation:
+    final_architecture_decision_allowed: true
+    checkpoint_selection_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+    additional_architecture_tuning_allowed: false
+    historical_fam_as_primary_comparator_allowed: false
+    claim_blind_test_allowed: false

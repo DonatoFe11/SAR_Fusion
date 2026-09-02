@@ -1,0 +1,65 @@
+# Machine-readable restatement of the evaluation and promotion rule frozen in
+# commit e7ccd39 before the seed-40 candidate was trained. This file is added
+# after training but before the paired/native modality inference below.
+
+protocol:
+  id: rtdetr_fam_paired_vis_modal_dropout_probe_evaluation_v1
+  status: frozen_before_modality_inference
+  frozen_rule_commit: e7ccd39bc9b38507747089306ec43164b13c7e0c
+  frozen_rule_document: notes/rtdetr_fam_paired_vis_modal_dropout_probe.md
+  purpose: paired_vis_dropout_seed40_screen
+
+  seed: 40
+  checkpoint: best
+  confidence_threshold: 0.01
+  evaluation_seed: 42
+
+  configurations:
+    baseline:
+      project: RTDETR_FAM_SequenceVal_Fixed10_Protocol
+      training_config: parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml
+    paired_vis_dropout:
+      project: RTDETR_FAM_PairedVisModalDropout_SequenceVal_Seed40
+      training_config: parameters/RTDETR/rtdetr_fam_paired_vis_modal_dropout_sequence_validation_seed40.yaml
+
+  dataset_root: dataset/WiSARD
+  source:
+    paired_folders:
+      - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+    pairing: existing_wisard_sorted_zip
+    paired_ground_truth: vis
+    native_ir_ground_truth: ir
+    expected_vis_inventory: 897
+    expected_ir_inventory: 896
+    expected_paired_frames: 896
+    expected_unpaired_vis_terminal: 210924_FHL_Enterprise_VIS_0401.mp4_00896.jpg
+    expected_vis_boxes: 3319
+    expected_vis_empty_frames: 93
+    expected_ir_boxes: 3122
+    expected_ir_empty_frames: 100
+    expected_inventory_sha256: 47e2f348ebdc202cb749b1bbf2741fc868d8681eb24ffa4356cf4f584dfa4ec4
+
+  conditions:
+    paired_vis_ir: keep_all_four_channels_vis_gt
+    paired_vis: zero_ir_channel_vis_gt
+    paired_ir_vis_gt: zero_three_vis_channels_vis_gt
+    native_ir_ir_gt: native_ir_canvas_zero_rgb_ir_gt
+
+  promotion_rule:
+    rule: all_conditions_required
+    minimum_paired_ir_map50_gain: 0.03
+    minimum_fusion_map50_delta: -0.01
+    minimum_native_ir_map50_delta: -0.03
+    if_pass: expand_unchanged_to_seeds_41_44
+    if_fail: close_pure_paired_vis_replacement
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_fam_paired_vis_modal_dropout_probe_evaluation
+
+  interpretation:
+    seed40_is_final_evidence: false
+    mt_erie_allowed: false
+    threshold_tuning_allowed: false
+    checkpoint_selection_allowed: false
+    promotion_threshold_change_allowed: false

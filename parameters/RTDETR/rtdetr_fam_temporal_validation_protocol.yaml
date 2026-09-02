@@ -1,0 +1,107 @@
+# RETIRED PILOT — DO NOT CONTINUE SEEDS 41--44.
+# Preserved verbatim as the executable record of seed-40 run 4wkvp82g. The
+# same-video temporal validation selected an epoch that underperformed latest
+# on the already-consulted MtErie diagnostic. The replacement is:
+# parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml
+#
+# Original baseline protocol for the train-derived temporal validation pilot.
+# Finalized: 2026-08-14, after an accidental full-grid launch was aborted and
+# before any run was accepted or any validation score was used. The reduction
+# from 20 to 10 maximum epochs was based only on runtime and historical budget.
+#
+# Checkpoint rule:
+# - validate every epoch on the frozen temporal VIS+IR validation set;
+# - primary metric: validation mAP@50 (`map_50`);
+# - replace best only for an improvement strictly greater than 0.001;
+# - values within 0.001 keep the earlier checkpoint;
+# - stop after 5 consecutive validation epochs without such an improvement;
+# - maximum 10 epochs, matching the historical RT-DETR campaign budget;
+# - preserve both best and latest; final test selection is always best.
+#
+# `run_test` is deliberately false. MtErie must not be inspected while choosing
+# architectures. Final tests are launched separately after candidates are frozen.
+
+experiment:
+  name: RTDETR_FAM_TemporalVal_Protocol
+  group: RTDETR_temporal_validation_v1
+  continue_with_errors: true
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: [40, 41, 42, 43, 44]
+  repetition: [0]
+  task: [detection]
+  run_test: [false]
+  test_checkpoint: [best]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, FAM, TemporalValidation, BestCheckpoint, Baseline]]
+
+  train:
+    max_epochs: [10]
+    run_validation: [true]
+    # Checkpoint selection uses map_50 only. In eval mode RT-DETR labels affect
+    # only Hungarian/auxiliary loss computation, not logits or boxes.
+    compute_validation_loss: [false]
+    val_frequency: [1]
+    save_checkpoints: [true]
+    # Best is saved on improvement; latest is saved only at the natural or
+    # early-stopped end, avoiding a duplicate full state write every epoch.
+    save_final_checkpoint_only: [true]
+    early_stopping_patience: [5]
+    checkpoint_min_delta: [0.001]
+    compile: [false]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map_50]
+    greater_is_better: [true]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    temporal_split_manifest: [parameters/RTDETR/rtdetr_temporal_validation_split.json]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

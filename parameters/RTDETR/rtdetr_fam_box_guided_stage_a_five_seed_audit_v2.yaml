@@ -1,0 +1,163 @@
+# Conditional five-seed Stage-A audit, frozen before training seeds 41--44.
+# Seed 40 comes from the dedicated screen projects; the remaining seeds come
+# from the conditional expansion projects.  The runner fails closed unless
+# every checkpoint is bound to the exact source YAML, grid index and launch
+# metadata declared below.
+
+protocol_id: rtdetr_fam_box_guided_stage_a_five_seed_audit_v2
+status: conditional_frozen_before_seeds_41_44_training
+seeds: [40, 41, 42, 43, 44]
+checkpoint: best
+split: train
+mode: fusion
+
+candidate_sources:
+  - source_id: candidate_seed40_screen
+    project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
+    group: RTDETR_fam_box_guided_sequence_validation_v1
+    training_config: parameters/RTDETR/rtdetr_fam_box_guided_sequence_validation_seed40.yaml
+    training_config_sha256: 16c1d58a4926bb6f6d1c018eb96600b52279116ca04a42d35286d63fb12ea647
+    expected_grid_seeds: [40]
+    selected_runs:
+      - {seed: 40, grid_index: 0}
+    required_run_metadata:
+      start_from_grid: 0
+      start_from_run: 0
+      search: grid
+      isolate_runs: true
+  - source_id: candidate_seeds41_44_expansion
+    project: RTDETR_FAM_BoxGuided_SequenceVal_FiveSeed
+    group: RTDETR_fam_box_guided_sequence_validation_v1
+    training_config: parameters/RTDETR/rtdetr_fam_box_guided_sequence_validation_five_seed.yaml
+    training_config_sha256: 8080f8f384626a49bcc2fe0440294e584aeceac7b33e0a07e86d0280dd85c6b7
+    expected_grid_seeds: [40, 41, 42, 43, 44]
+    selected_runs:
+      - {seed: 41, grid_index: 1}
+      - {seed: 42, grid_index: 2}
+      - {seed: 43, grid_index: 3}
+      - {seed: 44, grid_index: 4}
+    required_run_metadata:
+      start_from_grid: 0
+      start_from_run: 1
+      search: grid
+      isolate_runs: true
+
+control_sources:
+  - source_id: control_seed40_screen
+    project: RTDETR_FAM_BoxGuided_MatchedControl_Seed40
+    group: RTDETR_fam_box_guided_matched_control_v1
+    training_config: parameters/RTDETR/rtdetr_fam_box_guided_matched_control_seed40.yaml
+    training_config_sha256: 811c5c15ede894337b7dee2fe862bf50a9fd24fb31026fdf2b6c5c61eac4fef6
+    expected_grid_seeds: [40]
+    selected_runs:
+      - {seed: 40, grid_index: 0}
+    required_run_metadata:
+      start_from_grid: 0
+      start_from_run: 0
+      search: grid
+      isolate_runs: true
+  - source_id: control_seeds41_44_expansion
+    project: RTDETR_FAM_BoxGuided_MatchedControl_Seeds41to44
+    group: RTDETR_fam_box_guided_matched_control_v1
+    training_config: parameters/RTDETR/rtdetr_fam_box_guided_matched_control_seeds41_44.yaml
+    training_config_sha256: 917653f36fa4bb5eb78e990ae6a05ef7b55b0116b4ea4398540dcbbfa94263a4
+    expected_grid_seeds: [41, 42, 43, 44]
+    selected_runs:
+      - {seed: 41, grid_index: 0}
+      - {seed: 42, grid_index: 1}
+      - {seed: 43, grid_index: 2}
+      - {seed: 44, grid_index: 3}
+    required_run_metadata:
+      start_from_grid: 0
+      start_from_run: 0
+      search: grid
+      isolate_runs: true
+
+seed40_counterfactual_prerequisite:
+  protocol_id: rtdetr_fam_box_guided_counterfactual_v1
+  protocol_path: parameters/RTDETR/rtdetr_fam_box_guided_counterfactual_seed40.yaml
+  protocol_file_sha256: 37eed97e8c468b21c1e581fa07d6d1d7bbbf2b790ac62417e14ce1255de67acd
+  protocol_payload_sha256: b891a2395996f2c6a95992bdd272a211625eb19a805020d7bb9e60cfe7f9ec0c
+  result_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.json
+  schema_version: 1
+  seed: 40
+  project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
+  checkpoint: best
+  training_config_sha256: 16c1d58a4926bb6f6d1c018eb96600b52279116ca04a42d35286d63fb12ea647
+  require_protocol_complete: true
+  require_diagnostic_gate_passed: true
+  require_active_reproduction_passed: true
+  require_guidance_weights_restored: true
+
+seed40_mechanism_prerequisite:
+  protocol_id: rtdetr_fam_box_guided_mechanism_audit_v1
+  protocol_path: parameters/RTDETR/rtdetr_fam_box_guided_mechanism_audit_seed40.yaml
+  protocol_file_sha256: 2b7a5d97fafb7d0cd822bbf58edf90eda5f87020843b63f223f265a7c0cb7835
+  protocol_payload_sha256: 7278a05a279730d483e7108c3a8fe9d09f9400c6fbf1b0bfffbf783d2004e4f5
+  result_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.json
+  schema_version: 1
+  seed: 40
+  project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
+  checkpoint: best
+  training_config_sha256: 16c1d58a4926bb6f6d1c018eb96600b52279116ca04a42d35286d63fb12ea647
+  require_protocol_complete: true
+  require_mechanism_gate_passed: true
+
+implementation_sources:
+  scripts/run_rtdetr_fam_box_guided_stage_a_five_seed_audit.py: 29effd3e3902a06d56fa6fd5cb239582b915ddc98d5cf816eba723a8cf856a27
+  scripts/run_rtdetr_fam_box_guided_mechanism_audit.py: d0d868f75a4de4c064b61c774dc9d8056dd82f8bd8f977b41f1822e2b9dcf14d
+  scripts/run_rtdetr_fam_box_guided_counterfactual.py: 07ba892af68b1f9a38b80e3ce7e91af8283d66a3d242503b7155d06a85f41375
+
+box_matching:
+  method: mutual_nearest_box_center
+  max_distance_normalized: 0.05
+diagnostic_baselines:
+  zero_flow: fixed_zero_dy_dx
+  constant_flow: best_smooth_l1_constant_on_frozen_train_targets
+  constant_comparison_is_promotion_gate: false
+  positive_improvement_interpretation: non_global_fit_on_frozen_train_targets_only
+  does_not_establish: input_conditioned_generalization
+smooth_l1_beta_cells: 0.25
+guidance_limit_cells: 4.0
+near_saturation_threshold_cells: 3.9
+expected_train_frames: 3123
+audit_batch_size: 12
+expected_train_batches: 261
+target_population:
+  pairing: existing_wisard_sorted_zip
+  target_order: vis_x_vis_y_ir_minus_vis_dy_dx
+  expected_frames: 3123
+  expected_frames_with_matches: 2306
+  expected_matched_boxes: 5209
+  expected_max_matches_per_frame: 4
+  expected_per_frame_match_count_distribution:
+    0: 817
+    1: 801
+    2: 543
+    3: 526
+    4: 436
+  expected_source_inventory_sha256: f889b5a54115f0267e0d5c087e6c3673bd2c65f63607e0c01df063620ea76a1e
+  expected_target_population_sha256: d519574962e81ae5b492248113247cca20d7ef15b2d189d1e3b58aebf218f3c0
+mechanism_gate:
+  minimum_guidance_relative_improvement_vs_zero: 0.20
+  minimum_guidance_mean_abs_cells: 0.05
+  maximum_guidance_saturation_fraction: 0.01
+  minimum_total_relative_improvement_vs_zero: 0.0
+  maximum_mean_positive_cancellation_ratio: 0.50
+  maximum_fraction_guidance_at_least_half_cancelled: 0.50
+  if_pass: box_guidance_mechanism_supported
+  if_fail: box_guidance_mechanism_not_supported
+
+stage_a_promotion_gate:
+  metric: best_map_50
+  delta: candidate_minus_matched_control
+  minimum_seed40_gain: 0.01
+  minimum_mean_gain: 0.01
+  minimum_positive_seed_wins: 4
+  require_mechanism_all_passed: true
+  rule: all_conditions_required
+  if_pass: promote_box_guided_candidate_to_stage_b
+  if_fail: do_not_promote_box_guided_candidate
+
+output_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.json
+output_csv: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.csv

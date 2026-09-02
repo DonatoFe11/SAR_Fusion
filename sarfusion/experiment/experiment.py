@@ -198,13 +198,17 @@ class Experimenter:
             total_runs_excl=total_runs_excl,
         )
 
-    def execute_runs(self, only_create=False):
+    def execute_runs(self, only_create=False, max_runs=None):
         starting_run = self.exp_settings.start_from_run
+        attempted_runs = 0
         for i in range(self.exp_settings.start_from_grid, len(self.grids)):
             grid = self.grids[i]
             if i != self.exp_settings.start_from_grid:
                 starting_run = 0
             for j in range(starting_run, len(grid)):
+                if max_runs is not None and attempted_runs >= int(max_runs):
+                    return
+                attempted_runs += 1
                 params = grid[j]
                 run = None
                 try:
@@ -286,8 +290,9 @@ class ParallelExperimenter(Experimenter):
     def __init__(self, yolo=False):
         super().__init__(yolo=yolo)
 
-    def execute_runs(self, only_create=False):
+    def execute_runs(self, only_create=False, max_runs=None):
         starting_run = self.exp_settings.start_from_run
+        attempted_runs = 0
         self.exp_settings.uuid = self.exp_settings.uuid or str(uuid.uuid4())[:8]
 
         for i in range(self.exp_settings.start_from_grid, len(self.grids)):
@@ -295,6 +300,9 @@ class ParallelExperimenter(Experimenter):
             if i != self.exp_settings.start_from_grid:
                 starting_run = 0
             for j in range(starting_run, len(grid)):
+                if max_runs is not None and attempted_runs >= int(max_runs):
+                    return
+                attempted_runs += 1
                 params = grid[j]
                 try:
                     logger.info(f"Running grid {i} out of {len(self.grids) - 1}")
@@ -325,6 +333,7 @@ def experiment(
     preview: bool = False,
     yolo: bool = False,
     start_from_run: int | None = None,
+    max_runs: int | None = None,
 ):
     logger.info("Running experiment")
     settings = load_yaml(param_path)
@@ -338,7 +347,7 @@ def experiment(
     experimenter = ParallelExperimenter(yolo=yolo) if parallel or only_create else Experimenter(yolo=yolo)
     experimenter.calculate_runs(settings)
     if not preview:
-        experimenter.execute_runs(only_create=only_create)
+        experimenter.execute_runs(only_create=only_create, max_runs=max_runs)
 
 
 def run(param_path: str = "parameters.yaml"):

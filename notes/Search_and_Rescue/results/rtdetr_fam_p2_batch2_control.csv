@@ -1,0 +1,4 @@
+seed,configuration,run_id,batch_size,gradient_accumulation_steps,best_epoch,best_map50,latest_map50
+40,fam_baseline,m7xjslb6,4,1,1,0.1521475464,0.0397380553
+40,fam_batch2_control,ci0ickvx,2,2,2,0.1593033075,0.1031431630
+40,fam_p2,k0uugy3n,2,2,5,0.1013972089,0.0648910329

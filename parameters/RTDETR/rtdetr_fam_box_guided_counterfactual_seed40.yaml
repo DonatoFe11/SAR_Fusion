@@ -1,0 +1,69 @@
+# Frozen before the counterfactual inference.  This is a diagnostic audit of
+# one already selected checkpoint, not a new checkpoint-selection protocol.
+protocol_id: rtdetr_fam_box_guided_counterfactual_v1
+status: frozen_before_counterfactual_inference
+purpose: isolate_inference_time_contribution_of_learned_box_guidance
+
+project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
+training_config: parameters/RTDETR/rtdetr_fam_box_guided_sequence_validation_seed40.yaml
+training_config_sha256: 16c1d58a4926bb6f6d1c018eb96600b52279116ca04a42d35286d63fb12ea647
+seed: 40
+checkpoint: best
+expected_train_frames: 3123
+
+split: validation
+mode: fusion
+ground_truth: vis
+confidence_threshold: 0.01
+evaluation_seed: 42
+batch_size: 12
+workers: 8
+expected_batches: 75
+
+source:
+  dataset_root: dataset/WiSARD
+  paired_folders:
+    - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+  pairing: existing_wisard_sorted_zip
+  expected_vis_inventory: 897
+  expected_ir_inventory: 896
+  expected_paired_frames: 896
+  expected_unpaired_vis_terminal: 210924_FHL_Enterprise_VIS_0401.mp4_00896.jpg
+  expected_vis_boxes: 3319
+  expected_vis_empty_frames: 93
+  expected_ir_boxes: 3122
+  expected_ir_empty_frames: 100
+  # Historical paired-source digest: paths, image sizes and label hashes.
+  expected_inventory_sha256: 47e2f348ebdc202cb749b1bbf2741fc868d8681eb24ffa4356cf4f584dfa4ec4
+  # Strong digest additionally covering every retained VIS/IR image byte.
+  expected_content_inventory_sha256: 6c7748af3be2761a3a466b548af64aae925b693fbca795edf695072e28f17141
+  expected_sample_order_sha256: 49415f065575c869087c78f842591096b74a0ea3a16ca2e4ce765e26958badcd
+
+counterfactual:
+  active: checkpoint_parameters_unchanged
+  zero: zero_and_restore_guidance_predictor_final_conv_weight_and_bias
+  order: [active, zero]
+  require_same_checkpoint_instance: true
+  require_same_sample_order_and_ground_truth: true
+
+active_reproduction:
+  metric: map_50
+  wandb_summary_key: best_map_50
+  absolute_tolerance: 0.0002
+
+diagnostic_gate:
+  metric: active_minus_zero_map_50
+  comparator: greater_than_or_equal
+  minimum: 0.0
+  if_pass: guidance_non_degrading_on_stage_a_validation
+  if_fail: guidance_not_supported_as_inference_contributor
+
+output_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.json
+output_csv: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.csv
+
+interpretation:
+  changes_checkpoint_selection: false
+  measures_total_training_effect: false
+  permits_threshold_tuning: false
+  permits_transformation_search: false
+  permits_mt_erie: false

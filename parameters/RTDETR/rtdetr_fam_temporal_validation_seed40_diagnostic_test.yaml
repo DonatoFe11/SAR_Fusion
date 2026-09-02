@@ -1,0 +1,76 @@
+# One-off diagnostic evaluation of the first completed temporal-validation
+# baseline. This is deliberately separate from training: it loads the frozen
+# seed-40 `best` checkpoint (epoch 8) and evaluates only the 708 paired MtErie
+# frames selected by the normal WiSARD `test` phase for `folders: vis_ir`.
+#
+# MtErie has already been consulted by earlier project campaigns, so this run
+# is an internal diagnostic rather than a new blind holdout. Its result must
+# not be used to change the frozen split or checkpoint rule after the fact.
+
+experiment:
+  name: RTDETR_FAM_TemporalVal_Seed40_DiagnosticTest
+  group: RTDETR_temporal_validation_v1_diagnostic
+  continue_with_errors: false
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  # Evaluation-only RNG seed. The source training seed is independently and
+  # explicitly fixed to 40 in `pretrained_wandb` below.
+  seed: [42]
+  repetition: [0]
+  task: [detection]
+  run_test: [true]
+  # The source checkpoint is already loaded by `pretrained_wandb`; do not try
+  # to restore a checkpoint from this new evaluation run.
+  test_checkpoint: [current]
+  # Test loss does not affect predictions or mAP and would run the expensive
+  # Hungarian/auxiliary loss path during inference.
+  compute_test_loss: [false]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, FAM, TemporalValidation, Seed40, DiagnosticTest, MtErie]]
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+      require_full_pretrained_match: [true]
+      pretrained_wandb:
+        project: [RTDETR_FAM_TemporalVal_Protocol]
+        seed: [40]
+        checkpoint: [best]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    # In the test phase this resolves to the three paired MtErie sequences:
+    # 708 synchronized VIS+IR frames evaluated against the VIS annotations.
+    folders: [vis_ir]
+    single_class: [true]
+    modal_dropout: [false]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [12]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

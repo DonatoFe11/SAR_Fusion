@@ -1,0 +1,62 @@
+# Frozen after the Stage-B FAM/RCRA decision and before this descriptive
+# modality inference. The result cannot reopen model or checkpoint selection.
+
+protocol:
+  id: rtdetr_fam_full_data_paired_modality_evaluation_v1
+  frozen_on: "2026-08-25"
+  status: frozen_before_descriptive_inference
+  purpose: selected_current_code_fam_sensor_characterization
+
+  selection_source:
+    protocol: parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_evaluation.yaml
+    result_csv: notes/Search_and_Rescue/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv
+    required_decision: fail_retain_fam
+    required_selected_architecture: fam
+
+  training_config: parameters/RTDETR/rtdetr_fam_full_data_stage_b_five_seed.yaml
+  project: RTDETR_FAM_FullData_StageB_FiveSeed
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+
+  dataset_root: dataset/WiSARD
+  source:
+    paired_folders:
+      - [210417_MtErie_Enterprise_VIS_0003, 210417_MtErie_Enterprise_IR_0004]
+      - [210417_MtErie_Enterprise_VIS_0005, 210417_MtErie_Enterprise_IR_0006]
+      - [210417_MtErie_Enterprise_VIS_0007, 210417_MtErie_Enterprise_IR_0008]
+    pairing: existing_wisard_sorted_zip
+    ground_truth: vis
+    expected_frames: 708
+    expected_vis_boxes: 1770
+    expected_vis_empty_frames: 19
+    expected_inventory_sha256: d6ceca387baaa22b63c31d762c2cb636b52e78acdaa9d8c33e668948a0718900
+
+  modalities:
+    vis_ir: keep_all_four_channels
+    vis: zero_ir_channel
+    ir: zero_three_vis_channels
+
+  # These values were produced by the already-completed Stage-B fusion
+  # evaluation. Reproducing them verifies checkpoint and model reconstruction.
+  expected_fusion_map50:
+    tolerance: 0.0002
+    values:
+      40: 0.42913907766342163
+      41: 0.34980306029319763
+      42: 0.32332074642181396
+      43: 0.3308485150337219
+      44: 0.3512851595878601
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_fam_full_data_paired_modality_evaluation
+
+  interpretation:
+    model_selection_allowed: false
+    checkpoint_selection_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+    architecture_tuning_allowed: false
+    claim_blind_test_allowed: false

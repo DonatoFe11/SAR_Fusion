@@ -11,7 +11,10 @@ from fam_alignment_check import (
     offset_statistics,
     offset_vectors,
 )
-from sarfusion.models.rtdetr_fusion import BoundedFeatureAlignmentModule
+from sarfusion.models.rtdetr_fusion import (
+    BoundedFeatureAlignmentModule,
+    BoxGuidedCommonOffsetFeatureAlignmentModule,
+)
 
 
 class GridSampleFeatureAlignmentModule(nn.Module):
@@ -88,6 +91,39 @@ class TestFAMAlignmentDiagnostics(unittest.TestCase):
         self.assertEqual(record["offset_kind"], "dcnv2_3x3")
         self.assertAlmostEqual(record["raw_offset"].mean().item(), 100.0)
         self.assertLessEqual(record["offset"].abs().max().item(), 4.0)
+        capture.remove()
+
+    def test_capture_reports_box_guidance_and_effective_total_offset(self):
+        module = BoxGuidedCommonOffsetFeatureAlignmentModule(2)
+        with torch.no_grad():
+            module.offset_conv.weight.zero_()
+            module.offset_conv.bias.zero_()
+            module.offset_conv.bias[:18].fill_(1.0)
+            module.guidance_predictor[-1].weight.zero_()
+            # 4*tanh(raw/4) == 2 cells.
+            module.guidance_predictor[-1].bias.fill_(
+                4.0 * torch.atanh(torch.tensor(0.5)).item()
+            )
+        capture = FAMCapture(nn.Sequential(module))
+        rgb = torch.randn(1, 2, 3, 3)
+        ir = torch.randn(1, 2, 3, 3)
+
+        module(rgb, ir, both_present=torch.tensor([True]))
+
+        record = capture.records[0]
+        self.assertEqual(record["offset_kind"], "dcnv2_3x3")
+        torch.testing.assert_close(
+            record["residual_offset"],
+            torch.ones_like(record["residual_offset"]),
+        )
+        torch.testing.assert_close(
+            record["guidance_flow"],
+            torch.full_like(record["guidance_flow"], 2.0),
+        )
+        torch.testing.assert_close(
+            record["offset"],
+            torch.full_like(record["offset"], 3.0),
+        )
         capture.remove()
 
     def test_aggregate_keeps_record_count(self):

@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import time
+import math
 from copy import deepcopy
 from safetensors import safe_open
 from collections import defaultdict
@@ -33,11 +34,23 @@ from sarfusion.utils.reproducibility import (
     prepare_rtdetr_model_for_determinism,
     runtime_fingerprint,
     tensor_digest,
+    training_source_runtime_fields,
+    verify_training_source_manifest,
+)
+from sarfusion.experiment.modality_consistency import (
+    matched_detection_consistency_loss,
+    modality_consistency_epoch_scale,
+    validate_modality_consistency_config,
+)
+from sarfusion.experiment.box_guided_alignment import (
+    box_guided_alignment_epoch_scale,
+    box_guided_alignment_loss,
+    validate_box_guided_alignment_config,
+    validate_box_guided_training_contract,
 )
 from sarfusion.utils.utils import (
     RunningAverage,
     load_yaml,
-    make_showable,
     write_yaml,
 )
 
@@ -52,6 +65,44 @@ from .utils import (
 from copy import deepcopy
 
 logger = get_logger(__name__)
+
+
+HEAD_AND_DINO_PARAMETER_NAMES = (
+    "mixed_query_content",
+    "dn_label_embeddings",
+    "enc_output",
+    "pos_trans",
+    "bbox_embed",
+    "class_embed",
+)
+
+
+def partition_optimizer_parameters(named_parameters):
+    """Partition parameters once, keeping experimental gates isolated."""
+    groups = {
+        "backbone": [],
+        "new_modules": [],
+        "head_and_dino": [],
+        "box_guidance": [],
+        "reliability_gate": [],
+        "alignment_gate": [],
+    }
+    for name, parameter in named_parameters:
+        if any(
+            key in name for key in ("common_projection", "guidance_predictor")
+        ):
+            groups["box_guidance"].append(parameter)
+        elif "alignment_gates" in name:
+            groups["alignment_gate"].append(parameter)
+        elif "reliability_gates" in name:
+            groups["reliability_gate"].append(parameter)
+        elif any(key in name for key in HEAD_AND_DINO_PARAMETER_NAMES):
+            groups["head_and_dino"].append(parameter)
+        elif any(key in name for key in ("ir_backbone", "channel_fusion")):
+            groups["new_modules"].append(parameter)
+        else:
+            groups["backbone"].append(parameter)
+    return groups
 
 
 class Run:
@@ -70,6 +121,7 @@ class Run:
         self.scheduler = None
         self.criterion = None
         self.best_metric = None
+        self.best_epoch = None
         self.scheduler_step_moment = None
         self.watch_metric = None
         self.train_evaluator: Evaluator = None
@@ -83,6 +135,14 @@ class Run:
         self._ended = False
         self.reproducibility = {}
         self.repro_trace = ReproducibilityTrace(None)
+        self.training_source_manifest = None
+        self.reliability_gate_optimizer_group_index = None
+        self.alignment_gate_optimizer_group_index = None
+        self.box_guidance_optimizer_group_index = None
+        self.modality_consistency_params = validate_modality_consistency_config(None)
+        self.box_guided_alignment_params = validate_box_guided_alignment_config(
+            None
+        )
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -96,6 +156,17 @@ class Run:
 
     def init(self, params: dict):
         self.reproducibility = deepcopy(params.get("reproducibility", {}))
+        self.training_source_manifest = verify_training_source_manifest(
+            self.reproducibility.get("training_source_manifest_id"),
+            self.reproducibility.get("training_source_manifest_sha256"),
+        )
+        if self.training_source_manifest is not None and not bool(
+            self.reproducibility.get("trace", False)
+        ):
+            raise ValueError(
+                "A declared training-source manifest requires "
+                "reproducibility.trace=true"
+            )
         configure_reproducibility(
             params["seed"],
             deterministic=self.reproducibility.get("deterministic", False),
@@ -128,6 +199,11 @@ class Run:
             else None
         )
         self.repro_trace = ReproducibilityTrace(trace_path)
+        if self.training_source_manifest is not None and not self.repro_trace.enabled:
+            raise RuntimeError(
+                "Training-source provenance requires a writable local "
+                "reproducibility trace"
+            )
         self.repro_trace.write(
             "runtime",
             seed=int(params["seed"]),
@@ -139,6 +215,7 @@ class Run:
                 self.reproducibility.get("training_seed", params["seed"])
             ),
             repetition=params.get("repetition"),
+            **training_source_runtime_fields(self.training_source_manifest),
             **runtime_fingerprint(),
         )
         (self.train_loader, self.val_loader, self.test_loader), self.denormalize = (
@@ -192,8 +269,55 @@ class Run:
 
     def _prep_for_training(self):
         self.criterion = build_loss(self.params["loss"], model=self.model)
+        self.modality_consistency_params = validate_modality_consistency_config(
+            self.train_params.get("modality_consistency")
+        )
+        self.box_guided_alignment_params = validate_box_guided_alignment_config(
+            self.train_params.get("box_guided_alignment")
+        )
+        consistency_enabled = self.modality_consistency_params["enabled"]
+        dataset_consistency_enabled = bool(
+            self.dataset_params.get("paired_consistency", False)
+        )
+        if consistency_enabled != dataset_consistency_enabled:
+            raise ValueError(
+                "train.modality_consistency.enabled and "
+                "dataset.paired_consistency must be enabled or disabled together"
+            )
+        if consistency_enabled:
+            if not self.dataset_params.get("modal_dropout", False):
+                raise ValueError(
+                    "mixed consistency training must retain supervised modal dropout"
+                )
+            if (
+                self.dataset_params.get(
+                    "modal_dropout_coordinate_contract", "native"
+                )
+                != "native"
+            ):
+                raise ValueError(
+                    "mixed consistency training must retain native-coordinate "
+                    "IR supervision"
+                )
+        self.box_guided_alignment_params = validate_box_guided_training_contract(
+            self.box_guided_alignment_params,
+            self.dataset_params,
+            self.model_params,
+            modality_consistency_enabled=consistency_enabled,
+        )
         self.watch_metric = self.train_params["watch_metric"]
         self.greater_is_better = self.train_params.get("greater_is_better", True)
+        checkpoint_min_delta = float(
+            self.train_params.get("checkpoint_min_delta", 0.0)
+        )
+        if checkpoint_min_delta < 0:
+            raise ValueError("checkpoint_min_delta must be non-negative")
+        patience = self.train_params.get("early_stopping_patience")
+        if patience is not None:
+            if int(patience) < 1:
+                raise ValueError("early_stopping_patience must be positive")
+            if not self.train_params.get("run_validation", True):
+                raise ValueError("Early stopping requires run_validation=true")
         logger.info("Creating optimizer")
         
         backbone_lr = self.train_params.get("backbone_lr", self.train_params["initial_lr"])
@@ -202,25 +326,54 @@ class Run:
         head_and_dino_lr = self.train_params.get(
             "dino_lr", self.train_params["initial_lr"]
         )
-        new_module_params = []
-        head_and_dino_params = []
-        backbone_params = []
-
-        head_and_dino_parameter_names = (
-            "mixed_query_content",
-            "dn_label_embeddings",
-            "enc_output",
-            "pos_trans",
-            "bbox_embed",
-            "class_embed",
+        parameter_groups = partition_optimizer_parameters(
+            self.model.named_parameters()
         )
-        for name, param in self.model.named_parameters():
-            if any(k in name for k in head_and_dino_parameter_names):
-                head_and_dino_params.append(param)
-            elif any(k in name for k in ["ir_backbone", "channel_fusion"]):
-                new_module_params.append(param)
-            else:
-                backbone_params.append(param)
+        backbone_params = parameter_groups["backbone"]
+        new_module_params = parameter_groups["new_modules"]
+        head_and_dino_params = parameter_groups["head_and_dino"]
+        reliability_gate_params = parameter_groups["reliability_gate"]
+        alignment_gate_params = parameter_groups["alignment_gate"]
+        box_guidance_params = parameter_groups["box_guidance"]
+        box_guidance_lr = float(
+            self.train_params.get(
+                "box_guidance_lr", self.train_params["initial_lr"]
+            )
+        )
+        if box_guidance_lr <= 0:
+            raise ValueError("box_guidance_lr must be positive")
+        if "box_guidance_lr" in self.train_params and not box_guidance_params:
+            raise ValueError(
+                "box_guidance_lr was configured but the model has no "
+                "box-guidance parameters"
+            )
+        reliability_gate_lr = float(
+            self.train_params.get(
+                "reliability_gate_lr", self.train_params["initial_lr"]
+            )
+        )
+        if reliability_gate_lr <= 0:
+            raise ValueError("reliability_gate_lr must be positive")
+        if (
+            "reliability_gate_lr" in self.train_params
+            and not reliability_gate_params
+        ):
+            raise ValueError(
+                "reliability_gate_lr was configured but the model has no "
+                "reliability-gate parameters"
+            )
+        alignment_gate_lr = float(
+            self.train_params.get(
+                "alignment_gate_lr", self.train_params["initial_lr"]
+            )
+        )
+        if alignment_gate_lr <= 0:
+            raise ValueError("alignment_gate_lr must be positive")
+        if "alignment_gate_lr" in self.train_params and not alignment_gate_params:
+            raise ValueError(
+                "alignment_gate_lr was configured but the model has no "
+                "residual-alignment-gate parameters"
+            )
 
         frozen = sum(1 for _, p in self.model.named_parameters() if not p.requires_grad)
         logger.info(f"Frozen params: {frozen}")
@@ -243,19 +396,44 @@ class Run:
         logger.info(
             f"New module params: {len(new_module_params)}, "
             f"Detection-head/DINO-specific params: {len(head_and_dino_params)}, "
+            f"Box-guidance params: {len(box_guidance_params)}, "
+            f"Reliability-gate params: {len(reliability_gate_params)}, "
+            f"Residual-alignment-gate params: {len(alignment_gate_params)}, "
             f"Backbone params: {len(backbone_params)}"
         )
         logger.info(
             f"LR for new modules: {self.train_params['initial_lr']}, "
             f"LR for detection-head/DINO-specific modules: {head_and_dino_lr}, "
+            f"LR for box guidance: {box_guidance_lr}, "
+            f"LR for reliability gate: {reliability_gate_lr}, "
+            f"LR for residual alignment gate: {alignment_gate_lr}, "
             f"LR for backbone: {backbone_lr}"
         )
 
-        self.optimizer = AdamW([
+        optimizer_groups = [
             {"params": backbone_params, "lr": backbone_lr},
             {"params": new_module_params, "lr": self.train_params["initial_lr"]},
             {"params": head_and_dino_params, "lr": head_and_dino_lr},
-        ])
+        ]
+        self.reliability_gate_optimizer_group_index = None
+        self.box_guidance_optimizer_group_index = None
+        if box_guidance_params:
+            self.box_guidance_optimizer_group_index = len(optimizer_groups)
+            optimizer_groups.append(
+                {"params": box_guidance_params, "lr": box_guidance_lr}
+            )
+        if reliability_gate_params:
+            self.reliability_gate_optimizer_group_index = len(optimizer_groups)
+            optimizer_groups.append(
+                {"params": reliability_gate_params, "lr": reliability_gate_lr}
+            )
+        self.alignment_gate_optimizer_group_index = None
+        if alignment_gate_params:
+            self.alignment_gate_optimizer_group_index = len(optimizer_groups)
+            optimizer_groups.append(
+                {"params": alignment_gate_params, "lr": alignment_gate_lr}
+            )
+        self.optimizer = AdamW(optimizer_groups)
 
         scheduler_params = self.train_params.get("scheduler", None)
         if scheduler_params:
@@ -358,17 +536,9 @@ class Run:
                             logger.info(f"Running Model Validation")
                             metrics = self.validate_epoch(epoch)
                             self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                    improved = False
-                    save_final_only = self.train_params.get(
-                        "save_final_checkpoint_only", False
-                    )
-                    is_final_epoch = epoch == self.train_params["max_epochs"] - 1
-                    if (
-                        self.train_params.get("save_checkpoints", True)
-                        and (not save_final_only or is_final_epoch)
-                    ):
-                        improved = self.save_training_state(epoch, metrics)
+                    improved = self._update_best_metric(epoch, metrics)
 
+                    should_stop = False
                     if patience is not None and metrics is not None:
                         if improved:
                             epochs_without_improvement = 0
@@ -377,10 +547,25 @@ class Run:
                             logger.info(
                                 f"No improvement for {epochs_without_improvement}/{patience} epochs"
                             )
-                        if epochs_without_improvement >= patience:
-                            logger.info(
-                                f"Early stopping triggered after {epoch + 1} epochs")
-                            break
+                        should_stop = epochs_without_improvement >= patience
+
+                    save_final_only = self.train_params.get(
+                        "save_final_checkpoint_only", False
+                    )
+                    is_final_epoch = epoch == self.train_params["max_epochs"] - 1
+                    if self.train_params.get("save_checkpoints", True):
+                        self.save_training_state(
+                            epoch,
+                            improved=improved,
+                            save_latest=(
+                                not save_final_only or is_final_epoch or should_stop
+                            ),
+                        )
+
+                    if should_stop:
+                        logger.info(
+                            f"Early stopping triggered after {epoch + 1} epochs")
+                        break
         else:
             logger.info("No training params, no training")
 
@@ -389,24 +574,55 @@ class Run:
         self.end()
 
     def _metric_is_better(self, metric):
+        metric = float(metric)
+        if not math.isfinite(metric):
+            raise ValueError(
+                f"Checkpoint metric {self.watch_metric!r} must be finite, got {metric}"
+            )
         if self.best_metric is None:
             return True
+        min_delta = float(self.train_params.get("checkpoint_min_delta", 0.0))
         if self.greater_is_better:
-            return metric > self.best_metric
-        return metric < self.best_metric
+            return metric > self.best_metric + min_delta
+        return metric < self.best_metric - min_delta
 
-    def save_training_state(self, epoch, metrics=None):
-        improved = False
-        if metrics:
-            if self._metric_is_better(metrics[self.watch_metric]):
-                logger.info(
-                    f"Saving best model with metric {metrics[self.watch_metric]} as given that metric is greater than {self.best_metric}"
-                )
-                self.best_metric = metrics[self.watch_metric]
-                self.tracker.log_training_state(epoch=epoch, subfolder="best")
-                improved = True
-        self.tracker.log_training_state(epoch=epoch, subfolder="latest")
-        return improved
+    def _update_best_metric(self, epoch, metrics=None):
+        if metrics is None:
+            return False
+        if self.watch_metric not in metrics:
+            raise KeyError(
+                f"watch_metric={self.watch_metric!r} is absent from validation "
+                f"metrics {sorted(metrics)}"
+            )
+        metric = float(metrics[self.watch_metric])
+        if not self._metric_is_better(metric):
+            return False
+        previous = self.best_metric
+        self.best_metric = metric
+        self.best_epoch = int(epoch)
+        logger.info(
+            "New best checkpoint at epoch %s: %s=%s (previous=%s, min_delta=%s)",
+            epoch + 1,
+            self.watch_metric,
+            metric,
+            previous,
+            float(self.train_params.get("checkpoint_min_delta", 0.0)),
+        )
+        return True
+
+    def save_training_state(self, epoch, improved=False, save_latest=True):
+        if improved:
+            self.tracker.add_summary(
+                {
+                    "best_epoch": self.best_epoch + 1,
+                    f"best_{self.watch_metric}": self.best_metric,
+                }
+            )
+            # Queue metadata before the comparatively slow state write, giving
+            # asynchronous trackers time to persist it even on the final epoch.
+            self.tracker.log_training_state(epoch=epoch, subfolder="best")
+        if save_latest:
+            self.tracker.log_training_state(epoch=epoch, subfolder="latest")
 
     def _get_lr(self):
         if self.scheduler is None:
@@ -449,8 +665,68 @@ class Run:
             raise e
         return outputs
 
+    def _modality_consistency_forward(self, batch_dict, epoch, batch_idx):
+        """Run clean stop-gradient teacher and degraded paired student."""
+        epoch_scale = modality_consistency_epoch_scale(
+            self.modality_consistency_params,
+            epoch,
+        )
+        if epoch_scale == 0.0:
+            return None
+
+        required = (
+            "consistency_teacher_pixel_values",
+            "consistency_student_pixel_values",
+            "consistency_pixel_mask",
+        )
+        missing = [name for name in required if name not in batch_dict]
+        if missing:
+            raise ValueError(
+                "paired consistency batch is missing fields: "
+                + ", ".join(missing)
+            )
+        teacher_input = DataDict(
+            pixel_values=batch_dict.consistency_teacher_pixel_values,
+            pixel_mask=batch_dict.consistency_pixel_mask,
+            labels=None,
+        )
+        student_input = DataDict(
+            pixel_values=batch_dict.consistency_student_pixel_values,
+            pixel_mask=batch_dict.consistency_pixel_mask,
+            labels=None,
+        )
+
+        was_training = self.model.training
+        try:
+            self.model.eval()
+            with torch.no_grad():
+                teacher_output = self._forward(
+                    teacher_input,
+                    epoch,
+                    batch_idx,
+                )
+        finally:
+            self.model.train(was_training)
+        student_output = self._forward(
+            student_input,
+            epoch,
+            batch_idx,
+        )
+        loss = matched_detection_consistency_loss(
+            teacher_output,
+            student_output,
+            self.modality_consistency_params,
+            epoch_scale=epoch_scale,
+        )
+        return student_input, student_output, loss
+
     def _backward(
-        self, batch_idx, input_dict, outputs: WrapperModelOutput, loss_normalizer
+        self,
+        batch_idx,
+        input_dict,
+        outputs: WrapperModelOutput,
+        loss_normalizer,
+        auxiliary_loss=None,
     ):
         loss = outputs.loss
         if isinstance(loss, torch.Tensor):
@@ -462,6 +738,8 @@ class Run:
         else:
             raise ValueError(f"Unexpected loss type: {type(loss)}, value: {loss}")
 
+        if auxiliary_loss is not None:
+            loss_value = loss_value + auxiliary_loss.value
         loss_value = loss_value / loss_normalizer
         self.accelerator.backward(loss_value)
         check_nan(
@@ -608,6 +886,10 @@ class Run:
                     "modality_modes": list(batch_dict.modality_mode),
                     "torch_rng_sha256": tensor_digest(torch.get_rng_state()),
                 }
+                if "consistency_student_mode" in batch_dict:
+                    trace_values["consistency_student_modes"] = list(
+                        batch_dict.consistency_student_mode
+                    )
                 if torch.cuda.is_available():
                     trace_values["cuda_rng_sha256"] = tensor_digest(
                         torch.cuda.get_rng_state()
@@ -626,7 +908,69 @@ class Run:
                 result_dict: WrapperModelOutput = self._forward(
                     batch_dict, epoch, batch_idx
                 )
-                loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
+                box_guidance_components = {}
+                box_guidance_loss = None
+                box_guidance_scale = box_guided_alignment_epoch_scale(
+                    self.box_guided_alignment_params,
+                    epoch,
+                )
+                if self.box_guided_alignment_params["enabled"]:
+                    if "box_alignment_targets" not in batch_dict:
+                        raise ValueError(
+                            "box-guided training batch is missing "
+                            "box_alignment_targets"
+                        )
+                    box_guidance_loss = box_guided_alignment_loss(
+                        self.model,
+                        batch_dict.box_alignment_targets,
+                        self.box_guided_alignment_params,
+                        epoch_scale=box_guidance_scale,
+                    )
+                    box_guidance_components = box_guidance_loss.components
+                supervised_loss = self._backward(
+                    batch_idx,
+                    batch_dict,
+                    result_dict,
+                    loss_normalizer,
+                    auxiliary_loss=box_guidance_loss,
+                )
+                consistency_run = self._modality_consistency_forward(
+                    batch_dict,
+                    epoch,
+                    batch_idx,
+                )
+                consistency_components = {}
+                if consistency_run is not None:
+                    (
+                        consistency_input,
+                        consistency_output,
+                        consistency_loss,
+                    ) = consistency_run
+                    normalized_consistency_loss = (
+                        consistency_loss.value / loss_normalizer
+                    )
+                    if not torch.isfinite(normalized_consistency_loss):
+                        raise ValueError(
+                            "Non-finite modality consistency loss at "
+                            f"epoch={epoch} batch={batch_idx}: "
+                            f"{normalized_consistency_loss}"
+                        )
+                    self.accelerator.backward(normalized_consistency_loss)
+                    check_nan(
+                        self.model,
+                        consistency_input,
+                        consistency_output,
+                        normalized_consistency_loss,
+                        batch_idx,
+                        self.train_params,
+                    )
+                    consistency_components = consistency_loss.components
+                    loss = (
+                        supervised_loss.detach()
+                        + normalized_consistency_loss.detach()
+                    )
+                else:
+                    loss = supervised_loss.detach()
                 clip_norm = self.train_params.get("gradient_clip_norm", None)
                 if clip_norm is not None and clip_norm > 0:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
@@ -642,6 +986,22 @@ class Run:
                         else str(value)
                         for name, value in result_dict.loss.components.items()
                     }
+                loss_components.update(
+                    {
+                        name: float(value.detach().cpu().item())
+                        if isinstance(value, torch.Tensor) and value.numel() == 1
+                        else str(value)
+                        for name, value in consistency_components.items()
+                    }
+                )
+                loss_components.update(
+                    {
+                        name: float(value.detach().cpu().item())
+                        if isinstance(value, torch.Tensor) and value.numel() == 1
+                        else str(value)
+                        for name, value in box_guidance_components.items()
+                    }
+                )
                 trace_values = {
                     "epoch": epoch,
                     "batch": batch_idx,
@@ -674,10 +1034,41 @@ class Run:
                 for k, v in result_dict.loss.components.items():
                     if "cdn" in k:
                         self.tracker.log_metric(k, v.item() if hasattr(v, "item") else v)
+            for key, value in consistency_components.items():
+                self.tracker.log_metric(
+                    key,
+                    value.item() if hasattr(value, "item") else value,
+                )
+            for key, value in box_guidance_components.items():
+                self.tracker.log_metric(
+                    key,
+                    value.item() if hasattr(value, "item") else value,
+                )
 
             self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
             self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
             self.tracker.log_metric("lr_dino", self.optimizer.param_groups[2]["lr"])
+            if self.box_guidance_optimizer_group_index is not None:
+                self.tracker.log_metric(
+                    "lr_box_guidance",
+                    self.optimizer.param_groups[
+                        self.box_guidance_optimizer_group_index
+                    ]["lr"],
+                )
+            if self.reliability_gate_optimizer_group_index is not None:
+                self.tracker.log_metric(
+                    "lr_reliability_gate",
+                    self.optimizer.param_groups[
+                        self.reliability_gate_optimizer_group_index
+                    ]["lr"],
+                )
+            if self.alignment_gate_optimizer_group_index is not None:
+                self.tracker.log_metric(
+                    "lr_alignment_gate",
+                    self.optimizer.param_groups[
+                        self.alignment_gate_optimizer_group_index
+                    ]["lr"],
+                )
 
             self._update_train_metrics(
                 result_dict,
@@ -718,7 +1109,47 @@ class Run:
     def validate_epoch(self, epoch):
         return self.evaluate(self.val_loader, epoch=epoch, phase="val")
 
+    def _evaluation_model_input(self, batch_dict, phase):
+        if phase == "val":
+            compute_loss = (self.train_params or {}).get(
+                "compute_validation_loss", True
+            )
+        elif phase == "test":
+            compute_loss = (self.params or {}).get("compute_test_loss", True)
+        else:
+            compute_loss = True
+
+        if compute_loss:
+            return batch_dict
+
+        # Ground truth remains in batch_dict for mAP. RT-DETR receives no
+        # labels, so in eval mode it skips Hungarian matching and auxiliary
+        # losses while producing identical logits and boxes.
+        model_input = DataDict(**dict(batch_dict))
+        model_input.labels = None
+        return model_input
+
+    def _prepare_evaluation_memory(self):
+        """Release training-only CUDA storage before a large eval batch."""
+        optimizer = getattr(self, "optimizer", None)
+        if optimizer is not None:
+            # The final backward pass leaves gradient tensors resident after
+            # optimizer.step(). They are not needed by validation and can push
+            # an 8 GB GPU into WSL unified-memory paging.
+            optimizer.zero_grad(set_to_none=True)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def _release_evaluation_memory(self):
+        """Drop metric state and cached eval allocations before training."""
+        evaluator = getattr(self, "val_evaluator", None)
+        if evaluator is not None:
+            evaluator.reset()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def evaluate(self, dataloader, epoch=None, phase="val"):
+        self._prepare_evaluation_memory()
         self.model.eval()
         self.val_evaluator.reset()
 
@@ -730,6 +1161,13 @@ class Run:
         tile_gt_buffer = {}  # Salva le GT per ogni immagine originale
         
         tot_steps = 0
+        eval_cuda_cache_interval = int(
+            (self.train_params or {}).get("eval_cuda_cache_interval", 0) or 0
+        )
+        if eval_cuda_cache_interval < 0:
+            raise ValueError(
+                "eval_cuda_cache_interval must be non-negative"
+            )
         desc = f"{phase} Epoch {epoch+1}" if epoch is not None else f"{phase}"
         bar = tqdm(
             enumerate(dataloader),
@@ -740,7 +1178,11 @@ class Run:
         )
         self.tracker.create_image_sequence("predictions", columns=['epoch'])
         
-        with torch.no_grad():
+        batch_dict = None
+        model_input = None
+        result_dict = None
+        has_loss = False
+        with torch.inference_mode():
             for batch_idx, batch_dict in bar:
                 # if batch_idx == 100:
                 #     break
@@ -758,7 +1200,8 @@ class Run:
                     #     logger.info("DEBUG - use_tiling is FALSE - no original_idx/quadrant found")
                     #     logger.info(f"DEBUG - batch_dict keys: {batch_dict.keys() if hasattr(batch_dict, 'keys') else dir(batch_dict)}")
                 
-                result_dict: WrapperModelOutput = self.model(batch_dict)
+                model_input = self._evaluation_model_input(batch_dict, phase)
+                result_dict: WrapperModelOutput = self.model(model_input)
                 
                 if use_tiling:
                     # Modalità con tile aggregation
@@ -774,19 +1217,33 @@ class Run:
                     self._update_val_metrics(batch_dict, result_dict, tot_steps)
                     self.log_predictions(batch_idx, batch_dict, result_dict, epoch)
                 
-                loss = result_dict.loss if result_dict.loss is not None else 0
-                loss_value = loss.value if isinstance(result_dict.loss, dict) else result_dict.loss
-                avg_loss.update(loss_value)
+                loss_value = None
+                result_loss = getattr(result_dict, "loss", None)
+                if result_loss is not None:
+                    loss_value = (
+                        result_loss.value
+                        if isinstance(result_loss, dict)
+                        else result_loss
+                    )
+                    avg_loss.update(loss_value)
+                    has_loss = True
                 if batch_idx % 100 == 0:
-                    metrics_value = self.val_evaluator.compute()
                     bar.set_postfix(
                         {
                             "loss": loss_value,
-                            **make_showable(metrics_value),
                         }
                     )
 
                 self.global_val_step += 1
+                if (
+                    eval_cuda_cache_interval > 0
+                    and (batch_idx + 1) % eval_cuda_cache_interval == 0
+                ):
+                    # Drop only inactive CUDA workspaces. Predictions already
+                    # retained by the evaluator remain live and unchanged.
+                    batch_dict = model_input = result_dict = None
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
             
             # Se usiamo tiling, processa eventuali predizioni rimanenti nel buffer
             if use_tiling:
@@ -797,10 +1254,10 @@ class Run:
                     epoch
                 )
 
-            metrics_dict = {
-                **self.val_evaluator.compute(),
-                "loss": avg_loss.compute(),
-            }
+            metrics_value = self.val_evaluator.compute()
+            metrics_dict = dict(metrics_value)
+            if has_loss:
+                metrics_dict["loss"] = avg_loss.compute()
             
             print(f"DEBUG: Metrics computed for {phase}: {metrics_dict}")
 
@@ -811,13 +1268,17 @@ class Run:
         self.tracker.add_image_sequence("predictions")
         self.accelerator.wait_for_everyone()
 
-        metrics_value = self.val_evaluator.compute()
         for k, v in metrics_value.items():
             if epoch is not None:
                 logger.info(f"{phase} epoch {epoch+1} - {k}: {v}")
             else:
                 logger.info(f"{phase} - {k}: {v}")
-        logger.info(f"{phase} Loss: {avg_loss.compute()}")
+        if has_loss:
+            logger.info(f"{phase} Loss: {avg_loss.compute()}")
+        # Remove the final batch/output references before returning cached
+        # blocks to CUDA. Metrics are already materialized as Python values.
+        batch_dict = model_input = result_dict = None
+        self._release_evaluation_memory()
         return metrics_dict
     
     def _accumulate_tile_predictions(
@@ -992,6 +1453,16 @@ class Run:
 
         try:
             if self.tracker is not None:
+                # Reassert final selection metadata immediately before tracker
+                # shutdown. This also covers a best checkpoint selected before
+                # the final epoch.
+                if self.best_epoch is not None:
+                    self.tracker.add_summary(
+                        {
+                            "best_epoch": self.best_epoch + 1,
+                            f"best_{self.watch_metric}": self.best_metric,
+                        }
+                    )
                 self.tracker.end()
         finally:
             # Break the self-referencing lambda before collecting the run.

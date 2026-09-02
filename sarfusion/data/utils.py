@@ -54,6 +54,12 @@ def is_annotation_valid(annotation):
 
 
 def load_annotations(annotation_path):
+    # Paired WiSARD acquisitions listed in ONLY_VIS_LABELS deliberately carry
+    # an empty IR-annotation path.  Treat that explicit sentinel as an
+    # unlabelled stream; callers that require ground truth use the paired VIS
+    # annotations.  Non-empty missing paths still fail normally in ``open``.
+    if not annotation_path:
+        return []
     with open(annotation_path, "r") as file:
         annotations = file.readlines()
 

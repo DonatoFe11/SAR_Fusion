@@ -315,7 +315,9 @@ class WandBLogger(AbstractLogger):
 
     @main_process_only
     def add_summary(self, metrics: dict):
-        wandb.summary.update(metrics)
+        # Update the concrete Run object.  The module-level proxy can miss a
+        # last-moment update when the run is finalized immediately afterwards.
+        self.experiment.summary.update(metrics)
 
     @main_process_only
     def add_checkpoint(self, tag: str, state_dict: dict, global_step: int = 0):
