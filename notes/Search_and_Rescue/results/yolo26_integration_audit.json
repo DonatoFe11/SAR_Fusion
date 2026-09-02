@@ -1,0 +1,126 @@
+{
+  "dataset_checks": {
+    "batch_shape": [
+      2,
+      4,
+      128,
+      128
+    ],
+    "channel_sentinel": [
+      30,
+      20,
+      10,
+      40
+    ],
+    "sample_shape": [
+      4,
+      128,
+      128
+    ],
+    "train_length": 3123,
+    "train_val_rgb_overlap": 0,
+    "val_length": 896
+  },
+  "dataset_manifest": {
+    "content_sha256": "c92b43c2f69b35e61816f8c2c95f8bea76bec2a1eaa112f36f4303ed92bbdbaf",
+    "counts": {
+      "train": 3123,
+      "val": 896
+    },
+    "dropped_unpaired_frames": {
+      "train": [
+        {
+          "ir_only_frame_indices": [],
+          "rgb_only_frame_indices": [
+            943,
+            944
+          ],
+          "sequence": "210924_FHL_Enterprise_VIS_0405+210924_FHL_Enterprise_IR_0406"
+        },
+        {
+          "ir_only_frame_indices": [],
+          "rgb_only_frame_indices": [],
+          "sequence": "220109_Baker_Enterprise_VIS_1+220109_Baker_Enterprise_IR_1"
+        }
+      ],
+      "val": [
+        {
+          "ir_only_frame_indices": [],
+          "rgb_only_frame_indices": [
+            896
+          ],
+          "sequence": "210924_FHL_Enterprise_VIS_0401+210924_FHL_Enterprise_IR_0402"
+        }
+      ]
+    },
+    "schema": "sarfusion.yolo26.stage_a.dataset.v1"
+  },
+  "environment": {
+    "torch": "2.4.0",
+    "torchvision": "0.19.0",
+    "ultralytics": "8.4.138"
+  },
+  "model_checks": {
+    "candidate_initialization": {
+      "backbone_layers": 11,
+      "end2end": true,
+      "fam_sha256": "bf3500e09b1fbc74946d1c4d09bd4825dd3da916ce51b7f76203a71dd4e2ce53",
+      "fusion_indices": [
+        4,
+        6,
+        10
+      ],
+      "ir_sha256": "2d016295abaa8e60accf3f54eae6eb13184746c0e5db73c94fe2225c437d0390",
+      "shared_sha256": "563466281f8dda2004165e7671f606d96b45f6bdf48a7ceef9516780c8fd83aa",
+      "stride": [
+        8.0,
+        16.0,
+        32.0
+      ],
+      "use_fam": true
+    },
+    "control_initialization": {
+      "backbone_layers": 11,
+      "end2end": true,
+      "fam_sha256": "bf3500e09b1fbc74946d1c4d09bd4825dd3da916ce51b7f76203a71dd4e2ce53",
+      "fusion_indices": [
+        4,
+        6,
+        10
+      ],
+      "ir_sha256": "2d016295abaa8e60accf3f54eae6eb13184746c0e5db73c94fe2225c437d0390",
+      "shared_sha256": "563466281f8dda2004165e7671f606d96b45f6bdf48a7ceef9516780c8fd83aa",
+      "stride": [
+        8.0,
+        16.0,
+        32.0
+      ],
+      "use_fam": false
+    },
+    "fam_gradient_norms": [
+      65.6484146118164,
+      74.18511962890625,
+      205.05514526367188
+    ],
+    "fam_max_updates": [
+      0.0010000000474974513,
+      0.0010000000474974513,
+      0.0010000000474974513
+    ],
+    "loss": [
+      8.508790969848633,
+      16.625471115112305,
+      0.15806931257247925
+    ],
+    "loss_items": {
+      "box_loss": 3.423025131225586,
+      "cls_loss": 9.691139221191406,
+      "l1_loss": 0.04623117297887802
+    },
+    "matched_initialization": true,
+    "rgb_only_max_abs_error": 0.0,
+    "strict_checkpoint_roundtrip": true
+  },
+  "schema": "sarfusion.yolo26.integration_audit.v1",
+  "status": "passed"
+}
