@@ -1,0 +1,103 @@
+# Frozen five-seed expansion of the mixed-consistency Stage-A candidate.
+# Run with --start-from-run 1 only if the seed-40 screen passes its frozen
+# fusion, paired-masked-IR and native-IR promotion gates.
+
+experiment:
+  name: RTDETR_FAM_MixedConsistency_SequenceVal
+  group: RTDETR_FAM_mixed_consistency_sequence_validation_v1
+  continue_with_errors: false
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: [40, 41, 42, 43, 44]
+  repetition: [0]
+  task: [detection]
+  run_test: [false]
+  test_checkpoint: [best]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, FAM, MixedConsistency, SequenceValidation, Fixed10, StageA]]
+
+  train:
+    max_epochs: [10]
+    run_validation: [true]
+    compute_validation_loss: [false]
+    val_frequency: [1]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    checkpoint_min_delta: [0.001]
+    compile: [false]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map_50]
+    greater_is_better: [true]
+    modality_consistency:
+      enabled: [true]
+      teacher: [online_eval_stop_gradient]
+      start_epoch: [1]
+      warmup_epochs: [2]
+      confidence_threshold: [0.2]
+      max_teacher_queries: [20]
+      matching_class_cost: [2.0]
+      matching_bbox_cost: [5.0]
+      matching_giou_cost: [2.0]
+      classification_weight: [2.0]
+      bbox_weight: [5.0]
+      giou_weight: [2.0]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    train_folders:
+      - - [210924_FHL_Enterprise_VIS_0405, 210924_FHL_Enterprise_IR_0406]
+        - [220109_Baker_Enterprise_VIS_1, 220109_Baker_Enterprise_IR_1]
+    val_folders:
+      - - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    modal_dropout_coordinate_contract: [native]
+    paired_consistency: [true]
+    paired_consistency_student_probs: [[0.5, 0.5]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

@@ -54,7 +54,7 @@ class FeatureAlignmentModule(nn.Module):
             for param in self.parameters():
                 param.requires_grad = False
         
-    def forward(self, rgb_feat, ir_feat):
+    def forward(self, rgb_feat, ir_feat, both_present=None):
         """
         Args:
             rgb_feat: [B, C, H, W] RGB features
@@ -63,6 +63,8 @@ class FeatureAlignmentModule(nn.Module):
         Returns:
             ir_aligned: [B, C, H, W] IR features aligned to RGB
         """
+        del both_present
+
         # Concatenate RGB and IR to predict offset
         concat = torch.cat([rgb_feat, ir_feat], dim=1)  # [B, 2C, H, W]
         
@@ -200,7 +202,8 @@ class GridSampleFeatureAlignmentModule(nn.Module):
             batch_size, -1, -1, -1
         )
 
-    def forward(self, rgb_feat, ir_feat):
+    def forward(self, rgb_feat, ir_feat, both_present=None):
+        del both_present
         if rgb_feat.shape != ir_feat.shape:
             raise ValueError(
                 "Grid-sample FAM requires RGB and IR features with the same "
@@ -241,9 +244,152 @@ class GridSampleFeatureAlignmentModule(nn.Module):
         return ir_feat + (warped - identity_warp)
 
 
+class BoxGuidedCommonOffsetFeatureAlignmentModule(FeatureAlignmentModule):
+    """P3 FAM with a weakly supervised common-offset guidance branch.
+
+    The historical FAM remains the task-adaptive residual: it still predicts
+    18 unconstrained DCNv2 offsets and 9 masks from the raw RGB--IR features.
+    A compact shared projection additionally predicts one coarse ``(dy, dx)``
+    displacement per location.  That displacement is added to every one of
+    the nine DCNv2 sampling points::
+
+        offset_k = residual_offset_k + common_offset
+
+    The last guidance convolution is zero-initialized, so the new branch is
+    exactly neutral before optimization.  During Stage A it is supervised
+    sparsely at mutually matched VIS/IR box centres; the original detection
+    loss can still shape the residual offsets without being forced to perform
+    literal image registration.
+
+    Guidance is bounded to four feature cells, but the total DCNv2 offset is
+    deliberately not bounded: the previous bounded-total-offset ablation was
+    already negative.  The branch is suppressed sample-wise when either input
+    modality is absent under Modal Dropout.
+    """
+
+    COMMON_CHANNELS = 32
+    GUIDANCE_LIMIT_CELLS = 4.0
+
+    def __init__(self, in_channels, freeze=False, spatial_jitter_std=0.0):
+        if spatial_jitter_std != 0.0:
+            raise ValueError(
+                "Box-guided common-offset FAM must be evaluated without SSJ"
+            )
+        super().__init__(
+            in_channels,
+            freeze=False,
+            spatial_jitter_std=spatial_jitter_std,
+        )
+        common_channels = self.COMMON_CHANNELS
+        # Constructing an extra branch must not advance the global RNG relative
+        # to the historical FAM.  Otherwise a nominally identical model seed
+        # changes the initialization of the shared P4/P5 FAMs and the RT-DETR
+        # training RNG, confounding the architectural comparison.  The new
+        # layers receive deterministic ordinary PyTorch initialization inside
+        # the fork, while the caller's RNG state is restored afterwards.
+        with torch.random.fork_rng(devices=[]):
+            self.common_projection = nn.Sequential(
+                nn.Conv2d(
+                    in_channels,
+                    common_channels,
+                    kernel_size=1,
+                    bias=False,
+                ),
+                nn.GroupNorm(8, common_channels),
+                nn.SiLU(),
+            )
+            # The same projection is applied to both modalities. Difference
+            # and product terms expose agreement while retaining both inputs.
+            self.guidance_predictor = nn.Sequential(
+                nn.Conv2d(
+                    common_channels * 4,
+                    common_channels,
+                    kernel_size=3,
+                    padding=1,
+                ),
+                nn.SiLU(),
+                nn.Conv2d(common_channels, 2, kernel_size=1),
+            )
+            self.reset_guidance_parameters()
+
+        # RTDetrPreTrainedModel.post_init() reinitializes every nn.Conv2d it
+        # discovers.  Mark only the newly constructed subtree as initialized;
+        # without this, post_init would consume extra random draws and defeat
+        # the fork above.  Shared historical FAM layers remain untouched by
+        # this marker and follow exactly their original initialization path.
+        for new_subtree in (self.common_projection, self.guidance_predictor):
+            for module in new_subtree.modules():
+                module._is_hf_initialized = True
+        self.last_guidance_flow = None
+
+        if freeze:
+            for parameter in self.parameters():
+                parameter.requires_grad = False
+
+    def reset_guidance_parameters(self):
+        """Restore exact-neutral guidance after Hugging Face ``post_init``."""
+        final_conv = self.guidance_predictor[-1]
+        nn.init.zeros_(final_conv.weight)
+        nn.init.zeros_(final_conv.bias)
+
+    @staticmethod
+    def _presence_scale(both_present, feature):
+        if both_present is None:
+            return feature.new_ones((feature.shape[0], 1, 1, 1))
+        presence = both_present.to(device=feature.device, dtype=feature.dtype)
+        if presence.ndim == 1:
+            presence = presence[:, None, None, None]
+        if presence.shape != (feature.shape[0], 1, 1, 1):
+            raise ValueError(
+                "both_present must have shape [B] or [B, 1, 1, 1], got "
+                f"{tuple(presence.shape)}"
+            )
+        return presence
+
+    def predict_guidance(self, rgb_feat, ir_feat, both_present=None):
+        rgb_common = self.common_projection(rgb_feat)
+        ir_common = self.common_projection(ir_feat)
+        descriptors = torch.cat(
+            (
+                rgb_common,
+                ir_common,
+                rgb_common - ir_common,
+                rgb_common * ir_common,
+            ),
+            dim=1,
+        )
+        raw_flow = self.guidance_predictor(descriptors)
+        limit = self.GUIDANCE_LIMIT_CELLS
+        flow = limit * torch.tanh(raw_flow / limit)
+        return flow * self._presence_scale(both_present, flow)
+
+    def forward(self, rgb_feat, ir_feat, both_present=None):
+        if rgb_feat.shape != ir_feat.shape:
+            raise ValueError(
+                "Box-guided FAM requires equal RGB and IR feature shapes, got "
+                f"{tuple(rgb_feat.shape)} and {tuple(ir_feat.shape)}"
+            )
+
+        out = self.offset_conv(torch.cat([rgb_feat, ir_feat], dim=1))
+        residual_offset = self.transform_offset(out[:, :18])
+        mask = torch.sigmoid(out[:, 18:])
+
+        # torchvision DeformConv2d interleaves (dy, dx) for every kernel
+        # point. Repeating [dy, dx] nine times preserves that convention.
+        guidance_flow = self.predict_guidance(
+            rgb_feat,
+            ir_feat,
+            both_present=both_present,
+        )
+        self.last_guidance_flow = guidance_flow
+        offset = residual_offset + guidance_flow.repeat(1, 9, 1, 1)
+        return self.deform_conv(ir_feat, offset, mask)
+
+
 FAM_VARIANTS = {
     "current_dcnv2": FeatureAlignmentModule,
     "bounded_dcnv2_4": BoundedFeatureAlignmentModule,
+    "box_guided_common_offset_p3": BoxGuidedCommonOffsetFeatureAlignmentModule,
     "identity_dcnv2": IdentityInitializedFeatureAlignmentModule,
     "grid_sample": GridSampleFeatureAlignmentModule,
 }
@@ -866,17 +1012,27 @@ class RTDetrFusionBackbone(nn.Module):
                 raise ValueError(
                     "RTDetrFusionBackbone requires config.encoder_in_channels when use_fam=True"
                 )
-            self.fam_modules = nn.ModuleList(
-                [
+            fam_modules = []
+            for level_index, channels in enumerate(feature_channels):
+                # Box-derived displacement is reliable at the high-resolution
+                # P3 map.  P4/P5 targets would be sub-cell and are deliberately
+                # left as the historical FAM rather than adding unsupervised
+                # copies of the new branch.
+                level_variant = self.fam_variant
+                if (
+                    self.fam_variant == "box_guided_common_offset_p3"
+                    and level_index != 0
+                ):
+                    level_variant = "current_dcnv2"
+                fam_modules.append(
                     build_feature_alignment_module(
-                        self.fam_variant,
-                        ch,
+                        level_variant,
+                        channels,
                         freeze=self.freeze_fam,
                         spatial_jitter_std=self.spatial_jitter_std,
                     )
-                    for ch in feature_channels
-                ]
-            )
+                )
+            self.fam_modules = nn.ModuleList(fam_modules)
         else:
             self.fam_modules = None
 
@@ -972,7 +1128,11 @@ class RTDetrFusionBackbone(nn.Module):
                 fused_feats = []
                 for idx, ((r_feat, r_mask), (i_feat, _)) in enumerate(zip(rgb_feats, ir_feats)):
                     # Apply FAM to align IR to RGB
-                    i_aligned = self.fam_modules[idx](r_feat, i_feat)
+                    i_aligned = self.fam_modules[idx](
+                        r_feat,
+                        i_feat,
+                        both_present=(rgb_present & ir_present),
+                    )
 
                     if self.alignment_gates is not None:
                         i_aligned = self.alignment_gates[idx](
@@ -1063,6 +1223,11 @@ class RTDetrFusionModel(RTDetrModel):
                 reset_identity = getattr(fam_module, "reset_identity_parameters", None)
                 if reset_identity is not None:
                     reset_identity()
+                reset_guidance = getattr(
+                    fam_module, "reset_guidance_parameters", None
+                )
+                if reset_guidance is not None:
+                    reset_guidance()
         if self.backbone.reliability_gates is not None:
             for reliability_gate in self.backbone.reliability_gates:
                 reliability_gate.reset_neutral_parameters()

@@ -1,0 +1,99 @@
+# Frozen before any inference with synthetic IR perturbations. Identity metrics
+# come from the already completed acquisition-confirmation protocol; no
+# transformation is chosen or discarded using model performance.
+
+protocol:
+  id: rtdetr_synthetic_geometric_stress_v1
+  frozen_on: "2026-08-30"
+  status: frozen_before_perturbed_inference
+  purpose: controlled_ir_misalignment_sensitivity_analysis
+
+  confirmation_source:
+    protocol: parameters/RTDETR/rtdetr_unused_acquisition_confirmation.yaml
+    expected_protocol_sha256: b36e950aa451f7861faad2e1615dd94471c823ca25e0b2eebacd80cb1c3dce96
+    identity_results_csv: notes/Search_and_Rescue/results/rtdetr_unused_acquisition_confirmation.csv
+    expected_identity_results_sha256: a314bbf1d5eb7ffce296945a4f892231c2cbb713ba1436295c9941a73b4233c8
+    required_dataset_description: previously_unused_internal_acquisition_confirmation
+
+  acquisitions: [carnation_0025_0026, fhl_0407_0408]
+  configurations:
+    historical_additive:
+      family: historical_locked
+      curve_label: Historical Additive
+    historical_fam:
+      family: historical_locked
+      curve_label: Historical FAM
+    stage_b_fam:
+      family: current_stage_b
+      curve_label: Stage-B FAM
+    stage_b_rcra:
+      family: current_stage_b
+      curve_label: Stage-B RCRA
+  seeds: [40, 41, 42, 43, 44]
+
+  # Perturb only channel 3 after the common 640x640 preprocessing. RGB, pixel
+  # mask and VIS annotations remain unchanged. Zero is the neutral value in
+  # the normalized model tensor. Translation and scale are separate curves;
+  # there is no Cartesian composition and no search for a favourable setting.
+  transformations:
+    input_space: post_preprocessing_model_tensor_640x640
+    target: ir_channel_3_only
+    rgb: unchanged
+    pixel_mask: unchanged
+    ground_truth: unchanged_vis
+    interpolation: bilinear
+    fill_value: 0.0
+    scale_center: image_center
+    composition: one_perturbation_at_a_time_no_cartesian_product
+    identity:
+      id: identity
+      dx_px: 0
+      dy_px: 0
+      scale: 1.0
+      source: frozen_confirmation_csv
+    translation_magnitudes_px: [8, 16, 32]
+    translation_directions:
+      - {id: right, dx_sign: 1, dy_sign: 0}
+      - {id: left, dx_sign: -1, dy_sign: 0}
+      - {id: down, dx_sign: 0, dy_sign: 1}
+      - {id: up, dx_sign: 0, dy_sign: -1}
+    scales: [0.9, 1.1]
+    expected_condition_count_including_identity: 15
+
+  primary_metric: map_50
+  confidence_threshold: 0.01
+  checkpoint: latest
+  evaluation_seed: 42
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_synthetic_geometric_stress
+
+  reporting:
+    experimental_unit: checkpoint_seed
+    direction_pooling: equal_weight_four_cardinal_directions_per_seed
+    acquisition_pooling: equal_weight_two_acquisitions_per_seed_descriptive_only
+    report_identity_normalized_relative_drop: true
+    report_absolute_delta: true
+    report_raw_seed_direction_values: true
+    report_mean_sample_sd_median_ci95: true
+    frame_level_independence_claim_allowed: false
+
+  paired_robustness_comparisons:
+    historical_fam_vs_additive:
+      candidate_configuration: historical_fam
+      reference_configuration: historical_additive
+    stage_b_rcra_vs_fam:
+      candidate_configuration: stage_b_rcra
+      reference_configuration: stage_b_fam
+
+  interpretation:
+    model_selection_allowed: false
+    checkpoint_selection_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+    transformation_selection_allowed: false
+    architecture_tuning_allowed: false
+    cross_family_absolute_accuracy_ranking_allowed: false
+    claim_physical_calibration_allowed: false
+    claim_external_holdout_allowed: false
+    negative_results_must_be_reported: true

@@ -107,6 +107,8 @@ def get_train_val_test_params(name, dataset_params):
             **shared_dataset_params,
             "folders": val_folders,
             "modal_dropout": False,
+            "paired_consistency": False,
+            "box_alignment_targets": False,
             "temporal_split_phase": "val" if temporal_inventory else None,
             "temporal_split_inventory": temporal_inventory,
         }
@@ -114,6 +116,8 @@ def get_train_val_test_params(name, dataset_params):
             **shared_dataset_params,
             "folders": test_folders,
             "modal_dropout": False,
+            "paired_consistency": False,
+            "box_alignment_targets": False,
             "test_all_tiles": True if dataset_params.get("use_tiling", False) else False,
             "temporal_split_phase": None,
             "temporal_split_inventory": None,

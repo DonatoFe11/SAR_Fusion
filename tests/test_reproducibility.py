@@ -1,17 +1,50 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 import torch
 import torch.nn.functional as F
 
 from sarfusion.utils.reproducibility import (
+    BOX_GUIDED_TRAINING_SOURCE_FILES,
+    BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID,
     ReproducibilityTrace,
+    build_training_source_manifest,
     deterministic_grid_sample_bilinear,
     state_dict_digest,
+    training_source_runtime_fields,
+    verify_training_source_manifest,
+    verify_training_source_runtime_trace,
 )
 from sarfusion.models.rtdetr_fusion import copy_matching_pretrained_label_heads
+
+
+EXPECTED_BOX_GUIDED_TRAINING_SOURCE_FILES_V1 = (
+    "main.py",
+    "sarfusion/data/__init__.py",
+    "sarfusion/data/utils.py",
+    "sarfusion/data/wisard.py",
+    "sarfusion/experiment/box_guided_alignment.py",
+    "sarfusion/experiment/experiment.py",
+    "sarfusion/experiment/modality_consistency.py",
+    "sarfusion/experiment/run.py",
+    "sarfusion/experiment/utils.py",
+    "sarfusion/models/__init__.py",
+    "sarfusion/models/checkpoints.py",
+    "sarfusion/models/detr.py",
+    "sarfusion/models/loss.py",
+    "sarfusion/models/rtdetr_fusion.py",
+    "sarfusion/tracker/abstract_tracker.py",
+    "sarfusion/tracker/wandb_tracker.py",
+    "sarfusion/utils/general.py",
+    "sarfusion/utils/grid.py",
+    "sarfusion/utils/metrics.py",
+    "sarfusion/utils/reproducibility.py",
+    "sarfusion/utils/structures.py",
+    "sarfusion/utils/utils.py",
+)
 
 
 class TestDeterministicRTDetrSampling(unittest.TestCase):
@@ -61,6 +94,91 @@ class TestDeterministicRTDetrSampling(unittest.TestCase):
                 record = json.loads(file.readline())
             self.assertEqual(record["event"], "batch")
             self.assertEqual(record["sample_indices"], [3, 1])
+
+    def test_box_guided_source_manifest_is_stable_and_fail_closed(self):
+        manifest = build_training_source_manifest()
+        self.assertEqual(
+            manifest["manifest_id"], BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID
+        )
+        self.assertEqual(
+            BOX_GUIDED_TRAINING_SOURCE_FILES,
+            EXPECTED_BOX_GUIDED_TRAINING_SOURCE_FILES_V1,
+        )
+        self.assertEqual(
+            tuple(manifest["files"]),
+            EXPECTED_BOX_GUIDED_TRAINING_SOURCE_FILES_V1,
+        )
+        self.assertEqual(len(manifest["sha256"]), 64)
+        verified = verify_training_source_manifest(
+            manifest["manifest_id"], manifest["sha256"]
+        )
+        self.assertEqual(verified, manifest)
+
+        with self.assertRaisesRegex(RuntimeError, "manifest changed"):
+            verify_training_source_manifest(
+                manifest["manifest_id"], "0" * 64
+            )
+        with self.assertRaisesRegex(ValueError, "declared together"):
+            verify_training_source_manifest(manifest["manifest_id"], None)
+        with self.assertRaisesRegex(RuntimeError, "declaration is required"):
+            verify_training_source_manifest(None, None, required=True)
+
+    def test_source_manifest_changes_with_bytes_and_rejects_missing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative_path in EXPECTED_BOX_GUIDED_TRAINING_SOURCE_FILES_V1:
+                source_path = root / relative_path
+                source_path.parent.mkdir(parents=True, exist_ok=True)
+                source_path.write_text(relative_path, encoding="utf-8")
+
+            before = build_training_source_manifest(repo_root=root)
+            changed_path = root / "sarfusion/models/rtdetr_fusion.py"
+            changed_path.write_text("changed source bytes", encoding="utf-8")
+            after = build_training_source_manifest(repo_root=root)
+            self.assertNotEqual(before["sha256"], after["sha256"])
+            self.assertNotEqual(
+                before["files"]["sarfusion/models/rtdetr_fusion.py"],
+                after["files"]["sarfusion/models/rtdetr_fusion.py"],
+            )
+
+            changed_path.unlink()
+            with self.assertRaisesRegex(FileNotFoundError, "manifest file is missing"):
+                build_training_source_manifest(repo_root=root)
+
+    def test_runtime_trace_binds_first_event_to_source_manifest(self):
+        manifest = build_training_source_manifest()
+        with tempfile.TemporaryDirectory() as directory:
+            path = f"{directory}/reproducibility_trace.jsonl"
+            trace = ReproducibilityTrace(path)
+            trace.write(
+                "runtime",
+                seed=40,
+                **training_source_runtime_fields(manifest),
+            )
+            trace.write("batch", batch=0)
+            provenance = verify_training_source_runtime_trace(path, manifest)
+            self.assertEqual(
+                provenance["training_source_manifest_sha256"],
+                manifest["sha256"],
+            )
+            self.assertEqual(len(provenance["reproducibility_trace_sha256"]), 64)
+            self.assertEqual(len(provenance["runtime_event_sha256"]), 64)
+
+            tampered_event = {
+                "event": "runtime",
+                "seed": 40,
+                **training_source_runtime_fields(manifest),
+            }
+            tampered_event["training_source_manifest_sha256"] = "0" * 64
+            with open(path, "w", encoding="utf-8") as output_file:
+                output_file.write(json.dumps(tampered_event) + "\n")
+            with self.assertRaisesRegex(RuntimeError, "provenance differs"):
+                verify_training_source_runtime_trace(path, manifest)
+
+            with open(path, "w", encoding="utf-8") as output_file:
+                output_file.write(json.dumps({"event": "batch"}) + "\n")
+            with self.assertRaisesRegex(RuntimeError, "must be runtime"):
+                verify_training_source_runtime_trace(path, manifest)
 
     def test_matching_pretrained_person_rows_are_reused(self):
         def detector(labels):

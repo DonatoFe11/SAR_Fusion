@@ -561,7 +561,7 @@ def main():
     paired_loader, native_loader = build_loaders(
         protocol,
         inventory,
-        runs["paired_vis_dropout"]["dataset"],
+        runs[CONFIGURATIONS[1]]["dataset"],
         args.batch_size,
         args.workers,
     )

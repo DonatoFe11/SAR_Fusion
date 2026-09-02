@@ -1,0 +1,175 @@
+# Frozen before any model inference on Carnation 0025/0026 or FHL 0407/0408.
+# Inventory statistics and file hashes are model-independent. The separate
+# attestation records whether these sequences were consulted in unarchived
+# experiments; inference is blocked while that status is pending.
+
+attestation:
+  status: no_prior_model_or_manual_experimental_use
+  # Allowed final values:
+  # - no_prior_model_or_manual_experimental_use
+  # - prior_or_uncertain_use
+  statement: >-
+    L'autore dichiara di non avere mai visionato manualmente le acquisizioni
+    Carnation 0025/0026 e FHL 0407/0408 prima del congelamento del protocollo;
+    l'audit del repository e degli archivi locali non ha rilevato un loro uso
+    nelle configurazioni o nelle run conservate.
+  recorded_on: "2026-08-30"
+
+protocol:
+  id: rtdetr_unused_acquisition_confirmation_v1
+  frozen_on: "2026-08-30"
+  status: frozen_before_inference
+  purpose: post_development_internal_acquisition_confirmation
+
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  evaluation_seed: 42
+  confidence_threshold: 0.01
+  dataset_root: dataset/WiSARD
+  ground_truth: vis
+  pairing: shared_numeric_frame_suffix
+  preprocessor_training_config: parameters/RTDETR/rtdetr_fam_full_data_stage_b_five_seed.yaml
+
+  selection_source:
+    protocol: parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_evaluation.yaml
+    result_csv: notes/Search_and_Rescue/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv
+    required_decision: fail_retain_fam
+
+  acquisitions:
+    carnation_0025_0026:
+      vis_folder: 210529_Carnation_Enterprise_VIS_0025
+      ir_folder: 210529_Carnation_Enterprise_IR_0026
+      expected_vis_images: 1315
+      expected_vis_labels: 1315
+      expected_ir_images: 1315
+      expected_ir_labels: 0
+      expected_common_frames: 1313
+      expected_vis_boxes: 5238
+      expected_vis_empty_frames: 100
+      expected_excluded_vis_frame_ids: [654, 983]
+      expected_excluded_ir_frame_ids: [1454, 1455]
+      expected_common_frame_ids_sha256: 911fed6b0e7409d2bc29037ca83a70f602cbc04b8d6528df6e7d788df09ea13e
+      expected_inventory_sha256: 29eb9ff1a474ceaba59e1de18bf67572da28138a6a86ff25a848ecc1fd7b8641
+    fhl_0407_0408:
+      vis_folder: 210924_FHL_Enterprise_VIS_0407
+      ir_folder: 210924_FHL_Enterprise_IR_0408
+      expected_vis_images: 1035
+      expected_vis_labels: 1035
+      expected_ir_images: 1035
+      expected_ir_labels: 0
+      expected_common_frames: 1035
+      expected_vis_boxes: 2022
+      expected_vis_empty_frames: 239
+      expected_excluded_vis_frame_ids: []
+      expected_excluded_ir_frame_ids: []
+      expected_common_frame_ids_sha256: 762502b5cb1e35d87ba0c37ec2160bd47699d6082dae27df3f8a3ea659aa5782
+      expected_inventory_sha256: dd4a2c813a92f8ee140cf7f35223bf392e28c5aceddf85a1f60372bea5859a9d
+
+  # Each acquisition is evaluated independently. Every condition uses the
+  # same paired frames and VIS annotations; VIS-only is obtained by zeroing
+  # the adapted IR channel in the same four-channel tensor.
+  conditions:
+    vis_ir: keep_all_four_channels
+    vis: zero_ir_channel
+
+  configurations:
+    historical_additive:
+      display_name: Historical Additive RT-DETR
+      family: historical_locked
+      project: RTDETR_Protocol
+      training_config: parameters/RTDETR/rtdetr_protocol.yaml
+      expected_use_fam: false
+      expected_use_residual_alignment_gating: false
+      conditions: [vis_ir]
+      expected_checkpoint_sha256:
+        40: 6ba15c08d2687aaf78457fcb14631ecbd793892b33dfec1f451c34a15090b105
+        41: f77123085e68ed55bec4ee2c36ef23727e5823238a80f0b4190c351d9d22f4cf
+        42: 4a944ee64cc1279f2f30124fb882a4bdad62e0f5ac4d73d318cadc9df1002dc7
+        43: 65f83dbeab40096434b7d5a80a5af24bd681f6054ade4aa28ea1bd30ddc7f746
+        44: fd46e18899cadec44272723306848d742aba4715474cd3789c6951c8e6afef20
+    historical_fam:
+      display_name: Historical RT-DETR + FAM
+      family: historical_locked
+      project: RTDETR_FAM_Protocol
+      training_config: parameters/RTDETR/rtdetr_protocol.yaml
+      expected_use_fam: true
+      expected_use_residual_alignment_gating: false
+      conditions: [vis_ir]
+      expected_checkpoint_sha256:
+        40: c77d749c30ed5872c0c81a96c4d64f9ebf7912208b16c964c2f0405732dda13a
+        41: 5fcafd3a5b197456a39bde55b1e1d5a5c1639b5cf4f67bf1ad57dd763e241640
+        42: b96ef8496088911d50d03a6061fe625cec8e17b17a4f1245a49b5b43e3703497
+        43: f6407afe0d781eb5c227e46611243d67385f1fc06010d4704f51ac5e8d0ac536
+        44: 2fec1971b28c88cfccb2356de81270c5a75a15082daee435a77eaf0694b98e3e
+    stage_b_fam:
+      display_name: Current-code RT-DETR + FAM
+      family: current_stage_b
+      project: RTDETR_FAM_FullData_StageB_FiveSeed
+      training_config: parameters/RTDETR/rtdetr_fam_full_data_stage_b_five_seed.yaml
+      expected_use_fam: true
+      expected_use_residual_alignment_gating: false
+      conditions: [vis_ir, vis]
+      expected_checkpoint_sha256:
+        40: 66217fac6c64144c444230bcdec4368b7b87e3fde2ebe983330b986452901c8d
+        41: 4689cc606e8f91627c0867355739f90d2bc4a4932cecc78533f7b4dee6a09a81
+        42: c305e9d97b98e586351246127e43b49e9fc5a73f59508d6d314f4f0f1a6ad9a3
+        43: 6b643ad11b2c693d07bd46b19f2a2acfdabb619a693dc67bc09027a66e436a65
+        44: 0e89d6568c75de2c55149b178718ff8789cd8f2a1e43456974fa257750ce9b85
+    stage_b_rcra:
+      display_name: Current-code RT-DETR + FAM + RCRA
+      family: current_stage_b
+      project: RTDETR_FAM_RCRA_FullData_StageB_FiveSeed
+      training_config: parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_five_seed.yaml
+      expected_use_fam: true
+      expected_use_residual_alignment_gating: true
+      conditions: [vis_ir]
+      expected_checkpoint_sha256:
+        40: 304bb429c36adc87fa4f3512f8eca588fe657792455b8254e2bb1fea0002e2fd
+        41: e3f8e8af6223862f8ffe6ea0015591efd716c019300c7670040f67fad6ba3519
+        42: 177bf17ec9f3d77aa90c200e4e2bea899141d3eaa61df63662f3777760258101
+        43: bff3756eca0f76f3df37a5a8b90e5d62dc8ea408e30cb597e5944da40b234a41
+        44: 604eb7ee24f2118ff6c850cf168ad3002cdf7d56ada427479ce73d0ea67d7a0e
+
+  comparisons:
+    historical_fam_minus_additive:
+      candidate_configuration: historical_fam
+      candidate_condition: vis_ir
+      reference_configuration: historical_additive
+      reference_condition: vis_ir
+      metric: map_50
+    stage_b_rcra_minus_fam:
+      candidate_configuration: stage_b_rcra
+      candidate_condition: vis_ir
+      reference_configuration: stage_b_fam
+      reference_condition: vis_ir
+      metric: map_50
+    stage_b_fam_fusion_minus_vis:
+      candidate_configuration: stage_b_fam
+      candidate_condition: vis_ir
+      reference_configuration: stage_b_fam
+      reference_condition: vis
+      metric: map_50
+
+  reporting:
+    experimental_unit: checkpoint_seed
+    acquisition_pooling: equal_weight_macro_average_descriptive_only
+    report_raw_seed_values: true
+    report_mean_sample_sd_median_ci95: true
+    report_positive_seed_wins: true
+    report_exploratory_paired_tests: true
+    frame_level_independence_claim_allowed: false
+
+  batch_size: 12
+  workers: 8
+  output_dir: out/rtdetr_unused_acquisition_confirmation
+
+  interpretation:
+    model_selection_allowed: false
+    checkpoint_selection_allowed: false
+    threshold_tuning_allowed: false
+    seed_selection_allowed: false
+    architecture_tuning_allowed: false
+    new_training_decision_from_confirmation_alone_allowed: false
+    claim_external_holdout_allowed: false
+    claim_representative_sar_population_allowed: false
+    negative_results_must_be_reported: true

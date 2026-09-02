@@ -34,6 +34,19 @@ from sarfusion.utils.reproducibility import (
     prepare_rtdetr_model_for_determinism,
     runtime_fingerprint,
     tensor_digest,
+    training_source_runtime_fields,
+    verify_training_source_manifest,
+)
+from sarfusion.experiment.modality_consistency import (
+    matched_detection_consistency_loss,
+    modality_consistency_epoch_scale,
+    validate_modality_consistency_config,
+)
+from sarfusion.experiment.box_guided_alignment import (
+    box_guided_alignment_epoch_scale,
+    box_guided_alignment_loss,
+    validate_box_guided_alignment_config,
+    validate_box_guided_training_contract,
 )
 from sarfusion.utils.utils import (
     RunningAverage,
@@ -70,11 +83,16 @@ def partition_optimizer_parameters(named_parameters):
         "backbone": [],
         "new_modules": [],
         "head_and_dino": [],
+        "box_guidance": [],
         "reliability_gate": [],
         "alignment_gate": [],
     }
     for name, parameter in named_parameters:
-        if "alignment_gates" in name:
+        if any(
+            key in name for key in ("common_projection", "guidance_predictor")
+        ):
+            groups["box_guidance"].append(parameter)
+        elif "alignment_gates" in name:
             groups["alignment_gate"].append(parameter)
         elif "reliability_gates" in name:
             groups["reliability_gate"].append(parameter)
@@ -117,8 +135,14 @@ class Run:
         self._ended = False
         self.reproducibility = {}
         self.repro_trace = ReproducibilityTrace(None)
+        self.training_source_manifest = None
         self.reliability_gate_optimizer_group_index = None
         self.alignment_gate_optimizer_group_index = None
+        self.box_guidance_optimizer_group_index = None
+        self.modality_consistency_params = validate_modality_consistency_config(None)
+        self.box_guided_alignment_params = validate_box_guided_alignment_config(
+            None
+        )
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -132,6 +156,17 @@ class Run:
 
     def init(self, params: dict):
         self.reproducibility = deepcopy(params.get("reproducibility", {}))
+        self.training_source_manifest = verify_training_source_manifest(
+            self.reproducibility.get("training_source_manifest_id"),
+            self.reproducibility.get("training_source_manifest_sha256"),
+        )
+        if self.training_source_manifest is not None and not bool(
+            self.reproducibility.get("trace", False)
+        ):
+            raise ValueError(
+                "A declared training-source manifest requires "
+                "reproducibility.trace=true"
+            )
         configure_reproducibility(
             params["seed"],
             deterministic=self.reproducibility.get("deterministic", False),
@@ -164,6 +199,11 @@ class Run:
             else None
         )
         self.repro_trace = ReproducibilityTrace(trace_path)
+        if self.training_source_manifest is not None and not self.repro_trace.enabled:
+            raise RuntimeError(
+                "Training-source provenance requires a writable local "
+                "reproducibility trace"
+            )
         self.repro_trace.write(
             "runtime",
             seed=int(params["seed"]),
@@ -175,6 +215,7 @@ class Run:
                 self.reproducibility.get("training_seed", params["seed"])
             ),
             repetition=params.get("repetition"),
+            **training_source_runtime_fields(self.training_source_manifest),
             **runtime_fingerprint(),
         )
         (self.train_loader, self.val_loader, self.test_loader), self.denormalize = (
@@ -228,6 +269,42 @@ class Run:
 
     def _prep_for_training(self):
         self.criterion = build_loss(self.params["loss"], model=self.model)
+        self.modality_consistency_params = validate_modality_consistency_config(
+            self.train_params.get("modality_consistency")
+        )
+        self.box_guided_alignment_params = validate_box_guided_alignment_config(
+            self.train_params.get("box_guided_alignment")
+        )
+        consistency_enabled = self.modality_consistency_params["enabled"]
+        dataset_consistency_enabled = bool(
+            self.dataset_params.get("paired_consistency", False)
+        )
+        if consistency_enabled != dataset_consistency_enabled:
+            raise ValueError(
+                "train.modality_consistency.enabled and "
+                "dataset.paired_consistency must be enabled or disabled together"
+            )
+        if consistency_enabled:
+            if not self.dataset_params.get("modal_dropout", False):
+                raise ValueError(
+                    "mixed consistency training must retain supervised modal dropout"
+                )
+            if (
+                self.dataset_params.get(
+                    "modal_dropout_coordinate_contract", "native"
+                )
+                != "native"
+            ):
+                raise ValueError(
+                    "mixed consistency training must retain native-coordinate "
+                    "IR supervision"
+                )
+        self.box_guided_alignment_params = validate_box_guided_training_contract(
+            self.box_guided_alignment_params,
+            self.dataset_params,
+            self.model_params,
+            modality_consistency_enabled=consistency_enabled,
+        )
         self.watch_metric = self.train_params["watch_metric"]
         self.greater_is_better = self.train_params.get("greater_is_better", True)
         checkpoint_min_delta = float(
@@ -257,6 +334,19 @@ class Run:
         head_and_dino_params = parameter_groups["head_and_dino"]
         reliability_gate_params = parameter_groups["reliability_gate"]
         alignment_gate_params = parameter_groups["alignment_gate"]
+        box_guidance_params = parameter_groups["box_guidance"]
+        box_guidance_lr = float(
+            self.train_params.get(
+                "box_guidance_lr", self.train_params["initial_lr"]
+            )
+        )
+        if box_guidance_lr <= 0:
+            raise ValueError("box_guidance_lr must be positive")
+        if "box_guidance_lr" in self.train_params and not box_guidance_params:
+            raise ValueError(
+                "box_guidance_lr was configured but the model has no "
+                "box-guidance parameters"
+            )
         reliability_gate_lr = float(
             self.train_params.get(
                 "reliability_gate_lr", self.train_params["initial_lr"]
@@ -306,6 +396,7 @@ class Run:
         logger.info(
             f"New module params: {len(new_module_params)}, "
             f"Detection-head/DINO-specific params: {len(head_and_dino_params)}, "
+            f"Box-guidance params: {len(box_guidance_params)}, "
             f"Reliability-gate params: {len(reliability_gate_params)}, "
             f"Residual-alignment-gate params: {len(alignment_gate_params)}, "
             f"Backbone params: {len(backbone_params)}"
@@ -313,6 +404,7 @@ class Run:
         logger.info(
             f"LR for new modules: {self.train_params['initial_lr']}, "
             f"LR for detection-head/DINO-specific modules: {head_and_dino_lr}, "
+            f"LR for box guidance: {box_guidance_lr}, "
             f"LR for reliability gate: {reliability_gate_lr}, "
             f"LR for residual alignment gate: {alignment_gate_lr}, "
             f"LR for backbone: {backbone_lr}"
@@ -324,6 +416,12 @@ class Run:
             {"params": head_and_dino_params, "lr": head_and_dino_lr},
         ]
         self.reliability_gate_optimizer_group_index = None
+        self.box_guidance_optimizer_group_index = None
+        if box_guidance_params:
+            self.box_guidance_optimizer_group_index = len(optimizer_groups)
+            optimizer_groups.append(
+                {"params": box_guidance_params, "lr": box_guidance_lr}
+            )
         if reliability_gate_params:
             self.reliability_gate_optimizer_group_index = len(optimizer_groups)
             optimizer_groups.append(
@@ -567,8 +665,68 @@ class Run:
             raise e
         return outputs
 
+    def _modality_consistency_forward(self, batch_dict, epoch, batch_idx):
+        """Run clean stop-gradient teacher and degraded paired student."""
+        epoch_scale = modality_consistency_epoch_scale(
+            self.modality_consistency_params,
+            epoch,
+        )
+        if epoch_scale == 0.0:
+            return None
+
+        required = (
+            "consistency_teacher_pixel_values",
+            "consistency_student_pixel_values",
+            "consistency_pixel_mask",
+        )
+        missing = [name for name in required if name not in batch_dict]
+        if missing:
+            raise ValueError(
+                "paired consistency batch is missing fields: "
+                + ", ".join(missing)
+            )
+        teacher_input = DataDict(
+            pixel_values=batch_dict.consistency_teacher_pixel_values,
+            pixel_mask=batch_dict.consistency_pixel_mask,
+            labels=None,
+        )
+        student_input = DataDict(
+            pixel_values=batch_dict.consistency_student_pixel_values,
+            pixel_mask=batch_dict.consistency_pixel_mask,
+            labels=None,
+        )
+
+        was_training = self.model.training
+        try:
+            self.model.eval()
+            with torch.no_grad():
+                teacher_output = self._forward(
+                    teacher_input,
+                    epoch,
+                    batch_idx,
+                )
+        finally:
+            self.model.train(was_training)
+        student_output = self._forward(
+            student_input,
+            epoch,
+            batch_idx,
+        )
+        loss = matched_detection_consistency_loss(
+            teacher_output,
+            student_output,
+            self.modality_consistency_params,
+            epoch_scale=epoch_scale,
+        )
+        return student_input, student_output, loss
+
     def _backward(
-        self, batch_idx, input_dict, outputs: WrapperModelOutput, loss_normalizer
+        self,
+        batch_idx,
+        input_dict,
+        outputs: WrapperModelOutput,
+        loss_normalizer,
+        auxiliary_loss=None,
     ):
         loss = outputs.loss
         if isinstance(loss, torch.Tensor):
@@ -580,6 +738,8 @@ class Run:
         else:
             raise ValueError(f"Unexpected loss type: {type(loss)}, value: {loss}")
 
+        if auxiliary_loss is not None:
+            loss_value = loss_value + auxiliary_loss.value
         loss_value = loss_value / loss_normalizer
         self.accelerator.backward(loss_value)
         check_nan(
@@ -726,6 +886,10 @@ class Run:
                     "modality_modes": list(batch_dict.modality_mode),
                     "torch_rng_sha256": tensor_digest(torch.get_rng_state()),
                 }
+                if "consistency_student_mode" in batch_dict:
+                    trace_values["consistency_student_modes"] = list(
+                        batch_dict.consistency_student_mode
+                    )
                 if torch.cuda.is_available():
                     trace_values["cuda_rng_sha256"] = tensor_digest(
                         torch.cuda.get_rng_state()
@@ -744,7 +908,69 @@ class Run:
                 result_dict: WrapperModelOutput = self._forward(
                     batch_dict, epoch, batch_idx
                 )
-                loss = self._backward(batch_idx, batch_dict, result_dict, loss_normalizer)
+                box_guidance_components = {}
+                box_guidance_loss = None
+                box_guidance_scale = box_guided_alignment_epoch_scale(
+                    self.box_guided_alignment_params,
+                    epoch,
+                )
+                if self.box_guided_alignment_params["enabled"]:
+                    if "box_alignment_targets" not in batch_dict:
+                        raise ValueError(
+                            "box-guided training batch is missing "
+                            "box_alignment_targets"
+                        )
+                    box_guidance_loss = box_guided_alignment_loss(
+                        self.model,
+                        batch_dict.box_alignment_targets,
+                        self.box_guided_alignment_params,
+                        epoch_scale=box_guidance_scale,
+                    )
+                    box_guidance_components = box_guidance_loss.components
+                supervised_loss = self._backward(
+                    batch_idx,
+                    batch_dict,
+                    result_dict,
+                    loss_normalizer,
+                    auxiliary_loss=box_guidance_loss,
+                )
+                consistency_run = self._modality_consistency_forward(
+                    batch_dict,
+                    epoch,
+                    batch_idx,
+                )
+                consistency_components = {}
+                if consistency_run is not None:
+                    (
+                        consistency_input,
+                        consistency_output,
+                        consistency_loss,
+                    ) = consistency_run
+                    normalized_consistency_loss = (
+                        consistency_loss.value / loss_normalizer
+                    )
+                    if not torch.isfinite(normalized_consistency_loss):
+                        raise ValueError(
+                            "Non-finite modality consistency loss at "
+                            f"epoch={epoch} batch={batch_idx}: "
+                            f"{normalized_consistency_loss}"
+                        )
+                    self.accelerator.backward(normalized_consistency_loss)
+                    check_nan(
+                        self.model,
+                        consistency_input,
+                        consistency_output,
+                        normalized_consistency_loss,
+                        batch_idx,
+                        self.train_params,
+                    )
+                    consistency_components = consistency_loss.components
+                    loss = (
+                        supervised_loss.detach()
+                        + normalized_consistency_loss.detach()
+                    )
+                else:
+                    loss = supervised_loss.detach()
                 clip_norm = self.train_params.get("gradient_clip_norm", None)
                 if clip_norm is not None and clip_norm > 0:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), clip_norm)
@@ -760,6 +986,22 @@ class Run:
                         else str(value)
                         for name, value in result_dict.loss.components.items()
                     }
+                loss_components.update(
+                    {
+                        name: float(value.detach().cpu().item())
+                        if isinstance(value, torch.Tensor) and value.numel() == 1
+                        else str(value)
+                        for name, value in consistency_components.items()
+                    }
+                )
+                loss_components.update(
+                    {
+                        name: float(value.detach().cpu().item())
+                        if isinstance(value, torch.Tensor) and value.numel() == 1
+                        else str(value)
+                        for name, value in box_guidance_components.items()
+                    }
+                )
                 trace_values = {
                     "epoch": epoch,
                     "batch": batch_idx,
@@ -792,10 +1034,27 @@ class Run:
                 for k, v in result_dict.loss.components.items():
                     if "cdn" in k:
                         self.tracker.log_metric(k, v.item() if hasattr(v, "item") else v)
+            for key, value in consistency_components.items():
+                self.tracker.log_metric(
+                    key,
+                    value.item() if hasattr(value, "item") else value,
+                )
+            for key, value in box_guidance_components.items():
+                self.tracker.log_metric(
+                    key,
+                    value.item() if hasattr(value, "item") else value,
+                )
 
             self.tracker.log_metric("lr_new_modules", self.optimizer.param_groups[1]["lr"])
             self.tracker.log_metric("lr_backbone", self.optimizer.param_groups[0]["lr"])
             self.tracker.log_metric("lr_dino", self.optimizer.param_groups[2]["lr"])
+            if self.box_guidance_optimizer_group_index is not None:
+                self.tracker.log_metric(
+                    "lr_box_guidance",
+                    self.optimizer.param_groups[
+                        self.box_guidance_optimizer_group_index
+                    ]["lr"],
+                )
             if self.reliability_gate_optimizer_group_index is not None:
                 self.tracker.log_metric(
                     "lr_reliability_gate",

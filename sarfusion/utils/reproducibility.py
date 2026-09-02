@@ -14,6 +14,179 @@ import numpy as np
 import torch
 
 
+BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID = (
+    "rtdetr_box_guided_training_source_v1"
+)
+BOX_GUIDED_TRAINING_SOURCE_FILES = (
+    "main.py",
+    "sarfusion/data/__init__.py",
+    "sarfusion/data/utils.py",
+    "sarfusion/data/wisard.py",
+    "sarfusion/experiment/box_guided_alignment.py",
+    "sarfusion/experiment/experiment.py",
+    "sarfusion/experiment/modality_consistency.py",
+    "sarfusion/experiment/run.py",
+    "sarfusion/experiment/utils.py",
+    "sarfusion/models/__init__.py",
+    "sarfusion/models/checkpoints.py",
+    "sarfusion/models/detr.py",
+    "sarfusion/models/loss.py",
+    "sarfusion/models/rtdetr_fusion.py",
+    "sarfusion/tracker/abstract_tracker.py",
+    "sarfusion/tracker/wandb_tracker.py",
+    "sarfusion/utils/general.py",
+    "sarfusion/utils/grid.py",
+    "sarfusion/utils/metrics.py",
+    "sarfusion/utils/reproducibility.py",
+    "sarfusion/utils/structures.py",
+    "sarfusion/utils/utils.py",
+)
+_SHA256_HEX_LENGTH = 64
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source_file:
+        for block in iter(lambda: source_file.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _canonical_json_sha256(value) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_training_source_manifest(
+    manifest_id: str = BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID,
+    *,
+    repo_root: str | os.PathLike | None = None,
+) -> dict:
+    """Hash the frozen local source surface for box-guided RT-DETR training.
+
+    The manifest is deliberately an explicit, versioned list rather than a
+    recursive source-tree hash.  This keeps generated files and unrelated
+    experiments out of the identity while making every file that controls the
+    model, data stream, auxiliary loss, validation metric, and checkpoint
+    selection part of the scientific contract.
+    """
+    if manifest_id != BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID:
+        raise ValueError(f"Unknown training-source manifest id: {manifest_id!r}")
+
+    root = (
+        Path(repo_root).resolve()
+        if repo_root is not None
+        else Path(__file__).resolve().parents[2]
+    )
+    file_hashes = {}
+    for relative_path in BOX_GUIDED_TRAINING_SOURCE_FILES:
+        source_path = (root / relative_path).resolve()
+        try:
+            source_path.relative_to(root)
+        except ValueError as error:
+            raise RuntimeError(
+                f"Training-source path escapes repository root: {relative_path}"
+            ) from error
+        if not source_path.is_file():
+            raise FileNotFoundError(
+                f"Training-source manifest file is missing: {source_path}"
+            )
+        file_hashes[relative_path] = _file_sha256(source_path)
+
+    payload = {
+        "schema_version": 1,
+        "manifest_id": manifest_id,
+        "files": file_hashes,
+    }
+    return {**payload, "sha256": _canonical_json_sha256(payload)}
+
+
+def verify_training_source_manifest(
+    manifest_id: str | None,
+    expected_sha256: str | None,
+    *,
+    repo_root: str | os.PathLike | None = None,
+    required: bool = False,
+) -> dict | None:
+    """Optionally validate a declared source manifest, failing on half-configs."""
+    if manifest_id is None and expected_sha256 is None:
+        if required:
+            raise RuntimeError("Training-source provenance declaration is required")
+        return None
+    if manifest_id is None or expected_sha256 is None:
+        raise ValueError(
+            "training_source_manifest_id and "
+            "training_source_manifest_sha256 must be declared together"
+        )
+    if (
+        not isinstance(expected_sha256, str)
+        or len(expected_sha256) != _SHA256_HEX_LENGTH
+        or any(character not in "0123456789abcdef" for character in expected_sha256)
+    ):
+        raise ValueError(
+            "training_source_manifest_sha256 must be a lowercase SHA-256 digest"
+        )
+
+    current = build_training_source_manifest(manifest_id, repo_root=repo_root)
+    if current["sha256"] != expected_sha256:
+        raise RuntimeError(
+            "Training-source manifest changed: expected "
+            f"{expected_sha256}, got {current['sha256']}"
+        )
+    return current
+
+
+def training_source_runtime_fields(manifest: dict | None) -> dict:
+    """Return the exact provenance fields embedded in the first trace event."""
+    if manifest is None:
+        return {}
+    return {
+        "training_source_manifest_id": manifest["manifest_id"],
+        "training_source_manifest_sha256": manifest["sha256"],
+        "training_source_files_sha256": dict(manifest["files"]),
+    }
+
+
+def verify_training_source_runtime_trace(
+    trace_path: str | os.PathLike,
+    manifest: dict,
+) -> dict:
+    """Bind a completed run's first runtime event to the current source bytes."""
+    trace_path = Path(trace_path)
+    if not trace_path.is_file():
+        raise RuntimeError("Completed run has no reproducibility_trace.jsonl")
+    trace_bytes = trace_path.read_bytes()
+    if not trace_bytes:
+        raise RuntimeError("Reproducibility trace is empty")
+    first_line = trace_bytes.splitlines()[0]
+    try:
+        first_event = json.loads(first_line.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("First reproducibility-trace event is invalid JSON") from error
+    if not isinstance(first_event, dict) or first_event.get("event") != "runtime":
+        raise RuntimeError("First reproducibility-trace event must be runtime")
+
+    expected_fields = training_source_runtime_fields(manifest)
+    observed_fields = {
+        key: first_event.get(key) for key in expected_fields
+    }
+    if observed_fields != expected_fields:
+        raise RuntimeError(
+            "Runtime trace training-source provenance differs from the "
+            "declared/current manifest"
+        )
+    return {
+        **expected_fields,
+        "runtime_event_sha256": _canonical_json_sha256(first_event),
+        "reproducibility_trace_sha256": hashlib.sha256(trace_bytes).hexdigest(),
+    }
+
+
 def configure_reproducibility(seed: int, deterministic: bool = False, warn_only: bool = False):
     """Configure all RNGs before datasets, models, or CUDA state are created."""
     seed = int(seed)

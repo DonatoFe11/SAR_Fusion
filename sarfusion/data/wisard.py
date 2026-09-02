@@ -282,6 +282,146 @@ def adapt_ir2rgb(rgb, ir):
     return rgb, new_ir
 
 
+def _image_size(image):
+    """Return ``(width, height)`` for PIL or channel-first tensor images."""
+    if isinstance(image, Image.Image):
+        return image.size
+    if isinstance(image, (torch.Tensor, np.ndarray)) and image.ndim >= 2:
+        return int(image.shape[-1]), int(image.shape[-2])
+    raise ValueError(f"Unsupported image type for spatial size: {type(image)}")
+
+
+def _box_centers(annotations, *, width, height):
+    """Return normalized ``[x, y]`` centers from COCO-style annotations."""
+    if width <= 0 or height <= 0:
+        raise ValueError("Image dimensions must be positive.")
+
+    centers = []
+    for annotation in annotations.get("annotations", []):
+        bbox = annotation.get("bbox")
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            raise ValueError("Each alignment annotation must contain a 4-value bbox.")
+        x_min, y_min, box_width, box_height = map(float, bbox)
+        values = (x_min, y_min, box_width, box_height)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("Alignment annotation coordinates must be finite.")
+        centers.append(
+            [
+                (x_min + box_width / 2.0) / float(width),
+                (y_min + box_height / 2.0) / float(height),
+            ]
+        )
+
+    if not centers:
+        return torch.empty((0, 2), dtype=torch.float32)
+    return torch.tensor(centers, dtype=torch.float32)
+
+
+def build_box_alignment_targets(
+    vis_annotations,
+    ir_annotations,
+    *,
+    vis_size,
+    ir_size,
+    adapted_ir_size,
+    max_distance=0.05,
+):
+    """Build conservative box-center flow targets for a paired WiSARD frame.
+
+    Sizes use PIL's ``(width, height)`` convention. IR centers are mapped
+    through the resize-and-horizontal-pad geometry actually returned by
+    :func:`adapt_ir2rgb`, then normalized on that adapted canvas. A pair is
+    retained only when the VIS and adapted-IR centers select each other as
+    nearest neighbours and their normalized Euclidean distance is no greater
+    than ``max_distance``.
+
+    Rows follow ``[vis_x, vis_y, flow_y, flow_x]``, with
+    ``flow = adapted_ir_center - vis_center``. The function deliberately
+    returns an empty ``(0, 4)`` tensor when either modality has no boxes.
+    """
+    try:
+        max_distance = float(max_distance)
+    except (TypeError, ValueError) as error:
+        raise ValueError("box_alignment_max_distance must be numeric.") from error
+    if not math.isfinite(max_distance) or not 0.0 <= max_distance <= math.sqrt(2.0):
+        raise ValueError(
+            "box_alignment_max_distance must be finite and lie in [0, sqrt(2)]."
+        )
+
+    if len(vis_size) != 2 or len(ir_size) != 2 or len(adapted_ir_size) != 2:
+        raise ValueError("Alignment image sizes must be (width, height) pairs.")
+    vis_width, vis_height = map(int, vis_size)
+    ir_width, ir_height = map(int, ir_size)
+    adapted_ir_width, adapted_ir_height = map(int, adapted_ir_size)
+    if min(
+        vis_width,
+        vis_height,
+        ir_width,
+        ir_height,
+        adapted_ir_width,
+        adapted_ir_height,
+    ) <= 0:
+        raise ValueError("Alignment image dimensions must be positive.")
+    if adapted_ir_height != vis_height:
+        raise ValueError(
+            "adapt_ir2rgb must preserve the VIS height for box alignment targets."
+        )
+
+    vis_centers = _box_centers(
+        vis_annotations,
+        width=vis_width,
+        height=vis_height,
+    )
+    native_ir_centers = _box_centers(
+        ir_annotations,
+        width=ir_width,
+        height=ir_height,
+    )
+    if vis_centers.numel() == 0 or native_ir_centers.numel() == 0:
+        return torch.empty((0, 4), dtype=torch.float32)
+
+    # Recover the exact geometry from the input/output canvases instead of
+    # assuming a particular number of padding calls inside adapt_ir2rgb.
+    resized_ir_width = int(ir_width * (vis_height / ir_height))
+    scale_x = resized_ir_width / float(ir_width)
+    scale_y = vis_height / float(ir_height)
+    left_padding = (adapted_ir_width - resized_ir_width) / 2.0
+
+    ir_centers = native_ir_centers.clone()
+    ir_centers[:, 0] = (
+        native_ir_centers[:, 0] * ir_width * scale_x + left_padding
+    ) / adapted_ir_width
+    ir_centers[:, 1] = (
+        native_ir_centers[:, 1] * ir_height * scale_y
+    ) / adapted_ir_height
+
+    distances = torch.cdist(vis_centers, ir_centers, p=2)
+    nearest_ir = distances.argmin(dim=1)
+    nearest_vis = distances.argmin(dim=0)
+    rows = []
+    for vis_index, ir_index_tensor in enumerate(nearest_ir):
+        ir_index = int(ir_index_tensor.item())
+        if int(nearest_vis[ir_index].item()) != vis_index:
+            continue
+        if float(distances[vis_index, ir_index].item()) > max_distance:
+            continue
+        flow = ir_centers[ir_index] - vis_centers[vis_index]
+        rows.append(
+            torch.stack(
+                (
+                    vis_centers[vis_index, 0],
+                    vis_centers[vis_index, 1],
+                    flow[1],
+                    flow[0],
+                )
+            )
+        )
+
+    if not rows:
+        return torch.empty((0, 4), dtype=torch.float32)
+    return torch.stack(rows).to(dtype=torch.float32)
+
+
 def get_wisard_folders(folders):
     if folders == "vis":
         folders = VIS
@@ -386,6 +526,10 @@ class WiSARDDataset(Dataset):
         modal_dropout=False,
         modal_dropout_probs=None,
         modal_dropout_coordinate_contract="native",
+        paired_consistency=False,
+        paired_consistency_student_probs=None,
+        box_alignment_targets=False,
+        box_alignment_max_distance=0.05,
         use_tiling=False,
         test_all_tiles=False,  # Nuova opzione per test
     ):
@@ -406,8 +550,18 @@ class WiSARDDataset(Dataset):
         )  # IR, RGB, Fusion
         self.modal_dropout_coordinate_contract = modal_dropout_coordinate_contract
         self._validate_modal_dropout_config()
+        self.paired_consistency = bool(paired_consistency)
+        self.paired_consistency_student_probs = (
+            [0.5, 0.5]
+            if paired_consistency_student_probs is None
+            else paired_consistency_student_probs
+        )
+        self._validate_paired_consistency_config()
         self.use_tiling = use_tiling
         self.test_all_tiles = test_all_tiles  # Se True, restituisce tutti i 4 tile in fase di test
+        self.box_alignment_targets = box_alignment_targets
+        self.box_alignment_max_distance = box_alignment_max_distance
+        self._validate_box_alignment_config()
         if single_class:
             self.id2class = {0: "person"}
         
@@ -454,6 +608,64 @@ class WiSARDDataset(Dataset):
                 f"'paired_vis', got {contract!r}."
             )
         self.modal_dropout_coordinate_contract = contract
+
+    def _validate_paired_consistency_config(self):
+        """Validate paired clean-teacher/degraded-student generation."""
+        probs = self.paired_consistency_student_probs
+        if not isinstance(probs, (list, tuple)) or len(probs) != 2:
+            raise ValueError(
+                "paired_consistency_student_probs must contain exactly two "
+                "values in [IR-only, RGB-only] order."
+            )
+        self.paired_consistency_student_probs = [float(prob) for prob in probs]
+        if any(prob < 0.0 for prob in self.paired_consistency_student_probs):
+            raise ValueError(
+                "paired_consistency_student_probs values must be non-negative."
+            )
+        if not np.isclose(sum(self.paired_consistency_student_probs), 1.0):
+            raise ValueError("paired_consistency_student_probs must sum to 1.0.")
+        if self.paired_consistency and any(
+            item_type != MULTI_MODALITY_ITEM for item_type, _ in self.items
+        ):
+            raise ValueError(
+                "paired_consistency requires a dataset containing only paired "
+                "RGB--IR items."
+            )
+
+    def _validate_box_alignment_config(self):
+        """Validate optional box-guided geometric pseudo-supervision."""
+        if not isinstance(self.box_alignment_targets, (bool, np.bool_)):
+            raise ValueError("box_alignment_targets must be a boolean.")
+        self.box_alignment_targets = bool(self.box_alignment_targets)
+        try:
+            self.box_alignment_max_distance = float(
+                self.box_alignment_max_distance
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "box_alignment_max_distance must be numeric."
+            ) from error
+        if (
+            not math.isfinite(self.box_alignment_max_distance)
+            or not 0.0
+            <= self.box_alignment_max_distance
+            <= math.sqrt(2.0)
+        ):
+            raise ValueError(
+                "box_alignment_max_distance must be finite and lie in "
+                "[0, sqrt(2)]."
+            )
+        if not self.box_alignment_targets:
+            return
+        if any(item_type != MULTI_MODALITY_ITEM for item_type, _ in self.items):
+            raise ValueError(
+                "box_alignment_targets requires a dataset containing only "
+                "paired RGB--IR items."
+            )
+        if self.use_tiling or self.test_all_tiles:
+            raise ValueError(
+                "box_alignment_targets is incompatible with tiled datasets."
+            )
 
     @staticmethod
     def _apply_paired_modal_dropout(img, mode):
@@ -544,6 +756,11 @@ class WiSARDDataset(Dataset):
         return img_tile, targets
 
     def __getitem__(self, idx):
+        consistency_teacher_img = None
+        consistency_student_img = None
+        consistency_student_mode = None
+        box_alignment_target = torch.empty((0, 4), dtype=torch.float32)
+
         # Se test_all_tiles è attivo, gestisci gli expanded_items
         if self.expanded_items is not None:
             original_idx, quadrant, item_data = self.expanded_items[idx]
@@ -637,12 +854,14 @@ class WiSARDDataset(Dataset):
             else:
                 mode = 'fusion'
 
+            paired_consistency = bool(getattr(self, "paired_consistency", False))
             if (
                 mode == 'fusion'
                 or (
                     mode == 'ir'
                     and self.modal_dropout_coordinate_contract == 'paired_vis'
                 )
+                or paired_consistency
             ):
                 img_vis_processed, img_ir_processed = adapt_ir2rgb(img_vis_pil, img_ir_pil)
                 inputs_vis = self.transform(img_vis_processed, annotations=targets_vis_raw, return_tensors="pt")
@@ -651,12 +870,39 @@ class WiSARDDataset(Dataset):
                 inputs_ir = self.transform(img_ir_processed, annotations=targets_ir_raw, return_tensors="pt")
                 img_ir_tensor = inputs_ir['pixel_values'][0][0:1]
 
-                img = torch.cat([img_vis_tensor, img_ir_tensor], dim=0)  # [4, H, W]
-                if self.modal_dropout_coordinate_contract == 'paired_vis':
-                    img = self._apply_paired_modal_dropout(img, mode)
-                targets = inputs_vis['labels'][0]
+                if getattr(self, "box_alignment_targets", False) and mode == 'fusion':
+                    box_alignment_target = build_box_alignment_targets(
+                        targets_vis_raw,
+                        targets_ir_raw,
+                        vis_size=img_vis_pil.size,
+                        ir_size=img_ir_pil.size,
+                        adapted_ir_size=_image_size(img_ir_processed),
+                        max_distance=self.box_alignment_max_distance,
+                    )
 
-            elif mode == 'rgb':
+                paired_img = torch.cat([img_vis_tensor, img_ir_tensor], dim=0)
+                if paired_consistency:
+                    consistency_student_mode = random.choices(
+                        ['ir', 'rgb'],
+                        weights=self.paired_consistency_student_probs,
+                        k=1,
+                    )[0]
+                    consistency_teacher_img = paired_img
+                    consistency_student_img = self._apply_paired_modal_dropout(
+                        paired_img,
+                        consistency_student_mode,
+                    )
+
+                if mode == 'fusion' or (
+                    mode == 'ir'
+                    and self.modal_dropout_coordinate_contract == 'paired_vis'
+                ):
+                    img = paired_img
+                    if self.modal_dropout_coordinate_contract == 'paired_vis':
+                        img = self._apply_paired_modal_dropout(img, mode)
+                    targets = inputs_vis['labels'][0]
+
+            if mode == 'rgb':
                 inputs_vis = self.transform(img_vis_pil, annotations=targets_vis_raw, return_tensors="pt")
                 img_rgb = inputs_vis['pixel_values'][0]
                 
@@ -665,7 +911,10 @@ class WiSARDDataset(Dataset):
                 img = torch.cat([img_rgb, zeros_ir], dim=0)  # [4, H, W]
                 targets = inputs_vis['labels'][0]
 
-            else:  # mode == 'ir'
+            elif (
+                mode == 'ir'
+                and self.modal_dropout_coordinate_contract == 'native'
+            ):
                 img_path_vis = img_path_ir
                 inputs_ir = self.transform(img_ir_pil, annotations=targets_ir_raw, return_tensors="pt")
                 img_ir_tensor = inputs_ir['pixel_values'][0][0:1]
@@ -682,6 +931,12 @@ class WiSARDDataset(Dataset):
             sample_idx=idx,
             modality_mode=mode,
         )
+        if consistency_teacher_img is not None:
+            data_dict.consistency_teacher_pixel_values = consistency_teacher_img
+            data_dict.consistency_student_pixel_values = consistency_student_img
+            data_dict.consistency_student_mode = consistency_student_mode
+        if getattr(self, "box_alignment_targets", False):
+            data_dict.box_alignment_targets = box_alignment_target
         
         if self.return_path:
             data_dict.path = img_path_vis
@@ -721,6 +976,46 @@ class WiSARDDataset(Dataset):
             [item["sample_idx"] for item in batch], dtype=torch.int64
         )
         result["modality_mode"] = [item["modality_mode"] for item in batch]
+        if any("box_alignment_targets" in item for item in batch):
+            if not all("box_alignment_targets" in item for item in batch):
+                raise ValueError(
+                    "box-alignment targets must be present for every item in a batch"
+                )
+            result["box_alignment_targets"] = [
+                item["box_alignment_targets"] for item in batch
+            ]
+        if "consistency_teacher_pixel_values" in batch[0]:
+            if not all("consistency_teacher_pixel_values" in item for item in batch):
+                raise ValueError(
+                    "paired-consistency fields must be present for every item "
+                    "in a batch"
+                )
+            teacher_encoding = self.transform.pad(
+                [item["consistency_teacher_pixel_values"] for item in batch],
+                return_tensors="pt",
+                input_data_format="channels_first",
+            )
+            student_encoding = self.transform.pad(
+                [item["consistency_student_pixel_values"] for item in batch],
+                return_tensors="pt",
+                input_data_format="channels_first",
+            )
+            if not torch.equal(
+                teacher_encoding["pixel_mask"], student_encoding["pixel_mask"]
+            ):
+                raise ValueError(
+                    "clean teacher and degraded student masks must be identical"
+                )
+            result["consistency_teacher_pixel_values"] = teacher_encoding[
+                "pixel_values"
+            ]
+            result["consistency_student_pixel_values"] = student_encoding[
+                "pixel_values"
+            ]
+            result["consistency_pixel_mask"] = teacher_encoding["pixel_mask"]
+            result["consistency_student_mode"] = [
+                item["consistency_student_mode"] for item in batch
+            ]
         
         # Aggiungi metadati per tiling se presenti
         if "original_idx" in batch[0]:

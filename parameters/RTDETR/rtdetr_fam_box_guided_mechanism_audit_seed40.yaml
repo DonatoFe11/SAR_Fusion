@@ -1,0 +1,51 @@
+# Frozen before training for the post-training seed-40 mechanism audit.
+# The result files are created only by an actual completed audit run.
+protocol_id: rtdetr_fam_box_guided_mechanism_audit_v1
+project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
+training_config: parameters/RTDETR/rtdetr_fam_box_guided_sequence_validation_seed40.yaml
+training_config_sha256: 16c1d58a4926bb6f6d1c018eb96600b52279116ca04a42d35286d63fb12ea647
+seeds: [40]
+checkpoint: best
+split: train
+mode: fusion
+box_matching:
+  method: mutual_nearest_box_center
+  max_distance_normalized: 0.05
+diagnostic_baselines:
+  zero_flow: fixed_zero_dy_dx
+  constant_flow: best_smooth_l1_constant_on_frozen_train_targets
+  constant_comparison_is_promotion_gate: false
+  positive_improvement_interpretation: non_global_fit_on_frozen_train_targets_only
+  does_not_establish: input_conditioned_generalization
+smooth_l1_beta_cells: 0.25
+guidance_limit_cells: 4.0
+near_saturation_threshold_cells: 3.9
+expected_train_frames: 3123
+audit_batch_size: 12
+expected_train_batches: 261
+target_population:
+  pairing: existing_wisard_sorted_zip
+  target_order: vis_x_vis_y_ir_minus_vis_dy_dx
+  expected_frames: 3123
+  expected_frames_with_matches: 2306
+  expected_matched_boxes: 5209
+  expected_max_matches_per_frame: 4
+  expected_per_frame_match_count_distribution:
+    0: 817
+    1: 801
+    2: 543
+    3: 526
+    4: 436
+  expected_source_inventory_sha256: f889b5a54115f0267e0d5c087e6c3673bd2c65f63607e0c01df063620ea76a1e
+  expected_target_population_sha256: d519574962e81ae5b492248113247cca20d7ef15b2d189d1e3b58aebf218f3c0
+mechanism_gate:
+  minimum_guidance_relative_improvement_vs_zero: 0.20
+  minimum_guidance_mean_abs_cells: 0.05
+  maximum_guidance_saturation_fraction: 0.01
+  minimum_total_relative_improvement_vs_zero: 0.0
+  maximum_mean_positive_cancellation_ratio: 0.50
+  maximum_fraction_guidance_at_least_half_cancelled: 0.50
+  if_pass: box_guidance_mechanism_supported
+  if_fail: box_guidance_mechanism_not_supported
+output_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.json
+output_csv: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.csv
