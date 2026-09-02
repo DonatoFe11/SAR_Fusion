@@ -1,0 +1,107 @@
+schema: sarfusion.yolo26.stage_a.run.v1
+
+study:
+  arm: fam
+  seed: 40
+  protocol_revision: warmup_bias_repair_v1
+  supersedes_pilot: runs/yolo26_stage_a/additive_seed40
+  development_validation: true
+  primary_metric: best_val_map50
+  control_vitality_min_map50: 0.100000
+  control_vitality_epoch_from: 4
+  promotion_delta: 0.010000
+  future_seeds_on_pass: [41, 42, 43, 44]
+  split_config: parameters/YOLO26/stage_a_split.yaml
+  source_manifest: parameters/YOLO26/stage_a_repair_v1_source_manifest.json
+  control_config: parameters/YOLO26/yolo26s_additive_seed40_stage_a_repair_v1.yaml
+  requires_control_audit: runs/yolo26_stage_a_repair_v1/additive_seed40/control_audit.json
+
+model:
+  weights: yolo26s.pt
+  weights_sha256: 646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b
+  family: yolo26s
+  use_fam: true
+  fam_variant: current_dcnv2
+  fusion_levels: [P3, P4, P5]
+  spatial_jitter_std: 0.0
+
+dataset:
+  modal_dropout: true
+  modal_dropout_probs: [0.2, 0.2, 0.6]
+
+selection:
+  checkpoint_metric: metrics/mAP50(B)
+  checkpoint_min_delta: 0.001
+  checkpoint: best
+  no_test: true
+  trace_batches: 20
+  replay_tolerance: 0.003
+
+preflight:
+  candidate_safe_gpu_step: true
+  batch: 4
+  imgsz: 640
+
+training:
+  task: detect
+  mode: train
+  epochs: 50
+  patience: 0
+  batch: 4
+  nbs: 16
+  imgsz: 640
+  device: 0
+  workers: 4
+  project: runs/yolo26_stage_a_repair_v1
+  name: fam_seed40
+  exist_ok: false
+  pretrained: false
+  optimizer: AdamW
+  lr0: 0.001
+  lrf: 0.01
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  warmup_momentum: 0.8
+  # Frozen before the repair control: identical to Additive repair.
+  warmup_bias_lr: 0.0
+  box: 7.5
+  cls: 0.5
+  dfl: 1.5
+  seed: 40
+  deterministic: false
+  single_cls: true
+  cache: false
+  rect: false
+  cos_lr: false
+  close_mosaic: 0
+  resume: false
+  amp: true
+  fraction: 1.0
+  profile: false
+  multi_scale: 0.0
+  compile: false
+  channels_last: false
+  val: true
+  save: true
+  save_period: -1
+  save_json: false
+  plots: false
+  max_det: 300
+  iou: 0.7
+  hsv_h: 0.0
+  hsv_s: 0.0
+  hsv_v: 0.0
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.5
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  bgr: 0.0
+  mosaic: 0.0
+  mixup: 0.0
+  cutmix: 0.0
+  copy_paste: 0.0
+  copy_paste_mode: flip
