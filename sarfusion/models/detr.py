@@ -13,13 +13,6 @@ from transformers import (
 
 from sarfusion.utils.structures import LossOutput
 from sarfusion.utils.general import xyxy2xywh
-from sarfusion.models.detr_fusion import DetrFusionForObjectDetection
-from sarfusion.models.rtdetr_fusion import RTDetrFusionForObjectDetection
-from sarfusion.models.rtdetr_fusion_fam import RTDetrFusionForObjectDetection as RTDetrFusionFAMForObjectDetection
-from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
-from sarfusion.models.rtdetr_cmx_hybrid import RTDetrCMXHybridForObjectDetection
-from sarfusion.models.deformable_detr_fusion import DeformableDetrFusionForObjectDetection
-from sarfusion.models.dino_fusion import DINOFusionForObjectDetection
 
 
 def convert_detr_predictions(predictions):
@@ -37,18 +30,39 @@ class BaseDetr(nn.Module, PyTorchModelHubMixin):
         pretrained_model_name,
         id2label,
         threshold=0.9,
+        pretrained_revision=None,
         **model_kwargs,  # Extra kwargs to pass to from_pretrained
     ):
         super(BaseDetr, self).__init__()
-        label2id = {c: str(i) for i, c in enumerate(id2label)}
+        if isinstance(id2label, dict):
+            normalized_id2label = {
+                int(index): label for index, label in id2label.items()
+            }
+        else:
+            normalized_id2label = {
+                index: label for index, label in enumerate(id2label)
+            }
+        label2id = {
+            label: int(index)
+            for index, label in normalized_id2label.items()
+        }
+        revision_kwargs = (
+            {"revision": pretrained_revision}
+            if pretrained_revision is not None
+            else {}
+        )
         self.processor = processor_class.from_pretrained(
-            pretrained_model_name, id2label=id2label, label2id=label2id
+            pretrained_model_name,
+            id2label=normalized_id2label,
+            label2id=label2id,
+            **revision_kwargs,
         )
         self.model = model_class.from_pretrained(
             pretrained_model_name,
-            id2label=id2label,
+            id2label=normalized_id2label,
             label2id=label2id,
             ignore_mismatched_sizes=True,
+            **revision_kwargs,
             **model_kwargs,  # Pass extra kwargs
         )
         self.threshold = threshold
@@ -122,10 +136,67 @@ class RTDetr(BaseDetr):
             id2label=id2label,
             threshold=threshold,
         )
-        
-        
+
+
+class RTDetrV2(BaseDetr):
+    """Standard single-backbone RT-DETRv2, imported only when requested."""
+
+    def __init__(
+        self,
+        id2label,
+        threshold=0.9,
+        pretrained_model_name="PekingU/rtdetr_v2_r50vd",
+        pretrained_revision=None,
+        reuse_pretrained_class_head=True,
+    ):
+        try:
+            from transformers import RTDetrV2ForObjectDetection
+        except ImportError as error:
+            raise RuntimeError(
+                "RT-DETRv2 requires the dedicated environment with "
+                "Transformers >=4.49; the historical 4.43 environment does "
+                "not provide RTDetrV2ForObjectDetection."
+            ) from error
+
+        super().__init__(
+            processor_class=RTDetrImageProcessor,
+            model_class=RTDetrV2ForObjectDetection,
+            pretrained_model_name=pretrained_model_name,
+            pretrained_revision=pretrained_revision,
+            id2label=id2label,
+            threshold=threshold,
+        )
+        self.reuse_pretrained_class_head = bool(
+            reuse_pretrained_class_head
+        )
+        self.pretrained_label_source_indices = []
+        if self.reuse_pretrained_class_head:
+            from sarfusion.models.rtdetr_fusion import (
+                copy_matching_pretrained_label_heads,
+            )
+
+            revision_kwargs = (
+                {"revision": pretrained_revision}
+                if pretrained_revision is not None
+                else {}
+            )
+            source = RTDetrV2ForObjectDetection.from_pretrained(
+                pretrained_model_name,
+                **revision_kwargs,
+            )
+            self.pretrained_label_source_indices = (
+                copy_matching_pretrained_label_heads(
+                    self.model,
+                    source,
+                    self.model.config.id2label,
+                )
+            )
+
+
 class FusionDetr(BaseDetr):
     def __init__(self, id2label, threshold=0.9):
+        from sarfusion.models.detr_fusion import DetrFusionForObjectDetection
+
         super(FusionDetr, self).__init__(
             processor_class=DetrImageProcessor,
             model_class=DetrFusionForObjectDetection,
@@ -152,6 +223,10 @@ class FusionRTDetr(BaseDetr):
         residual_alignment_hidden_channels=16,
         use_scalar_residual_alignment=False,
     ):
+        from sarfusion.models.rtdetr_fusion import (
+            RTDetrFusionForObjectDetection,
+        )
+
         super(FusionRTDetr, self).__init__(
             processor_class=RTDetrImageProcessor,
             model_class=RTDetrFusionForObjectDetection,
@@ -195,9 +270,71 @@ class FusionRTDetr(BaseDetr):
         self.reuse_pretrained_class_head = reuse_pretrained_class_head
 
 
+class FusionRTDetrV2(BaseDetr):
+    """RT-DETRv2 with modality-specific backbones and optional standard FAM."""
+
+    def __init__(
+        self,
+        id2label,
+        threshold=0.9,
+        use_fam=False,
+        freeze_fam=False,
+        ir_dropout_rate=0.0,
+        spatial_jitter_std=0.0,
+        fam_variant="current_dcnv2",
+        fam_initialization="historical_hf_post_init",
+        reuse_pretrained_class_head=False,
+        pretrained_model_name="PekingU/rtdetr_v2_r50vd",
+        pretrained_revision=None,
+    ):
+        try:
+            from sarfusion.models.rtdetr_v2_fusion import (
+                RTDetrV2FusionForObjectDetection,
+            )
+        except ImportError as error:
+            raise RuntimeError(
+                "RT-DETRv2 fusion requires the dedicated environment with "
+                "Transformers >=4.49; the historical 4.43 environment remains "
+                "supported for the completed RT-DETR experiments."
+            ) from error
+
+        super().__init__(
+            processor_class=RTDetrImageProcessor,
+            model_class=RTDetrV2FusionForObjectDetection,
+            pretrained_model_name=pretrained_model_name,
+            pretrained_revision=pretrained_revision,
+            id2label=id2label,
+            threshold=threshold,
+            use_fam=use_fam,
+            freeze_fam=freeze_fam,
+            ir_dropout_rate=ir_dropout_rate,
+            spatial_jitter_std=spatial_jitter_std,
+            fam_variant=fam_variant,
+            fam_initialization=fam_initialization,
+            reuse_pretrained_class_head=reuse_pretrained_class_head,
+        )
+        self.processor.num_channels = 4
+        self.use_fam = bool(use_fam)
+        self.freeze_fam = bool(freeze_fam)
+        self.ir_dropout_rate = float(ir_dropout_rate)
+        self.spatial_jitter_std = float(spatial_jitter_std)
+        self.fam_variant = str(fam_variant)
+        self.fam_initialization = str(fam_initialization)
+        self.reuse_pretrained_class_head = bool(
+            reuse_pretrained_class_head
+        )
+        self.pretrained_model_name = pretrained_model_name
+        self.pretrained_revision = pretrained_revision
+
+
 class FusionRTDetrFAM(BaseDetr):
     """RT-DETR FAM implementation (lazy FAM init in backbone forward)."""
+
     def __init__(self, id2label, threshold=0.9):
+        from sarfusion.models.rtdetr_fusion_fam import (
+            RTDetrFusionForObjectDetection as RTDetrFusionFAMForObjectDetection,
+        )
+
         super(FusionRTDetrFAM, self).__init__(
             processor_class=RTDetrImageProcessor,
             model_class=RTDetrFusionFAMForObjectDetection,
@@ -208,8 +345,11 @@ class FusionRTDetrFAM(BaseDetr):
         # Force the processor to accept 4 channels
         self.processor.num_channels = 4
 
+
 class FusionRTDetrCMX(BaseDetr):
     def __init__(self, id2label, threshold=0.9):
+        from sarfusion.models.rtdetr_cmx import RTDetrCMXForObjectDetection
+
         super(FusionRTDetrCMX, self).__init__(
             processor_class=RTDetrImageProcessor,
             model_class=RTDetrCMXForObjectDetection,
@@ -220,8 +360,13 @@ class FusionRTDetrCMX(BaseDetr):
         # Forza il processor ad accettare 4 canali (3 RGB + 1 IR)
         self.processor.num_channels = 4
 
+
 class FusionRTDetrCMXHybrid(BaseDetr):
     def __init__(self, id2label, threshold=0.9):
+        from sarfusion.models.rtdetr_cmx_hybrid import (
+            RTDetrCMXHybridForObjectDetection,
+        )
+
         super(FusionRTDetrCMXHybrid, self).__init__(
             processor_class=RTDetrImageProcessor,
             model_class=RTDetrCMXHybridForObjectDetection,
@@ -246,6 +391,10 @@ class FusionDeformableDetr(BaseDetr):
         ir_dropout_rate=0.0,
         spatial_jitter_std=0.0,
     ):
+        from sarfusion.models.deformable_detr_fusion import (
+            DeformableDetrFusionForObjectDetection,
+        )
+
         model_kwargs = {}
         if num_feature_levels is not None:
             model_kwargs["num_feature_levels"] = num_feature_levels
@@ -293,7 +442,8 @@ class FusionDINODeformableDetr(BaseDetr):
         box_noise_scale=1.0,
         cdn_loss_coef=1.0,
     ):
- 
+        from sarfusion.models.dino_fusion import DINOFusionForObjectDetection
+
         model_kwargs = {}
         if num_feature_levels is not None:
             model_kwargs["num_feature_levels"] = num_feature_levels

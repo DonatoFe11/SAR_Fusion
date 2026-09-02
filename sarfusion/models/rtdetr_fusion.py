@@ -574,6 +574,12 @@ def copy_matching_pretrained_label_heads(target, source, target_id2label):
                 target_layer.weight[target_id].copy_(source_layer.weight[source_id])
                 target_layer.bias[target_id].copy_(source_layer.bias[source_id])
 
+        target_denoising = getattr(
+            target.model, "denoising_class_embed", None
+        )
+        source_denoising = getattr(
+            source.model, "denoising_class_embed", None
+        )
         for target_id, source_id in enumerate(source_indices):
             target.model.enc_score_head.weight[target_id].copy_(
                 source.model.enc_score_head.weight[source_id]
@@ -581,15 +587,17 @@ def copy_matching_pretrained_label_heads(target, source, target_id2label):
             target.model.enc_score_head.bias[target_id].copy_(
                 source.model.enc_score_head.bias[source_id]
             )
-            target.model.denoising_class_embed.weight[target_id].copy_(
-                source.model.denoising_class_embed.weight[source_id]
-            )
+            if target_denoising is not None and source_denoising is not None:
+                target_denoising.weight[target_id].copy_(
+                    source_denoising.weight[source_id]
+                )
 
-        target_padding = target.model.denoising_class_embed.padding_idx
-        source_padding = source.model.denoising_class_embed.padding_idx
-        target.model.denoising_class_embed.weight[target_padding].copy_(
-            source.model.denoising_class_embed.weight[source_padding]
-        )
+        if target_denoising is not None and source_denoising is not None:
+            target_padding = target_denoising.padding_idx
+            source_padding = source_denoising.padding_idx
+            target_denoising.weight[target_padding].copy_(
+                source_denoising.weight[source_padding]
+            )
 
     return source_indices
 

@@ -12,7 +12,20 @@ from sarfusion.models.utils import torch_dict_load
 from sarfusion.models.utils import nc_safe_load
 from sarfusion.models.checkpoints import resolve_local_wandb_checkpoint
 from sarfusion.models.yolov10 import YOLOv10WiSARD
-from sarfusion.models.detr import DeformableDetr, Detr, FusionDetr, RTDetr, FusionRTDetr, FusionRTDetrFAM, FusionRTDetrCMX, FusionRTDetrCMXHybrid, FusionDeformableDetr, FusionDINODeformableDetr
+from sarfusion.models.detr import (
+    DeformableDetr,
+    Detr,
+    FusionDeformableDetr,
+    FusionDetr,
+    FusionDINODeformableDetr,
+    FusionRTDetr,
+    FusionRTDetrCMX,
+    FusionRTDetrCMXHybrid,
+    FusionRTDetrFAM,
+    FusionRTDetrV2,
+    RTDetr,
+    RTDetrV2,
+)
 from sarfusion.utils.general import yaml_save
 from sarfusion.utils.utils import load_yaml
 
@@ -164,6 +177,22 @@ def build_rtdetr(threshold=0.9, id2label=None):
     return RTDetr(threshold=threshold, id2label=id2label)
 
 
+def build_rtdetr_v2(
+    threshold=0.9,
+    id2label=None,
+    pretrained_model_name="PekingU/rtdetr_v2_r50vd",
+    pretrained_revision=None,
+    reuse_pretrained_class_head=True,
+):
+    return RTDetrV2(
+        threshold=threshold,
+        id2label=id2label,
+        pretrained_model_name=pretrained_model_name,
+        pretrained_revision=pretrained_revision,
+        reuse_pretrained_class_head=reuse_pretrained_class_head,
+    )
+
+
 def build_deformable_detr(threshold=0.9, id2label=None):
     return DeformableDetr(threshold=threshold, id2label=id2label)
 
@@ -243,6 +272,34 @@ def build_fusion_rt_detr(
         use_residual_alignment_gating=use_residual_alignment_gating,
         residual_alignment_hidden_channels=residual_alignment_hidden_channels,
         use_scalar_residual_alignment=use_scalar_residual_alignment,
+    )
+
+
+def build_fusion_rt_detr_v2(
+    threshold=0.9,
+    id2label=None,
+    use_fam=False,
+    freeze_fam=False,
+    ir_dropout_rate=0.0,
+    spatial_jitter_std=0.0,
+    fam_variant="current_dcnv2",
+    fam_initialization="historical_hf_post_init",
+    reuse_pretrained_class_head=False,
+    pretrained_model_name="PekingU/rtdetr_v2_r50vd",
+    pretrained_revision=None,
+):
+    return FusionRTDetrV2(
+        threshold=threshold,
+        id2label=id2label,
+        use_fam=use_fam,
+        freeze_fam=freeze_fam,
+        ir_dropout_rate=ir_dropout_rate,
+        spatial_jitter_std=spatial_jitter_std,
+        fam_variant=fam_variant,
+        fam_initialization=fam_initialization,
+        reuse_pretrained_class_head=reuse_pretrained_class_head,
+        pretrained_model_name=pretrained_model_name,
+        pretrained_revision=pretrained_revision,
     )
 
 
@@ -331,8 +388,10 @@ MODEL_REGISTRY = {
     "detr": build_detr,
     "defdetr": build_deformable_detr,
     "rtdetr": build_rtdetr,
+    "rtdetr_v2": build_rtdetr_v2,
     "fusiondetr": build_fusion_detr,
     "fusion_rtdetr": build_fusion_rt_detr,
+    "fusion_rtdetr_v2": build_fusion_rt_detr_v2,
     "fusion_rtdetr_fam": build_fusion_rt_detr_fam,
     "fusion_rtdetr_cmx": build_fusion_rt_detr_cmx,
     "fusion_rtdetr_cmx_hybrid": build_fusion_rt_detr_cmx_hybrid,
