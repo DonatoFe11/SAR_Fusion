@@ -659,7 +659,21 @@ soddisfatto. I punti 18 e successivi costituiscono l'estensione ora autorizzata.
     la geometria ma non migliora abbastanza la detection; il cost-volume non è
     giustificato e la prossima linea da valutare è RT-DETRv2 + FAM.
 27. Aggiornare `notes/Search_and_Rescue/main.tex` dopo la chiusura della nuova
-    campagna oppure dopo il suo arresto fail-closed.
+    campagna oppure dopo il suo arresto fail-closed. **Da fare:** RT-DETRv2 e
+    YOLO26 sono ora entrambi chiusi, quindi non restano altri training necessari
+    prima del consolidamento della tesi.
+28. Integrare e valutare RT-DETRv2 + FAM sul solo seed 40 Stage A. **Fatto e
+    chiuso:** Additive `0,181978` e FAM `0,158466` best validation mAP@50; il
+    delta primario non passa il gate e non autorizza altri seed o Stage B.
+29. Integrare YOLO26s ufficiale con dual backbone e congelare Additive/FAM.
+    **Fatto:** port 4-canali, loss E2E nativa, dataset appaiato, inizializzazione,
+    trace e checkpoint auditati. Il pilot Additive è integro ma collassa dopo
+    il best `0,06472` dell'epoca 2; FAM v1 non viene eseguito.
+30. Applicare un solo repair post-pilot alla recipe YOLO26, cambiando
+    esclusivamente `warmup_bias_lr` da `0,1` a zero. **Fatto e chiuso:** 50/50
+    epoche, audit optimizer e replay passati; best complessivo `0,04353`, best
+    eleggibile epoche 4--50 `0,01535` contro soglia `0,10`. Il gate di vitalità
+    fallisce e vieta FAM, seed 41--44, Stage B e una terza taratura.
 
 Nota operativa per gli eventuali fallback: l'ambiente locale `sarfusion` usa
 Transformers `4.43.3` e non contiene classi o moduli RT-DETRv2/D-FINE. Un loro

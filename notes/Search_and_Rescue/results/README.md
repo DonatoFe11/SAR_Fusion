@@ -327,3 +327,36 @@ Python dei file coinvolti e `git diff --check` sono puliti. Poiché il
 meccanismo geometrico apprende ma non migliora la detection, il fallback
 cost-volume non viene attivato; la direzione successiva indicata dal piano è
 RT-DETRv2 + FAM.
+
+## YOLO26 dual-backbone: pilot e repair Additive seed 40
+
+YOLO26s ufficiale è stato integrato con due backbone RGB/IR e fusione
+P3/P4/P5, congelando Additive e FAM prima dello Stage A. Il pilot Additive ha
+completato 50 epoche ma ha raggiunto soltanto `0,06472` mAP@50 all'epoca 2,
+collassando a `0,00001` all'epoca 50. L'audit ha individuato una recipe
+correggibile: con AdamW esplicito il learning rate di warmup dei bias era
+rimasto a `0,1`.
+
+È stato autorizzato un solo repair post-pilot, cambiando esclusivamente
+`warmup_bias_lr` a zero. Il repair completa 50/50 epoche e passa integrità,
+optimizer e replay checkpoint, ma ottiene un best complessivo di `0,04353`
+all'epoca 1. Nel tratto preregistrato 4--50 il massimo è `0,01535`, contro la
+soglia di vitalità `0,10`; lo stato finale è
+`control_integrity_passed_vitality_failed`.
+
+La linea YOLO26 è quindi chiusa senza eseguire FAM, altri seed o Stage B. Il
+risultato non misura il delta FAM--Additive e non dimostra un limite assoluto
+del task: mostra che questo controllo dual-backbone e questa recipe non hanno
+prodotto una baseline vitale. Dettagli e interpretazione sono nella
+[`nota post-run`](../../yolo26_stage_a_outcome.md); il riepilogo versionato è
+[`yolo26_additive_seed40_stage_a_repair_v1.json`](yolo26_additive_seed40_stage_a_repair_v1.json).
+
+SHA-256 principali:
+
+```text
+source manifest: f6ef8616ce45b834cdb8bb7a777ecb6c89c545f7fa028580366d053fc981e48f
+audit repair:    5612f1378948f2be9f3bf3071063f38f8330f15dd105443f5bdac3b343f8ee5e
+results CSV:     b6a31271f82c0da7accefb67e78b77bf108f4d7d71616f71028c9c2295a81818
+best.pt:         4592fa6c053dd648230f6e3731cbc1fbe59980c06a54592ae15803bc8d5ad2ff
+last.pt:         de9e5158de94592dc6ee355accaac7ab9e03d7eada550be028b9cc6724367f5b
+```
