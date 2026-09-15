@@ -1,0 +1,115 @@
+# Stage A v2: five fresh seeds, no seed-40 performance screen.
+# Complete all 10 epochs for every seed. Best validation mAP50 is primary;
+# latest is diagnostic. Stage B is conditional on the aggregate decision.
+# See notes/stage_a_b_five_seed_v2.md. Do not mix archived pilot runs here.
+
+experiment:
+  name: RTDETR_FAM_StageA_FiveSeed_V2
+  group: RTDETR_FAM_stage_a_five_seed_v2
+  continue_with_errors: false
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: &seed40 [40]
+  repetition: [0]
+  task: [detection]
+  run_test: [false]
+  test_checkpoint: [best]
+  strict_checkpoint_loading: [true]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    training_source_manifest_id: [rtdetr_box_guided_training_source_v1]
+    training_source_manifest_sha256: [3320b24d060aaacec316290c114933db1dce8d71eaaf455f1ccb6448183f76e5]
+    data_seed: *seed40
+    model_seed: *seed40
+    training_seed: *seed40
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETR, FAM, MatchedBaseline, StageA, FiveSeedV2, Fixed10, BestPrimary, NoSeedScreen]]
+
+  train:
+    max_epochs: [10]
+    run_validation: [true]
+    compute_validation_loss: [false]
+    val_frequency: [1]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    checkpoint_min_delta: [0.001]
+    compile: [false]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map_50]
+    greater_is_better: [true]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: ["PekingU/rtdetr_r50vd"]
+    folders: [vis_ir]
+    train_folders:
+      - - [210924_FHL_Enterprise_VIS_0405, 210924_FHL_Enterprise_IR_0406]
+        - [220109_Baker_Enterprise_VIS_1, 220109_Baker_Enterprise_IR_1]
+    val_folders:
+      - - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_coordinate_contract: [native]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids:
+  - seed: &seed41 [41]
+    reproducibility:
+      data_seed: *seed41
+      model_seed: *seed41
+      training_seed: *seed41
+  - seed: &seed42 [42]
+    reproducibility:
+      data_seed: *seed42
+      model_seed: *seed42
+      training_seed: *seed42
+  - seed: &seed43 [43]
+    reproducibility:
+      data_seed: *seed43
+      model_seed: *seed43
+      training_seed: *seed43
+  - seed: &seed44 [44]
+    reproducibility:
+      data_seed: *seed44
+      model_seed: *seed44
+      training_seed: *seed44

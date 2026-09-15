@@ -1,6 +1,29 @@
 # YOLO26 dual-backbone — esito Stage A
 
-## Stato finale
+## Stato aggiornato al 13 settembre 2026: Additive e FAM su cinque seed
+
+Il [protocollo Stage A/B v2](stage_a_b_five_seed_v2.md) ha rimosso il filtro
+prestazionale sul seed 40: sono stati completati **5 Additive + 5 FAM, tutti
+da 50 epoche**. Diversamente dal pilot v1, FAM è stato effettivamente addestrato
+e confrontato con Additive per ciascun seed 40--44.
+
+La mAP@50 validation dei **best** è `0,050686 ± 0,016295` per Additive e
+`0,027268 ± 0,014893` per FAM (media ± DS campionaria). FAM meno Additive dà
+un delta medio appaiato di `-0,023418`, con **1/5 vittorie**: il criterio
+aggregato fallisce e **non si attiva lo Stage B**. All'epoca 50 le medie sono
+rispettivamente `0,001262` e `0,000092`; il collasso a fine training persiste.
+
+I dieci replay dei best serializzati passano; il massimo scarto assoluto dalla
+metrica live è `0,0002525`, sotto la tolleranza `0,003`. Il risultato riguarda
+questa implementazione dual-backbone, recipe e split, non YOLO26 in generale.
+Valori per seed, best/last, integrità e decisione sono nel
+[resoconto v2](stage_a_five_seed_v2_results.md).
+
+## Archivio: stato finale del protocollo v1 e screen seed 40
+
+Tutte le sezioni seguenti descrivono il protocollo v1. Le frasi «FAM non è
+stato addestrato» e i divieti sugli altri seed valgono solo per quel pilot:
+sono stati superati dalla campagna v2, senza cancellarne i risultati.
 
 La linea YOLO26 è **completata e chiusa allo Stage A**. Il controllo Additive
 seed 40 ha completato sia il pilot originario sia l'unico repair consentito,
@@ -73,4 +96,3 @@ le prestazioni del task siano in assoluto non migliorabili.
 
 I dati di audit versionati sono in
 [`Search_and_Rescue/results/yolo26_additive_seed40_stage_a_repair_v1.json`](Search_and_Rescue/results/yolo26_additive_seed40_stage_a_repair_v1.json).
-

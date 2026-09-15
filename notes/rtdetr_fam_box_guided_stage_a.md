@@ -1,6 +1,27 @@
 # RT-DETR + FAM: Box-Guided Common-Offset a P3
 
-## Stato
+## Stato aggiornato al 13 settembre 2026: cinque seed completati
+
+Il [protocollo Stage A/B v2](stage_a_b_five_seed_v2.md), senza filtro sul seed
+40, ha completato tutti i cinque training box-guided da 10 epoche. Il controllo
+è il FAM standard Stage A già addestrato sui cinque seed, non cinque nuove run.
+
+La mAP@50 validation dei **best** è `0,172280 ± 0,023329` (media ± DS
+campionaria), contro `0,164563 ± 0,019554` del controllo. Il delta medio
+appaiato è `+0,007717`, con **2/5 vittorie**: non raggiunge né `+0,01` medio
+né le 4/5 vittorie richieste. Sui latest il delta medio è `+0,000534`.
+**Nessuna promozione allo Stage B.**
+
+Valori per seed, ID, best/latest, IC e limiti del riuso della baseline sono nel
+[resoconto v2](stage_a_five_seed_v2_results.md). Gli audit geometrici e
+active-vs-zero del pilot sotto riportati **non sono stati ripetuti sui nuovi
+cinque seed** e non ne attestano il comportamento meccanicistico.
+
+## Archivio: stato del protocollo v1 e screen seed 40
+
+Tutte le sezioni seguenti descrivono il protocollo v1. Il divieto storico di
+eseguire altri seed è stato superato dalla revisione v2 del 10 settembre;
+risultati, configurazioni e decisioni del pilot restano conservati come tali.
 
 **Screen scientifico seed 40 completato e candidato chiuso.** Il matched
 control ottiene `0,147389` mAP@50 e la candidata `0,155485`: il delta

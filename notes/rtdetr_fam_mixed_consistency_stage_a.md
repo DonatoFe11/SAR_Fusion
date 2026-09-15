@@ -1,6 +1,29 @@
 # RT-DETR + FAM: Modal Dropout misto e consistency training
 
-## Stato
+## Stato aggiornato al 13 settembre 2026: cinque seed completati
+
+Il [protocollo Stage A/B v2](stage_a_b_five_seed_v2.md), senza filtro sul seed
+40, ha completato tutti i cinque training mixed da 10 epoche. Il controllo è
+il FAM standard Stage A già addestrato sui cinque seed, non cinque nuove run.
+
+La mAP@50 validation fusion dei **best** è `0,109437 ± 0,032839` (media ± DS
+campionaria), contro `0,164563 ± 0,019554` del controllo. Il delta medio
+appaiato è `-0,055126`, con **0/5 vittorie**. Sui latest il delta medio è
+`-0,054894`. **Il criterio fusion fallisce e non si attiva lo Stage B.**
+
+Quattro best su cinque sono all'epoca 1, prima dell'attivazione della
+consistency; il seed 41 seleziona l'epoca 5. Il confronto usa comunque i best
+scelti durante l'intero budget, non un arresto o una valutazione imposta
+all'epoca 1. Le nuove valutazioni masked-IR/VIS-GT e IR nativa/IR-GT sui cinque
+seed **non sono state eseguite**: non si attribuisce loro l'esito dei gate del
+vecchio pilot. Valori, ID, IC e limiti del confronto sono nel
+[resoconto v2](stage_a_five_seed_v2_results.md).
+
+## Archivio: stato del protocollo v1 e screen seed 40
+
+Tutte le sezioni seguenti descrivono il protocollo v1. Il divieto storico di
+eseguire altri seed è stato superato dalla revisione v2 del 10 settembre;
+risultati, configurazioni e decisioni del pilot restano conservati come tali.
 
 **Screen Stage A seed 40 completato e candidato chiuso il 31 agosto 2026. I
 tre gate congelati sono falliti; i seed 41--44 e lo Stage B non devono essere
