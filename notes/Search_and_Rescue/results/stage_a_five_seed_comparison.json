@@ -1,0 +1,492 @@
+{
+  "schema": "sarfusion.thesis.stage_a_five_seed_comparison.v1",
+  "verification_date": "2026-09-14",
+  "metric": "mAP@50",
+  "metric_scale": [
+    0,
+    1
+  ],
+  "stage": "A",
+  "seeds": [
+    40,
+    41,
+    42,
+    43,
+    44
+  ],
+  "statistical_unit": "paired seed/checkpoint, not epochs or frames",
+  "aggregation": {
+    "sample_sd_ddof": 1,
+    "ci": "paired mean +/- t(0.975,df=4) * sample_sd / sqrt(5)",
+    "t_critical": 2.7764451051977987,
+    "ci_interpretation": "descriptive seed variability on a fixed development split; not an acquisition-generalization confidence interval"
+  },
+  "data_split": {
+    "training_pairs": 3123,
+    "training_sequences": [
+      "FHL_VIS_0405_IR_0406",
+      "Baker_VIS_1_IR_1"
+    ],
+    "validation_pairs": 896,
+    "validation_sequences": [
+      "FHL_VIS_0401_IR_0402"
+    ],
+    "new_MtErie_test_evaluation": false
+  },
+  "checkpoint_policy": {
+    "primary": "best on validation mAP@50",
+    "min_delta": 0.001,
+    "secondary": "last budget epoch (RT-DETR latest epoch 10; YOLO26 last.pt epoch 50)",
+    "early_stopping": false,
+    "best_epoch_indexing": "one-based",
+    "raw_maximum_is_not_selection_rule": true
+  },
+  "source_data_csv": "stage_a_five_seed_comparison.csv",
+  "models": [
+    {
+      "label": "RT-DETR FAM standard",
+      "family": "RT-DETR",
+      "project": "RTDETR_FAM_SequenceVal_Fixed10_Protocol",
+      "training_source_manifest_sha256": null,
+      "best_metric_kind": "live validation at selected checkpoint; not a fresh replay",
+      "method": "rtdetr_fam",
+      "best": {
+        "n": 5,
+        "mean": 0.1645626574754715,
+        "sample_sd": 0.019553502184892938,
+        "median": 0.16546642780303955,
+        "min": 0.14235958456993103,
+        "max": 0.19393183290958405
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.0840144507586956,
+        "sample_sd": 0.02668297555452805,
+        "median": 0.09459450095891953,
+        "min": 0.03973805531859398,
+        "max": 0.10372947156429291
+      },
+      "budget_epochs": 10
+    },
+    {
+      "label": "RT-DETRv2 Additive",
+      "family": "RT-DETRv2",
+      "project": "RTDETRv2_Additive_SequenceVal_FiveSeed_V2",
+      "training_source_manifest_sha256": "e63ac26308d3a9e7651d216901f093492815dfe3c787c994b63482130a61d9bd",
+      "best_metric_kind": "live validation at selected checkpoint; not a fresh replay",
+      "method": "rtdetrv2_additive",
+      "best": {
+        "n": 5,
+        "mean": 0.1543774425983429,
+        "sample_sd": 0.009349946467355215,
+        "median": 0.15151476860046387,
+        "min": 0.14520874619483948,
+        "max": 0.16599026322364807
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.09082258120179176,
+        "sample_sd": 0.045962161587598145,
+        "median": 0.099085234105587,
+        "min": 0.020498525351285934,
+        "max": 0.13561275601387024
+      },
+      "budget_epochs": 10
+    },
+    {
+      "label": "RT-DETRv2 FAM",
+      "family": "RT-DETRv2",
+      "project": "RTDETRv2_FAM_SequenceVal_FiveSeed_V2",
+      "training_source_manifest_sha256": "e63ac26308d3a9e7651d216901f093492815dfe3c787c994b63482130a61d9bd",
+      "best_metric_kind": "live validation at selected checkpoint; not a fresh replay",
+      "method": "rtdetrv2_fam",
+      "best": {
+        "n": 5,
+        "mean": 0.17641333043575286,
+        "sample_sd": 0.02547025496789374,
+        "median": 0.18632550537586212,
+        "min": 0.14190377295017242,
+        "max": 0.19957372546195984
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.09872038513422013,
+        "sample_sd": 0.016012674796115383,
+        "median": 0.09126605838537216,
+        "min": 0.08051321655511856,
+        "max": 0.11843568831682205
+      },
+      "budget_epochs": 10
+    },
+    {
+      "label": "RT-DETR FAM box-guided",
+      "family": "RT-DETR",
+      "project": "RTDETR_FAM_BoxGuided_StageA_FiveSeed_V2",
+      "training_source_manifest_sha256": "3320b24d060aaacec316290c114933db1dce8d71eaaf455f1ccb6448183f76e5",
+      "best_metric_kind": "live validation at selected checkpoint; not a fresh replay",
+      "method": "rtdetr_box_guided",
+      "best": {
+        "n": 5,
+        "mean": 0.1722798079252243,
+        "sample_sd": 0.023328797957928978,
+        "median": 0.174408420920372,
+        "min": 0.1388055682182312,
+        "max": 0.20298120379447937
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.08454857245087624,
+        "sample_sd": 0.026337537438485575,
+        "median": 0.08227445185184479,
+        "min": 0.052474986761808395,
+        "max": 0.12529684603214264
+      },
+      "budget_epochs": 10
+    },
+    {
+      "label": "RT-DETR FAM mixed consistency",
+      "family": "RT-DETR",
+      "project": "RTDETR_FAM_MixedConsistency_StageA_FiveSeed_V2",
+      "training_source_manifest_sha256": "3320b24d060aaacec316290c114933db1dce8d71eaaf455f1ccb6448183f76e5",
+      "best_metric_kind": "live validation at selected checkpoint; not a fresh replay",
+      "method": "rtdetr_mixed_consistency",
+      "best": {
+        "n": 5,
+        "mean": 0.10943698585033416,
+        "sample_sd": 0.03283883192501522,
+        "median": 0.12091688811779022,
+        "min": 0.05759882926940918,
+        "max": 0.14484043419361115
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.02911997549235821,
+        "sample_sd": 0.015366929792376745,
+        "median": 0.02704964578151703,
+        "min": 0.01157347485423088,
+        "max": 0.04840046539902687
+      },
+      "budget_epochs": 10
+    },
+    {
+      "label": "YOLO26 Additive",
+      "family": "YOLO26",
+      "artifact_directory_pattern": "runs/yolo26_stage_a_five_seed_v2/additive_seed{seed}",
+      "training_source_manifest_sha256": "968726d18952f2ef3f0e61f1d95114590a618da8a12d2df4fd6ae1dc011ea56a",
+      "best_metric_kind": "selected live EMA validation; serialized-best replay recorded separately",
+      "last_csv_precision_note": "CSV is rounded; zero is not evidence the unrounded metric is exactly zero",
+      "method": "yolo26_additive",
+      "best": {
+        "n": 5,
+        "mean": 0.050686,
+        "sample_sd": 0.016294658020345198,
+        "median": 0.04775,
+        "min": 0.03557,
+        "max": 0.07839
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.001262,
+        "sample_sd": 0.002153571452262497,
+        "median": 0.00035,
+        "min": 0.00014,
+        "max": 0.00511
+      },
+      "budget_epochs": 50
+    },
+    {
+      "label": "YOLO26 FAM",
+      "family": "YOLO26",
+      "artifact_directory_pattern": "runs/yolo26_stage_a_five_seed_v2/fam_seed{seed}",
+      "training_source_manifest_sha256": "968726d18952f2ef3f0e61f1d95114590a618da8a12d2df4fd6ae1dc011ea56a",
+      "best_metric_kind": "selected live EMA validation; serialized-best replay recorded separately",
+      "last_csv_precision_note": "CSV is rounded; zero is not evidence the unrounded metric is exactly zero",
+      "method": "yolo26_fam",
+      "best": {
+        "n": 5,
+        "mean": 0.027268,
+        "sample_sd": 0.014893270963760781,
+        "median": 0.02336,
+        "min": 0.00988,
+        "max": 0.04756
+      },
+      "latest": {
+        "n": 5,
+        "mean": 9.2e-05,
+        "sample_sd": 0.00011189280584559492,
+        "median": 5e-05,
+        "min": 0.0,
+        "max": 0.00027
+      },
+      "budget_epochs": 50
+    }
+  ],
+  "comparisons": [
+    {
+      "candidate": "rtdetr_box_guided",
+      "control": "rtdetr_fam",
+      "best": {
+        "n": 5,
+        "mean": 0.007717150449752808,
+        "sample_sd": 0.03252802937356766,
+        "median": -0.0036915093660354614,
+        "paired_deltas_by_seed": {
+          "40": 0.05083365738391876,
+          "41": 0.03204883635044098,
+          "42": -0.02666085958480835,
+          "43": -0.013944372534751892,
+          "44": -0.0036915093660354614
+        },
+        "ci95_t_mean": [
+          -0.03267173255592077,
+          0.04810603345542639
+        ],
+        "strictly_positive_seeds": 2,
+        "min": -0.02666085958480835,
+        "max": 0.05083365738391876
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.0005341216921806336,
+        "sample_sd": 0.019388800194170486,
+        "median": 0.003293633460998535,
+        "paired_deltas_by_seed": {
+          "40": 0.012736931443214417,
+          "41": 0.02226743847131729,
+          "42": -0.007774852216243744,
+          "43": 0.003293633460998535,
+          "44": -0.02785254269838333
+        },
+        "ci95_t_mean": [
+          -0.023540253477287058,
+          0.024608496861648326
+        ],
+        "strictly_positive_seeds": 3,
+        "min": -0.02785254269838333,
+        "max": 0.02226743847131729
+      },
+      "primary_gate": {
+        "mean_delta_at_least_0_01": false,
+        "at_least_four_positive_seeds": false,
+        "passed": false
+      },
+      "stage_b_activated": false
+    },
+    {
+      "candidate": "rtdetr_mixed_consistency",
+      "control": "rtdetr_fam",
+      "best": {
+        "n": 5,
+        "mean": -0.05512567162513733,
+        "sample_sd": 0.03456638007366987,
+        "median": -0.047991007566452026,
+        "paired_deltas_by_seed": {
+          "40": -0.007307112216949463,
+          "41": -0.08476075530052185,
+          "42": -0.042854055762290955,
+          "43": -0.09271542727947235,
+          "44": -0.047991007566452026
+        },
+        "ci95_t_mean": [
+          -0.09804550131084128,
+          -0.012205841939433394
+        ],
+        "strictly_positive_seeds": 0,
+        "min": -0.09271542727947235,
+        "max": -0.007307112216949463
+      },
+      "latest": {
+        "n": 5,
+        "mean": -0.054894475266337395,
+        "sample_sd": 0.026758303449594747,
+        "median": -0.05532900616526604,
+        "paired_deltas_by_seed": {
+          "40": -0.021865038201212883,
+          "41": -0.09145593270659447,
+          "42": -0.0675448551774025,
+          "43": -0.03827754408121109,
+          "44": -0.05532900616526604
+        },
+        "ci95_t_mean": [
+          -0.08811929731271084,
+          -0.021669653219963947
+        ],
+        "strictly_positive_seeds": 0,
+        "min": -0.09145593270659447,
+        "max": -0.021865038201212883
+      },
+      "primary_gate": {
+        "mean_delta_at_least_0_01": false,
+        "at_least_four_positive_seeds": false,
+        "passed": false
+      },
+      "stage_b_activated": false
+    },
+    {
+      "candidate": "rtdetrv2_fam",
+      "control": "rtdetrv2_additive",
+      "best": {
+        "n": 5,
+        "mean": 0.022035887837409972,
+        "sample_sd": 0.0344295525733495,
+        "median": 0.03956441581249237,
+        "paired_deltas_by_seed": {
+          "40": -0.024086490273475647,
+          "41": 0.05436497926712036,
+          "42": 0.04521729052066803,
+          "43": 0.03956441581249237,
+          "44": -0.004880756139755249
+        },
+        "ci95_t_mean": [
+          -0.020714048067181946,
+          0.0647858237420019
+        ],
+        "strictly_positive_seeds": 3,
+        "min": -0.024086490273475647,
+        "max": 0.05436497926712036
+      },
+      "latest": {
+        "n": 5,
+        "mean": 0.00789780393242836,
+        "sample_sd": 0.05381034815168199,
+        "median": -0.006330899894237518,
+        "paired_deltas_by_seed": {
+          "40": -0.006330899894237518,
+          "41": -0.00816633552312851,
+          "42": 0.017116256058216095,
+          "43": -0.05509953945875168,
+          "44": 0.09196953848004341
+        },
+        "ci95_t_mean": [
+          -0.058916568098325746,
+          0.07471217596318247
+        ],
+        "strictly_positive_seeds": 2,
+        "min": -0.05509953945875168,
+        "max": 0.09196953848004341
+      },
+      "primary_gate": {
+        "mean_delta_at_least_0_01": true,
+        "at_least_four_positive_seeds": false,
+        "passed": false
+      },
+      "stage_b_activated": false
+    },
+    {
+      "candidate": "yolo26_fam",
+      "control": "yolo26_additive",
+      "best": {
+        "n": 5,
+        "mean": -0.023418,
+        "sample_sd": 0.014822156388326228,
+        "median": -0.02463,
+        "paired_deltas_by_seed": {
+          "40": -0.02463,
+          "41": -0.03831,
+          "42": -0.030830000000000003,
+          "43": 0.0010700000000000015,
+          "44": -0.024390000000000002
+        },
+        "ci95_t_mean": [
+          -0.04182213796313065,
+          -0.005013862036869356
+        ],
+        "strictly_positive_seeds": 1,
+        "min": -0.03831,
+        "max": 0.0010700000000000015
+      },
+      "latest": {
+        "n": 5,
+        "mean": -0.00117,
+        "sample_sd": 0.0021991020894901628,
+        "median": -0.00016,
+        "paired_deltas_by_seed": {
+          "40": -0.0051,
+          "41": -0.00016,
+          "42": -8.999999999999999e-05,
+          "43": -0.00015000000000000001,
+          "44": -0.00035
+        },
+        "ci95_t_mean": [
+          -0.003900545892894613,
+          0.0015605458928946128
+        ],
+        "strictly_positive_seeds": 0,
+        "min": -0.0051,
+        "max": -8.999999999999999e-05
+      },
+      "primary_gate": {
+        "mean_delta_at_least_0_01": false,
+        "at_least_four_positive_seeds": false,
+        "passed": false
+      },
+      "stage_b_activated": false
+    }
+  ],
+  "artifact_checks_performed_for_this_export": {
+    "rtdetr_complete_runs": 25,
+    "rtdetr_history_verified_runs": 25,
+    "rtdetr_history_check": "10 validation epochs per run, best selection with min_delta=0.001 and latest matched summary; local W&B binary history scanned read-only",
+    "rtdetr_best_latest_training_state_artifacts_present": true,
+    "rtdetrv2_pairing": [
+      {
+        "seed": 40,
+        "common_config_runtime_source_match": true,
+        "detection_head_initialization_and_transfer_metadata_match": true,
+        "traced_sample_and_modality_batches_match": 200,
+        "traced_input_tensor_hashes_match": 50
+      },
+      {
+        "seed": 41,
+        "common_config_runtime_source_match": true,
+        "detection_head_initialization_and_transfer_metadata_match": true,
+        "traced_sample_and_modality_batches_match": 200,
+        "traced_input_tensor_hashes_match": 50
+      },
+      {
+        "seed": 42,
+        "common_config_runtime_source_match": true,
+        "detection_head_initialization_and_transfer_metadata_match": true,
+        "traced_sample_and_modality_batches_match": 200,
+        "traced_input_tensor_hashes_match": 50
+      },
+      {
+        "seed": 43,
+        "common_config_runtime_source_match": true,
+        "detection_head_initialization_and_transfer_metadata_match": true,
+        "traced_sample_and_modality_batches_match": 200,
+        "traced_input_tensor_hashes_match": 50
+      },
+      {
+        "seed": 44,
+        "common_config_runtime_source_match": true,
+        "detection_head_initialization_and_transfer_metadata_match": true,
+        "traced_sample_and_modality_batches_match": 200,
+        "traced_input_tensor_hashes_match": 50
+      }
+    ],
+    "yolo26_complete_runs": 10,
+    "yolo26_csv_and_selection_records_per_run": 50,
+    "yolo26_serialized_best_replays_passed": 10
+  },
+  "excluded_incomplete_runs": [
+    {
+      "run_id": "45awji0a",
+      "method": "rtdetrv2_additive",
+      "seed": 40,
+      "reason": "incomplete training; not a replicate",
+      "train_step": 1980,
+      "train_start_epoch_zero_based": 2,
+      "latest_present": false
+    }
+  ],
+  "scope_and_limitations": [
+    "RT-DETR FAM standard is an existing complete five-seed Stage A control reused without duplicate training. Common model/training/data configuration and reconstructed initialization hashes were checked in notes/stage_a_five_seed_v2_results.md; its original source/runtime snapshot is not guaranteed identical to the new ablations.",
+    "The mixed-consistency student path consumes additional random draws; seed pairing does not guarantee identical subsequent Modal Dropout realizations. The comparison estimates the full training intervention.",
+    "YOLO26 best metrics are live EMA selection values; serialized-best replay is a separate integrity check. Latest metrics have the precision of results.csv.",
+    "RT-DETRv2 metrics are live validation history values. Completion, saved-artifact presence, common configuration/runtime, detection-head initialization, transfer metadata and traced inputs are verified. Whole-model initial hashes differ because Additive omits FAM modules. No fresh inference replay or strict checkpoint tensor load was performed for this export.",
+    "New five-seed masked-IR/native-IR mixed-consistency evaluation and box-guided geometric/active-versus-zero audits were not performed. Their outcomes are not inferred from single-seed diagnostics. All necessary primary performance gates already fail.",
+    "Cross-family absolute mAP values are descriptive, not a controlled model ranking: recipes, budgets and evaluation pipelines differ. Stage A validation values are not interchangeable with Stage B MtErie values.",
+    "No new training or dataset inference was executed to create these portable summary artifacts."
+  ]
+}

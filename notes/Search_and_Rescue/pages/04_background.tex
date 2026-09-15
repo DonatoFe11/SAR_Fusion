@@ -43,7 +43,7 @@ but may be unusable as an operational alarm threshold. This distinction is
 important in \Cref{sec:error-analysis}, where threshold 0.01 produces high
 recall and tens of false positives per image.
 
-\section{Detection Transformer families}
+\section{Object detector families}
 
 \subsection{Transformer encoder--decoder and attention}
 
@@ -223,7 +223,8 @@ accuracy for latency without retraining the encoder.
   \includegraphics[width=\textwidth]{images/rtdetr_original.png}
   \caption{RT-DETR architecture. Its efficient hybrid encoder combines
   attention-based intra-scale interaction with convolutional cross-scale
-  fusion, while IoU-aware query selection initializes the Transformer decoder~\cite{zhao2024rtdetr}.}
+  fusion, while IoU-aware query selection initializes the Transformer decoder.
+  Source: Zhao et al.~\cite{zhao2024rtdetr}.}
   \label{fig:rtdetr-architecture}
 \end{figure}
 
@@ -238,6 +239,19 @@ efficiency is characterized through detector-only forward-pass latency measured
 on a specified GPU. Preprocessing and postprocessing are excluded, so these
 measurements compare the computational cost of the detector configurations
 rather than establish end-to-end real-time deployment performance.
+
+\subsection{RT-DETRv2}
+
+RT-DETRv2 retains the RT-DETR encoder--decoder framework while revising the
+decoder's deformable-attention sampling and the associated training
+strategy~\cite{lv2024rtdetrv2}. It allows the number of sampling points to vary
+across feature scales, provides an optional discrete sampling operator, and
+introduces dynamic augmentation and scale-adaptive hyperparameters. The five-seed
+comparison uses the official COCO-trained detector checkpoint
+\texttt{PekingU/rtdetr\_v2\_r50vd}, rather than an ImageNet-only backbone
+checkpoint. Base and FAM share the same dataset split, training configuration,
+and checkpoint-selection rule defined in \Cref{sec:two-stage-protocol}. The
+comparison evaluates the fusion intervention within this detector.
 
 \subsection{YOLOv10}
 
@@ -263,7 +277,8 @@ one-to-one output removes the need for NMS.
   \includegraphics[width=0.82\textwidth]{images/yolov10_dual_assignment_original.png}
   \caption{YOLOv10 consistent dual assignments. A shared backbone and PAN
   support one-to-many and one-to-one detection heads during training; only the
-  one-to-one branch is retained for NMS-free inference.~\cite{wang2024yolov10}.}
+  one-to-one branch is retained for NMS-free inference. Source: Wang et
+  al.~\cite{wang2024yolov10}.}
   \label{fig:yolov10-dual-assignments}
 \end{figure}
 
@@ -273,6 +288,18 @@ useful transfer target: both detector families receive corresponding
 multi-scale RGB and IR features, but RT-DETR processes them with a hybrid
 encoder and query decoder, whereas YOLOv10 processes them through a
 convolutional neck and dense detection head.
+
+\subsection{YOLO26}
+
+YOLO26 is a later Ultralytics detector family with a lighter
+distribution-focal-loss-free regression head, optional native end-to-end
+inference, and a revised optimization and label-assignment
+recipe~\cite{jocher2026yolo26}. The pretrained YOLO26s model is adapted to
+use separate RGB and IR backbones, whose features are fused at pyramid levels
+P3, P4, and P5. Base and FAM are compared over five paired seeds under
+the common Stage-A/Stage-B decision procedure, with a fixed fifty-epoch
+Stage-A budget. The measured contrast concerns this dual-backbone adaptation,
+not the stock single-stream detector.
 
 \begin{table}[htbp]
   \centering
@@ -289,7 +316,9 @@ convolutional neck and dense detection head.
     Deformable DETR & sparse multi-scale samples & reference-point queries & exploratory extension \\
     DINO & deformable multi-scale features & denoised and mixed queries & exploratory negative result \\
     RT-DETR & efficient hybrid pyramid & uncertainty-selected queries & primary detector \\
-    YOLOv10 & convolutional pyramid and neck & consistent dense assignments & transfer detector \\
+    RT-DETRv2 & revised deformable decoder & uncertainty-selected queries & five-seed Stage-A transfer \\
+    YOLOv10 & convolutional pyramid and neck & consistent dense assignments & five-seed fixed-budget transfer \\
+    YOLO26 & convolutional pyramid and lighter head & dense/end-to-end heads & five-seed Stage-A transfer \\
     \bottomrule
   \end{tabular}
   \end{adjustbox}
@@ -303,7 +332,11 @@ predictions, and intermediate fusion combines learned features. This work uses
 intermediate fusion because each sensor receives a dedicated backbone while
 the detector still operates on a joint multi-scale representation.
 
-The inherited RT-DETR baseline uses element-wise addition:
+In the RT-DETR, RT-DETRv2, and YOLO comparisons, \emph{Base} denotes the
+dual-backbone RGB--IR configuration without FAM, not the stock single-stream
+detector. Both Base and FAM use additive fusion but the FAM configuration first
+transforms the IR features, while the RT-DETR Base configuration uses direct
+element-wise addition:
 
 \begin{equation}
   F_{\mathrm{fused}}^{(i)} = F_{\mathrm{RGB}}^{(i)} + F_{\mathrm{IR}}^{(i)},
@@ -395,11 +428,15 @@ For every pyramid level, the FAM concatenates RGB and IR features and predicts
   \label{eq:fam-fusion}
 \end{align}
 
-The offset/mask predictor is initialized to zero, so initial offsets are null
-and masks are approximately 0.5. The DCNv2 filter weights retain their own
-initialization. Consequently, the standard FAM does \emph{not} start as a
-mathematical identity: null offsets preserve the initial sampling geometry but
-do not make the filtered output equal to the input.
+The standalone FAM constructor initializes the offset/mask predictor to zero,
+which gives null offsets and masks of 0.5. In the complete RT-DETR model used
+in the experiments, however, the subsequent Hugging Face \texttt{post\_init()}
+step replaces the predictor weights with seed-dependent random values.
+RT-DETRv2 preserves this effective initialization. Null offsets and constant
+masks are therefore not guaranteed at the start of training in these models.
+The standard FAM does \emph{not} start as a mathematical identity. Even with
+null offsets, the DCNv2 filter weights and modulation masks do not in general
+make the filtered output equal to the input.
 
 Because there is no ground-truth displacement field, the thesis uses the term
 \emph{geometric-functional transformation}. Nonzero offsets show that the
@@ -421,12 +458,13 @@ between the cameras. This distinction motivates the internal diagnostics in
 
 \section{Dataset organization and evaluation conditions}
 
-All final comparisons use synchronized WiSARD RGB--IR pairs. The effective
-split audit is summarized in \Cref{tab:dataset-splits}. Earlier
+The primary fusion comparisons use synchronized WiSARD RGB--IR pairs. The
+effective split audit is summarized in \Cref{tab:dataset-splits}. Earlier
 experiments also used unpaired visible or thermal folders to vary the training
-inventory. The final study instead restricts training and primary evaluation to
-paired samples, so that a modality comparison does not also change the set of
-scenes or annotations.
+inventory. The final training inventory is restricted to paired samples.
+Modality evaluations follow two distinct protocols: paired missing-input
+comparisons retain the same frames and VIS annotations, whereas native-sensor
+evaluations use sensor-specific images and annotations.
 
 \subsection{WiSARD acquisitions and experimental roles}
 
@@ -456,8 +494,12 @@ roles are summarized in \Cref{tab:wisard-acquisitions}.
     MtErie, three pairs & 708
       & Previously consulted internal development benchmark used for the main
         paired comparisons. \\
-    Carnation & 739
+    Carnation 0023/0024 & 739
       & Separately frozen stress test for severe cross-modal scale mismatch. \\
+    Carnation 0025/0026 & 1,313
+      & Previously unused internal acquisition-level confirmation set. \\
+    FHL 0407/0408 & 1,035
+      & Previously unused internal acquisition-level confirmation set. \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -495,17 +537,24 @@ validation introduced for Stage A.
 
 MtErie denotes the three synchronized WiSARD VIS--IR sequences used for the
 main 708-frame benchmark. Their VIS annotations define the common reference
-coordinate system and ground truth for the final comparisons. MtErie was
-consulted during architectural development and is therefore an \emph{internal
+coordinate system and ground truth for the fusion and paired missing-input
+comparisons. MtErie was consulted during architectural development and is
+therefore an \emph{internal
 development benchmark}. Final paired comparisons remain useful, particularly
 after the protocol was frozen, but may be optimistic with respect to a new acquisition.
-Carnation denotes a separate paired WiSARD acquisition used once as a predefined
-739-frame external stress case: its visible camera is substantially more zoomed-in
+Carnation 0023/0024 denotes a separate paired WiSARD acquisition used once as a predefined
+739-frame acquisition-level stress case: its visible camera is substantially more zoomed-in
 than its thermal camera, creating a severe cross-modal scale mismatch. It is not a new
 validation set or an estimate of general domain generalization.
 
-At evaluation time, the three modality conditions retain a common dataset and
-annotation set:
+Carnation 0025/0026 and FHL 0407/0408 are distinct, larger paired acquisitions
+used only in the later frozen confirmation. Exact identifier intersection
+produces 1,313 and 1,035 pairs, respectively. They were previously unused and
+not inspected for experimental selection, but remain internal WiSARD data and
+not external holdouts.
+
+In the paired modality evaluations, the three input conditions retain a common
+dataset and annotation set:
 
 \begin{description}
   \item[VIS+IR] both streams from each synchronized pair are supplied;
@@ -515,17 +564,22 @@ annotation set:
         visible input is masked, so no RGB signal is available to the model.
 \end{description}
 
-Thus, VIS and IR are controlled missing-input evaluations rather than datasets
-in which the opposite sensor file is absent. RT-DETR represents the missing
-stream as zero-filled input while retaining its four-channel interface; the
-YOLOv10 evaluator uses an explicit modality mask and bypasses the excluded
+Under this protocol, VIS and IR are controlled missing-input evaluations rather
+than datasets in which the opposite sensor file is absent. RT-DETR represents
+the missing stream as zero-filled input while retaining its four-channel
+interface; the YOLOv10 evaluator uses an explicit modality mask and bypasses the excluded
 backbone and FAM path. The conditions therefore share images and annotations,
 but their internal execution is not architecturally identical.
 
+Native-sensor evaluations instead retain the relevant sensor's own image
+coordinates and annotations and may also use a different frame inventory, as
+distinguished in \Cref{sec:coordinate-contracts}. They are reported separately
+from these paired missing-input comparisons.
+
 \section{Inherited experimental starting point}
 
-Previous work established DETR with Modal Dropout, the RT-DETR Additive
-baseline, a fixed \(2\times2\) tiling experiment related to slicing-aided
+Previous work established DETR with Modal Dropout, the RT-DETR Base
+configuration, a fixed \(2\times2\) tiling experiment related to slicing-aided
 small-object detection~\cite{akyon2022sahi}, and the initial CMX comparison.
 It subsequently introduced FAM on RT-DETR, Hybrid CMX, and Deformable DETR
 with nonlinear channel fusion and FAM. The resulting historical scores were

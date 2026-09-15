@@ -723,7 +723,7 @@ def render_qualitative_figures(payloads, manifest, dataset_root, output_dir):
             axes[0, 1].imshow(infrared, cmap="gray")
             axes[0, 1].set_title("IR")
             for axis, label, sample in (
-                (axes[1, 0], "Additive", additive),
+                (axes[1, 0], "Base", additive),
                 (axes[1, 1], "FAM", fam),
             ):
                 axis.imshow(rgb)
@@ -749,6 +749,33 @@ def render_qualitative_figures(payloads, manifest, dataset_root, output_dir):
             figure.savefig(output_path, dpi=180)
             plt.close(figure)
             print(f"Saved qualitative figure: {output_path}")
+
+
+def render_qualitative_montages(manifest, output_dir):
+    """Combine the six prespecified panels into one thesis figure per threshold."""
+    from PIL import Image
+
+    figure_dir = output_dir / "figures"
+    panel_dir = figure_dir / "qualitative"
+    panel_size = (1260, 720)
+    records = manifest["selected_samples"]
+    for confidence in FIGURE_CONFIDENCES:
+        confidence_label = str(confidence).replace(".", "")
+        canvas = Image.new("RGB", (2 * panel_size[0], 3 * panel_size[1]), "white")
+        for index, record in enumerate(records):
+            panel_path = panel_dir / (
+                f"sample_{record['sample_index']:03d}_{record['selection_category']}_"
+                f"conf_{confidence_label}.png"
+            )
+            with Image.open(panel_path) as panel:
+                panel = panel.convert("RGB").resize(panel_size, Image.Resampling.LANCZOS)
+                canvas.paste(
+                    panel,
+                    ((index % 2) * panel_size[0], (index // 2) * panel_size[1]),
+                )
+        output_path = figure_dir / f"rtdetr_error_qualitative_conf_{confidence_label}.jpg"
+        canvas.save(output_path, quality=95, subsampling=0)
+        print(f"Saved qualitative montage: {output_path}")
 
 
 def render_paired_summary(combined, output_dir):
@@ -779,7 +806,7 @@ def render_paired_summary(combined, output_dir):
                 )
                 values.append(row["metrics"][metric])
             axis.plot([0, 1], values, marker="o", alpha=0.75, label=f"seed {seed}")
-        axis.set_xticks([0, 1], ["Additive", "FAM"])
+        axis.set_xticks([0, 1], ["Base", "FAM"])
         axis.set_title(title + (" ↑" if higher_is_better else " ↓"))
         axis.grid(alpha=0.25)
     axes[0, 0].legend(fontsize=8, ncol=2)
@@ -824,7 +851,7 @@ def render_threshold_sensitivity(combined, output_dir):
                 yerr=standard_deviations,
                 marker="o",
                 capsize=3,
-                label=configuration.capitalize(),
+                label={"additive": "Base", "fam": "FAM"}[configuration],
                 color=color,
             )
         axis.set_xscale("log")
@@ -1021,6 +1048,7 @@ def main():
         ),
     )
     render_qualitative_figures(payloads, manifest, dataset_root, output_dir)
+    render_qualitative_montages(manifest, output_dir)
     render_paired_summary(combined, output_dir)
     render_threshold_sensitivity(combined, output_dir)
 

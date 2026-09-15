@@ -279,93 +279,88 @@ def title(ctx, value, width, subtitle=None, *, subtitle_size=9.5):
         draw_text(ctx, subtitle, width / 2, 49, size=subtitle_size, align="center", colour=MID)
 
 
-def generate_timeline():
-    """Render the study chronology as a portrait, top-to-bottom flow."""
-    width, height = 680, 850
-    surface, ctx = pdf_canvas("experimental_timeline.pdf", width, height)
+def generate_experimental_design():
+    """Render evaluation scopes and the shared five-seed selection protocol.
 
-    phases = [
-        (
-            LIGHT_BLUE,
-            BLUE,
-            "1  Previous work",
-            "Inherited starting point",
-            "DETR + Modal Dropout\nRT-DETR Additive; tiling and CMX\nFAM on RT-DETR\nDeformable DETR + FAM",
-        ),
-        (
-            LIGHT_ORANGE,
-            ORANGE,
-            "2  Exploratory development",
-            "Previous protocol",
-            "Lazy / Eager / Frozen FAM\nSpatial Dropout and SSJ\nDeformable DETR + FAM + SSJ\nComplete DINO baseline",
-        ),
-        (
-            LIGHT_PURPLE,
-            PURPLE,
-            "3  Reproducibility audit",
-            "Protocol redesign",
-            "CUDA variability and transferred person head\nValidation and checkpoint audit\nTraining-only Modal Dropout\nIsolated processes and paired seeds",
-        ),
-        (
-            LIGHT_TEAL,
-            TEAL,
-            "4  Historical locked evaluation",
-            "FAM reference evidence",
-            "RT-DETR: six configurations × five seeds\nDiagnostics, bounded offsets and error analysis\nCarnation stress test and compute\nYOLOv10 transfer: Additive versus FAM",
-        ),
-        (
-            LIGHT_GREEN,
-            GREEN,
-            "5  Validation-led extension",
-            "Stage A / Stage B",
-            "Whole-video validation and best checkpoints\nP2, resolution, gating and RCRA ablations\nMatched full-data FAM versus RCRA\nPaired 708-frame modality characterization",
-        ),
-    ]
+    This is a design diagram, not a chronology: the locked comparison and
+    diagnostic panels have no arrows into the Stage-A/Stage-B decision flow.
+    """
+    width, height = 760, 905
+    surface, ctx = pdf_canvas("experimental_design.pdf", width, height)
+    title(
+        ctx,
+        "Controlled five-seed experimental design",
+        width,
+        "Paired seeds 40–44 · configuration-level comparisons",
+        subtitle_size=13,
+    )
 
-    card_x, card_w, card_h = 92, 545, 130
-    card_y = [18, 170, 322, 506, 690]
-    line(ctx, 53, 42, 53, 812, colour=NAVY, width=2.5)
-    arrow(ctx, 53, 812, 53, 834, colour=NAVY, width=2.5, head=10)
+    box(ctx, 35, 74, 690, 107, "", fill=LIGHT_BLUE, stroke=BLUE, line_width=2)
+    draw_text(ctx, "Locked reference comparison", 55, 103, size=17, bold=True, colour=BLUE)
+    draw_text(
+        ctx,
+        "Six RT-DETR configurations; YOLOv10 Base versus FAM\n"
+        "Full-data, fixed-budget training · final checkpoints · MtErie evaluation",
+        55, 133, size=14, line_height=23,
+    )
 
-    for index, ((fill, stroke, heading, tag, body), y) in enumerate(zip(phases, card_y)):
-        centre_y = y + card_h / 2
-        circle(ctx, 53, centre_y, 9, fill=stroke, stroke=WHITE, width=2)
-        arrow(ctx, 62, centre_y, card_x, centre_y, colour=stroke, width=1.8, head=8)
-        box(ctx, card_x, y, card_w, card_h, "", fill=fill, stroke=stroke, radius=14, line_width=2)
-        draw_text(ctx, heading, card_x + 22, y + 28, size=16, bold=True, colour=stroke)
-        box(
-            ctx,
-            card_x + card_w - 190,
-            y + 12,
-            170,
-            29,
-            tag,
-            fill=WHITE,
-            stroke=stroke,
-            size=12,
-            bold=True,
-            radius=15,
-        )
-        line(ctx, card_x + 22, y + 48, card_x + card_w - 22, y + 48, colour=stroke, width=1.1)
-        draw_text(ctx, body, card_x + 26, y + 68, size=12.5, line_height=17, max_width=card_w - 52)
+    draw_text(
+        ctx, "VALIDATION-LED COMPARISONS", 380, 211,
+        size=13, bold=True, align="center", colour=TEAL,
+    )
+    box(ctx, 35, 228, 690, 268, "", fill=LIGHT_TEAL, stroke=TEAL, line_width=2)
+    draw_text(ctx, "Stage A · five seeds for every configuration", 55, 259, size=17, bold=True, colour=TEAL)
+    draw_text(
+        ctx,
+        "Train: 3,123 paired frames · validation: 896 paired frames\n"
+        "Whole-video split · matched candidate/control comparisons",
+        55, 289, size=14, line_height=23,
+    )
+    line(ctx, 55, 326, 705, 326, colour=TEAL, width=1)
+    draw_text(
+        ctx,
+        "RT-DETR FAM: architecture, RCRA, box-guided and mixed consistency\n"
+        "RT-DETRv2 and YOLO26: Base versus FAM\n"
+        "Budget: 10 epochs for RT-DETR / v2; 50 epochs for YOLO26",
+        55, 351, size=14, line_height=23,
+    )
+    line(ctx, 55, 414, 705, 414, colour=TEAL, width=1)
+    draw_text(
+        ctx,
+        "Primary: best validation mAP@50 · minimum improvement 0.001\n"
+        "Secondary: final-epoch checkpoint · no early stopping",
+        55, 445, size=14, line_height=23, bold=True,
+    )
 
-        if index == 2:
-            boundary_y = y + card_h + 28
-            line(ctx, 32, boundary_y, 648, boundary_y, colour=RED, width=2.2, dashed=True)
-            box(
-                ctx,
-                180,
-                boundary_y - 18,
-                320,
-                36,
-                "CONTROLLED MULTI-SEED EVIDENCE",
-                fill=LIGHT_RED,
-                stroke=RED,
-                size=14,
-                bold=True,
-                radius=18,
-            )
+    arrow(ctx, 285, 496, 285, 530, colour=TEAL, width=2, head=9)
+    box(
+        ctx, 35, 530, 500, 80,
+        "Aggregate promotion criterion\nMean paired Δ ≥ +0.01 and ≥ 4/5 positive deltas\nPlus configuration-specific checks",
+        fill=LIGHT_GOLD, stroke=GOLD, size=14, bold=True, line_width=2,
+    )
+    arrow(ctx, 535, 570, 571, 570, colour=RED, width=2, head=8)
+    box(ctx, 575, 540, 150, 60, "Not met:\nno Stage B", fill=LIGHT_RED, stroke=RED, size=14, bold=True)
+    arrow(ctx, 285, 610, 285, 655, colour=GREEN, width=2, head=9)
+    draw_text(ctx, "Only if all criteria are met", 303, 639, size=12.5, colour=GREEN, bold=True)
 
+    box(ctx, 35, 655, 690, 116, "", fill=LIGHT_GREEN, stroke=GREEN, line_width=2)
+    draw_text(ctx, "Stage B · matched full-data confirmation", 55, 685, size=17, bold=True, colour=GREEN)
+    draw_text(
+        ctx,
+        "Fresh pretrained initialization · all 4,019 training pairs · five seeds\n"
+        "Fixed budget · final checkpoint only · no validation-based selection\n"
+        "Evaluation on the common 708 MtErie pairs after training is complete",
+        55, 712, size=14, line_height=23,
+    )
+
+    line(ctx, 35, 794, 725, 794, colour=MID, dashed=True)
+    box(ctx, 35, 811, 690, 77, "", fill=(0.975, 0.978, 0.982), stroke=MID)
+    draw_text(ctx, "Separate diagnostic and generalization evidence", 55, 839, size=16, bold=True, colour=NAVY)
+    draw_text(
+        ctx,
+        "Modality, alignment and replay audits · synthetic stress · other acquisitions",
+        55, 866, size=13.5,
+    )
     surface.finish()
 
 
@@ -505,12 +500,12 @@ def generate_rtdetr_results():
     def map_y(value):
         return panel_a_bottom - (value - y_min) / (y_max - y_min) * (panel_a_bottom - panel_a_top)
 
-    draw_text(ctx, "A  VIS+IR mAP@50: FAM versus Additive", 28, 31, size=16, bold=True, colour=NAVY)
+    draw_text(ctx, "A  VIS+IR mAP@50: FAM versus Base", 28, 31, size=16, bold=True, colour=NAVY)
     for tick in [0.20, 0.25, 0.30, 0.35, 0.40, 0.45]:
         y = map_y(tick)
         line(ctx, 105, y, 600, y, colour=GRID, width=0.9)
         draw_text(ctx, f"{tick:.2f}", 94, y + 5, size=13, align="right", colour=MID)
-    draw_text(ctx, "Additive", x_left, 385, size=15, bold=True, align="center")
+    draw_text(ctx, "Base", x_left, 385, size=15, bold=True, align="center")
     draw_text(ctx, "FAM", x_right, 385, size=15, bold=True, align="center")
     for seed, colour, shape, left_value, right_value in zip(seeds, colours, marker_shapes, additive, fam):
         y1, y2 = map_y(left_value), map_y(right_value)
@@ -786,7 +781,7 @@ def generate_yolo_architecture():
         box(ctx, 28, y, 125, 28, f"RGB {level}", fill=LIGHT_BLUE, stroke=BLUE, size=13, bold=True)
         box(ctx, 28, y + 38, 125, 28, f"IR {level}", fill=LIGHT_ORANGE, stroke=ORANGE, size=13, bold=True)
         draw_text(ctx, metadata, 172, y + 34, size=13, colour=MID, max_width=140)
-        box(ctx, 325, y + 3, 190, 60, f"Additive or FAM\n{level} fusion", fill=LIGHT_TEAL, stroke=TEAL, size=14, bold=True)
+        box(ctx, 325, y + 3, 190, 60, f"Base or FAM\n{level} fusion", fill=LIGHT_TEAL, stroke=TEAL, size=14, bold=True)
         box(ctx, 555, y + 9, 80, 48, f"fused\n{level}", fill=LIGHT_TEAL, stroke=TEAL, size=13, bold=True)
         arrow(ctx, 153, y + 14, 325, y + 18, colour=BLUE, head=7)
         arrow(ctx, 153, y + 52, 325, y + 48, colour=ORANGE, head=7)
@@ -824,14 +819,14 @@ def generate_yolo_architecture():
 
 
 def main():
-    generate_timeline()
+    generate_experimental_design()
     generate_rtdetr_architecture()
     generate_rtdetr_results()
     generate_p5_collapse()
     generate_yolo_architecture()
     for path in sorted(OUT.glob("*.pdf")):
         if path.name in {
-            "experimental_timeline.pdf",
+            "experimental_design.pdf",
             "rtdetr_fam_architecture.pdf",
             "rtdetr_final_paired_map50.pdf",
             "yolov10_dual_backbone_fam.pdf",

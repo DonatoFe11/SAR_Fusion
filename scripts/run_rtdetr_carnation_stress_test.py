@@ -491,7 +491,11 @@ def render_paired_map50(combined, output_dir):
     import matplotlib.pyplot as plt
 
     rows = combined["results"]
-    modalities = (("vis_ir", "VIS+IR"), ("vis", "VIS only"), ("ir", "IR only"))
+    modalities = (
+        ("vis_ir", "VIS+IR"),
+        ("vis", "VIS only"),
+        ("ir", "Native IR / IR GT"),
+    )
     figure, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
     for axis, (modality, title) in zip(axes, modalities):
         for seed in EXPECTED_SEEDS:
@@ -506,7 +510,7 @@ def render_paired_map50(combined, output_dir):
                 for configuration in ("additive", "fam")
             ]
             axis.plot([0, 1], values, marker="o", alpha=0.75, label=f"seed {seed}")
-        axis.set_xticks([0, 1], ["Additive", "FAM"])
+        axis.set_xticks([0, 1], ["Base", "FAM"])
         axis.set_title(title)
         axis.set_ylabel("mAP@50")
         axis.grid(alpha=0.25)

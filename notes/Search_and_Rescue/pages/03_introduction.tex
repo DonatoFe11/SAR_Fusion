@@ -73,15 +73,15 @@ selection affect the ranking of RGB--thermal detectors, and which protocol can
 support a fair architecture-development campaign?
 
 \paragraph{RQ2 --- RT-DETR effectiveness and modality use.}
-Does FAM provide a repeatable advantage over additive RT-DETR fusion, and does
-the selected detector obtain a measurable benefit from the thermal stream when
-all modality conditions are evaluated on the same paired frames and ground
-truth?
+Does FAM provide a repeatable advantage over the Base RT-DETR configuration,
+which uses direct additive fusion, and does the selected detector obtain a
+measurable benefit from the thermal stream when all modality conditions are
+evaluated on the same paired frames and ground truth?
 
 \paragraph{RQ3 --- Mechanism and improved alignment.}
 What geometric-functional transformation does FAM learn across P3, P4, and P5,
 which failure modes does it exhibit, and can a reliability-conditioned local
-selection between raw and aligned IR improve it more consistently than simpler
+modulation of the FAM correction improve it more consistently than simpler
 alignment, resolution, or gating interventions?
 
 \paragraph{RQ4 --- Operational relevance.}
@@ -90,15 +90,18 @@ severe sensor-scale mismatch delimit its usefulness for UAV Search and Rescue?
 
 \paragraph{RQ5 --- Architectural transferability.}
 Does the FAM advantage observed in RT-DETR transfer to other detector families
-under the implemented Deformable DETR, DINO, and YOLOv10 configurations?
+under the implemented Deformable DETR, YOLOv10, RT-DETRv2, and YOLO26
+configurations?
 
 \section{Scope and relationship with previous work}
 
-This thesis builds on previous work on RGB--thermal detection. That
-work examined DETR, Modal Dropout, the RT-DETR Additive fusion baseline, fixed
-tiling, and CMX. Subsequent work introduced FAM on RT-DETR, developed a Hybrid
-CMX variant, and adapted Deformable DETR to channel fusion with FAM. These
-components define the starting point of the present work.
+This thesis builds on preliminary RGB--thermal detection project work conducted
+before this thesis. That work examined DETR, Modal Dropout, the Base RT-DETR
+configuration with direct additive fusion, fixed tiling, and CMX. Subsequent
+preliminary work introduced FAM on RT-DETR, developed a Hybrid CMX variant, and
+adapted Deformable DETR to channel fusion with FAM. These components, preserved
+in the public project repository identified in \Cref{chap:appendices}, define
+the starting point of the present work.
 
 The FAM is therefore \emph{not} presented as a new architecture invented in
 this thesis. It is described in full so that the document remains
@@ -110,10 +113,10 @@ outside the original RT-DETR setting. The thesis additionally develops
 Reliability-Conditioned Residual Alignment (RCRA), an extension developed in
 this thesis that locally selects how much of the FAM correction to retain.
 
-Early experiments were useful for discovering bugs and generating hypotheses, 
-but many were individual runs produced before the final validation and checkpoint 
-policy was defined. They are retained as an exploratory development history and are 
-not mixed with the main multi-seed estimates.
+Model comparisons are reported within their respective data splits, training
+budgets and checkpoint-selection protocols. Analysis of FAM's internal
+behavior complements these comparisons, but does not replace the performance
+criteria used for Stage-A/B model selection.
 
 \section{Contributions}
 
@@ -130,15 +133,22 @@ The contributions developed in the present work are:
   \item a mechanistic study of FAM across pyramid levels, combining internal
         diagnostics, factorial interventions, identification of a compensated
         P5 collapse, and a five-seed bounded-offset test;
-  \item a validation-led comparison of tiny-object, resolution, reliability,
-        and residual-alignment hypotheses, followed by a configuration-matched
-        full-data comparison of RCRA and FAM;
+  \item a five-seed validation-led comparison of tiny-object, resolution,
+        reliability, residual-alignment, mixed-consistency, and supervised
+        box-guided hypotheses under the common Stage-A/B protocol, including
+        configuration-matched full-data confirmation of RCRA and FAM;
   \item a coordinate-controlled modality audit on the same 708 paired frames,
         distinguishing paired missing-RGB robustness from native-IR detection;
   \item an explicit delimitation of the result through paired error analysis,
         the frozen Carnation scale-mismatch stress test, a detector-only
         compute benchmark, and a controlled negative transfer result on
-        dual-backbone YOLOv10.
+        dual-backbone YOLOv10;
+  \item a predeclared and versioned confirmation on two previously unused
+        internal WiSARD acquisitions and a controlled synthetic geometric
+        stress test;
+  \item paired five-seed Stage-A transfer comparisons of Base and FAM
+        fusion in RT-DETRv2 and YOLO26, with validation-selected checkpoints
+        as primary endpoints and final-epoch checkpoints as diagnostics.
 \end{enumerate}
 
 Exploratory DINO and Deformable DETR studies are retained as development
@@ -151,12 +161,13 @@ findings fail to transfer under the studied conditions.
 
 \Cref{chap:background} introduces the dataset, detector families, multimodal
 fusion, missing-modality training, and the inherited architectural starting
-point. \Cref{chap:methodology} reconstructs the subsequent exploratory
-development and explains how the variability investigation led first to the
-historical locked comparison and then to the two-stage development protocol.
+point. \Cref{chap:methodology} defines the experimental methods, distinguishes
+the historical locked comparison from validation-led model development, and
+specifies the common five-seed, two-stage protocol.
 \Cref{chap:evaluation} presents the main RT-DETR results, the validation-led
 architecture campaign and modality audit, internal FAM diagnostics,
 bounded-offset intervention, error analysis, Carnation stress test,
-computational cost, and YOLOv10 transfer study. Finally,
-\Cref{chap:discussion} answers the research questions, states the validity
+confirmation on previously unused acquisitions, controlled geometric stress,
+computational cost, and five-seed detector-transfer studies.
+Finally, \Cref{chap:discussion} answers the research questions, states the validity
 boundaries, and outlines future work.

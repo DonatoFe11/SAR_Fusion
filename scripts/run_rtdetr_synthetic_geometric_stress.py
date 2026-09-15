@@ -672,6 +672,8 @@ def build_curves(aggregate, protocol, output_dir):
         name: settings["curve_label"]
         for name, settings in protocol["configurations"].items()
     }
+    # Keep protocol identifiers unchanged while using thesis terminology in plots.
+    labels["historical_additive"] = "Historical Base"
     colors = {
         "historical_additive": "#7f7f7f",
         "historical_fam": "#1f77b4",

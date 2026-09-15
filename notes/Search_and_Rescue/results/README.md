@@ -4,6 +4,51 @@ Questa directory contiene risultati compatti destinati alla tesi. Gli output
 grezzi completi restano in `out/`, che è ignorata da Git, per evitare di
 versionare decine di megabyte di predizioni frame-level.
 
+Nei nomi storici degli artefatti e nei campi macchina, `additive` identifica la
+configurazione chiamata **Base** nella tesi: entrambe le configurazioni terminano
+con un'addizione, mentre soltanto FAM trasforma prima le feature IR.
+
+## Confronti Stage A a cinque seed: allineamento e trasferimento
+
+Gli artefatti usati dalle tabelle aggregate della tesi sono
+[`stage_a_five_seed_comparison.csv`](stage_a_five_seed_comparison.csv) e
+[`stage_a_five_seed_comparison.json`](stage_a_five_seed_comparison.json).
+Contengono 35 repliche, cinque per ciascuna configurazione: FAM standard
+RT-DETR, mixed consistency, box-guided P3, RT-DETRv2 Additive/FAM e YOLO26
+Additive/FAM. Il CSV conserva i singoli seed come provenienza verificabile;
+il testo della tesi presenta confronti aggregati, non pilot o run isolate.
+
+Il protocollo comune usa 3.123 coppie train, 896 coppie validation FHL
+0401/0402, seed 40--44, nessun early stopping e best validation mAP@50 come
+primario (`min_delta=0.001`). Le ultime epoche sono una diagnostica distinta:
+10 per RT-DETR/RT-DETRv2, 50 per YOLO26. Il JSON contiene statistiche
+campionarie e contrasti appaiati, con IC t al 95% e numero di vittorie.
+
+| Contrasto sui best | Delta medio mAP@50 | Vittorie | Stage B |
+|---|---:|---:|---|
+| Mixed − FAM standard | -0,055126 | 0/5 | non attivato |
+| Box-guided − FAM standard | +0,007717 | 2/5 | non attivato |
+| RT-DETRv2 FAM − Additive | +0,022036 | 3/5 | non attivato |
+| YOLO26 FAM − Additive | -0,023418 | 1/5 | non attivato |
+
+Sono richiesti sia un delta medio almeno `+0.01` sia almeno quattro vittorie.
+RT-DETRv2 supera la soglia media, ma non quella di stabilità: non ha un effetto
+medio negativo. Le cinque baseline FAM RT-DETR sono riutilizzate; configurazioni
+e inizializzazioni sono state confrontate, senza attestare identità completa
+del codice e runtime storici. Ogni detector usa il proprio controllo Additive,
+e le mAP non costituiscono una classifica fra recipe e budget diversi.
+
+Verifica del 14 settembre 2026: history complete per le 25 run RT-DETR/RT-DETRv2,
+dieci run YOLO26 da 50 epoche e replay dei best YOLO26 coerenti. La run RT-DETRv2
+Additive seed 40 interrotta è esclusa e sostituita dalla replica completa dello
+stesso seed, non conteggiata due volte. Non sono state eseguite nuove inferenze
+sul test né le diagnostiche multiseed mixed sulle modalità isolate o box-guided
+sul campo geometrico; queste ultime non sono desumibili dagli esiti dei pilot.
+
+Le sezioni archiviate sui pilot mixed, box-guided e YOLO26 conservano soltanto
+la provenienza dei vecchi artefatti: i loro divieti sugli altri seed e i loro
+risultati non descrivono le campagne aggregate riportate qui.
+
 ## RT-DETR + FAM: selezione `best` contro `latest`
 
 Il file
@@ -228,10 +273,10 @@ SHA-256 degli artefatti versionati:
 
 ```text
 CSV:    f37b984c61e9aab51afa7706d57407d898048c9feb9691a5fb5e40d3405613ef
-Figura: c94eb817972c06abbfe2c742c69432c7c140d8343988947424bf11b2808b5854
+Figura: 55f49b8847175f825671718c6ed1cd129ca978b817e92520674f0a6b4796a13d
 ```
 
-## RT-DETR FAM: screen mixed consistency seed 40
+## Archivio — RT-DETR FAM: screen mixed consistency seed 40
 
 Il file
 [`rtdetr_fam_mixed_consistency_probe_evaluation.csv`](rtdetr_fam_mixed_consistency_probe_evaluation.csv)
@@ -251,7 +296,7 @@ Il CSV versionato ha SHA-256:
 5cb36e63d7a5758215e9fa4cf431e3ad4e56d7b285259dd00466d7627b608d65
 ```
 
-## RT-DETR FAM Box-Guided P3: inventario e probe tecnico
+## Archivio — RT-DETR FAM Box-Guided P3: inventario e probe tecnico
 
 La variante `box_guided_common_offset_p3` aggiunge a P3 un campo comune
 `(dy, dx)` debolmente supervisionato dai box appaiati e lascia P4/P5 come FAM
@@ -328,7 +373,7 @@ meccanismo geometrico apprende ma non migliora la detection, il fallback
 cost-volume non viene attivato; la direzione successiva indicata dal piano è
 RT-DETRv2 + FAM.
 
-## YOLO26 dual-backbone: pilot e repair Additive seed 40
+## Archivio — YOLO26 dual-backbone: pilot e repair Additive seed 40
 
 YOLO26s ufficiale è stato integrato con due backbone RGB/IR e fusione
 P3/P4/P5, congelando Additive e FAM prima dello Stage A. Il pilot Additive ha

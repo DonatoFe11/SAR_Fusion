@@ -88,7 +88,7 @@ and intervals are exploratory and are not used as a binary decision rule.
   \begin{adjustbox}{max width=\textwidth}
   \begin{tabular}{lccccc}
     \toprule
-    Contrast & Mean delta & SD delta & 95\% CI & Wins & Paired (t) / Wilcoxon (p) \\
+    Contrast & Mean delta & SD delta & 95\% CI & Wins & Paired \(t\)-test \(p\) / Wilcoxon \(p\) \\
     \midrule
     FAM -- Base & +0.0700 & 0.0531 & [+0.0040,+0.1359] & 5/5 & 0.0421 / 0.0625 \\
     FAM + IR Dropout -- FAM & +0.0091 & 0.0869 & [-0.0988,+0.1171] & 3/5 & 0.8260 / 0.8125 \\
@@ -166,13 +166,12 @@ same-population comparison.
 \section{Validation-led RT-DETR extension campaign}
 \label{sec:validation-led-campaign}
 
-\subsection{Stage-A checkpoint baseline}
+\subsection{Stage-A checkpoint reference}
 
-The complete-video split and checkpoint rule in
-\Cref{sec:two-stage-protocol} were first applied to standard FAM for seeds
-40--44. All runs completed ten epochs. The selected epochs were 1, 4, 6, 1,
-and 1, showing that the decline after early epochs was repeatable rather than a
-logging anomaly.
+The standard-FAM reference uses the complete-video split and checkpoint rule in
+\Cref{sec:two-stage-protocol} for seeds 40--44. All runs completed ten epochs.
+The selected epochs were 1, 4, 6, 1, and 1, showing that the decline after
+early epochs was repeatable rather than a logging anomaly.
 
 \begin{table}[htbp]
   \centering
@@ -201,11 +200,13 @@ not show that the new split improves absolute performance over historical FAM:
 the Stage-A model optimizes only 3,123 frames, while the historical
 \(0.3780\pm0.0440\) result optimizes all 4,019 and uses epoch 10.
 
-\subsection{Stage-A candidate screening}
+\subsection{Five-seed Stage-A candidate comparison}
 
 \Cref{tab:stage-a-candidates} summarizes the ablations performed under the
-common complete-video validation protocol. FAM is the paired reference for
-every delta.
+common complete-video validation protocol. Standard FAM is the paired reference
+for every delta, including mixed consistency and box-guided alignment.
+All configurations complete ten epochs for every seed and selection is based on
+the validation best.
 
 \begin{table}[htbp]
   \centering
@@ -223,6 +224,8 @@ every delta.
     Post-FAM reliability gate & 0.1662 \(\pm\) 0.0087 & +0.0016 & 3/5 & [-0.0242,+0.0274] & reject \\
     Gate with \(10\times\) LR & 0.1546 \(\pm\) 0.0200 & -0.0099 & 3/5 & [-0.0512,+0.0314] & reject \\
     Scalar residual control & 0.1603 \(\pm\) 0.0127 & -0.0043 & 2/5 & [-0.0284,+0.0199] & reject \\
+    Mixed consistency & 0.1094 \(\pm\) 0.0328 & -0.0551 & 0/5 & [-0.0980,-0.0122] & reject \\
+    Box-Guided P3 & 0.1723 \(\pm\) 0.0233 & +0.0077 & 2/5 & [-0.0327,+0.0481] & reject \\
     RCRA & \textbf{0.1825 \(\pm\) 0.0257} & \textbf{+0.0179} & \textbf{4/5} & [-0.0350,+0.0709] & promote \\
     \bottomrule
   \end{tabular}
@@ -251,10 +254,57 @@ out an inactive control and supports carrying the conditional RCRA candidate
 to Stage B. It does not establish statistical superiority over the scalar
 model, which RCRA beats in only 3/5 direct pairs.
 
+\subsection{Consistency and box-guided alignment}
+
+Mixed consistency reduces best-validation \mapfifty{} in all five pairs.
+Its mean is \(0.1094\pm0.0328\), compared with \(0.1646\pm0.0196\) for
+standard FAM. The mean paired difference is \(-0.0551\), with a 95\%
+interval entirely below zero. For four of the five seeds, the
+validation-selected checkpoint comes from the first epoch, before the
+consistency loss is activated. Only seed 41 selects its best checkpoint
+after consistency training has begun.
+
+Box-Guided P3 obtains \(0.1723\pm0.0233\), a mean gain of \(0.0077\).
+The gain is positive in only two pairs, its median is \(-0.0037\), and the
+interval includes zero. It meets neither the required mean improvement nor
+the four-win condition. The five standard-FAM reference runs are shared with
+the other Stage-A alignment comparisons rather than retrained for these two
+candidates.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Final-epoch validation diagnostic for consistency and box-guided
+  alignment. Values are epoch-10 \texttt{latest} \mapfifty{} over five seeds;
+  these scores do not replace the best-checkpoint promotion criterion.}
+  \label{tab:stage-a-five-seed-latest}
+  \begin{adjustbox}{max width=\textwidth}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Configuration & Mean \(\pm\) SD & Mean paired delta & Wins & 95\% CI of delta \\
+    \midrule
+    FAM reference & 0.0840 \(\pm\) 0.0267 & -- & -- & -- \\
+    Mixed consistency & 0.0291 \(\pm\) 0.0154 & -0.0549 & 0/5 & [-0.0881,-0.0217] \\
+    Box-Guided P3 & 0.0845 \(\pm\) 0.0263 & +0.0005 & 3/5 & [-0.0235,+0.0246] \\
+    \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
+
+The final-epoch diagnostic preserves the mixed-consistency regression and
+shows essentially no mean box-guided advantage. Both candidates fail the
+necessary fusion criterion and do not enter Stage B. Native-IR and
+paired masked-IR evaluations for mixed consistency, and geometric and
+active-versus-zero guide audits for box-guided alignment, were not carried
+out across these five-seed configurations. No aggregate result is claimed
+for those unmeasured conditions. In particular, parameter updates or an
+auxiliary training loss are not evidence that the guide improves registration
+or contributes directly to detection at inference.
+
 \subsection{Matched full-data Stage B}
 
-Stage B restores all 4,019 training frames and trains RCRA and a current-code
-FAM baseline for ten epochs, without validation or automatic MtErie testing.
+Stage B restores all 4,019 training frames and trains RCRA and a matched
+current-code FAM control for ten epochs, without validation or automatic
+MtErie testing.
 The primary evaluation uses the same 708 paired MtErie frames and epoch-10
 \texttt{latest} checkpoints.
 
@@ -283,7 +333,7 @@ The primary evaluation uses the same 708 paired MtErie frames and epoch-10
 RCRA passes the required mean-gain condition but wins only 3/5 seeds, rather
 than the required 4/5. Its paired 95\% interval is
 [-0.0550, 0.0918]. The frozen decision therefore retains matched FAM as the
-final performance baseline. This is not evidence that RCRA is uniformly worse:
+selected model and reference. This is not evidence that RCRA is uniformly worse:
 its mean and median effects are positive, but the improvement is too unstable
 to support replacement.
 
@@ -393,7 +443,7 @@ The ablation consequently fails the predeclared masked-IR improvement and
 native-IR preservation requirements. It is rejected after the single screening
 seed and is not extended to seeds 41--44, MtErie, or Stage B. The result
 supports retaining the original native-IR Modal Dropout in the final FAM
-baseline: matching the paired evaluation convention removes useful native-IR
+model: matching the paired evaluation convention removes useful native-IR
 supervision without making the detector robust to a missing RGB reference.
 
 \section{Mechanistic validation of the FAM}
@@ -608,8 +658,8 @@ the selected model.
 
 This analysis uses the historical locked Base and FAM checkpoints from
 \Cref{sec:rtdetr-main-results}. It characterizes the established FAM gain over
-additive fusion and is not a post-selection comparison of RCRA and the
-current-code Stage-B baseline.
+Base RT-DETR and is not a post-selection comparison of RCRA and the matched
+current-code Stage-B FAM control.
 
 \subsection{Protocol}
 
@@ -714,6 +764,12 @@ Each checkpoint is evaluated in VIS+IR, VIS, and IR, yielding thirty
 evaluations without training, tuning, checkpoint selection, or threshold
 selection.
 
+VIS+IR and VIS are evaluated in the VIS coordinate system against the VIS
+annotations, so those two input conditions are directly comparable. The
+IR-only condition instead uses the native IR images and IR annotations. It
+supports a within-condition comparison between Base RT-DETR and FAM, but its
+absolute score is not directly comparable with the VIS+IR or VIS rows.
+
 Carnation is a deliberately difficult single acquisition. It is not a
 representative sample of SAR domains, a new validation set, or an estimate of
 general domain generalization.
@@ -730,12 +786,12 @@ general domain generalization.
     \midrule
     VIS+IR & 0.1445 \(\pm\) 0.0709 & 0.2408 \(\pm\) 0.0380 & +0.0962 & 4/5 \\
     VIS & 0.1555 \(\pm\) 0.0669 & 0.3196 \(\pm\) 0.0518 & +0.1641 & 5/5 \\
-    IR & 0.1288 \(\pm\) 0.0776 & 0.0979 \(\pm\) 0.0652 & -0.0308 & 1/5 \\
+    Native IR / IR GT & 0.1288 \(\pm\) 0.0776 & 0.0979 \(\pm\) 0.0652 & -0.0308 & 1/5 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-FAM is more tolerant than Base RT-DETR in the fusion condition, with a mean gain
+FAM outperforms Base RT-DETR under this severe scale mismatch, with a mean gain
 of 0.0962 and four paired wins. This is not sufficient to make fusion the best
 input condition. For the FAM checkpoints, VIS-only exceeds VIS+IR in all five
 seeds by a mean of 0.0789. Adding the strongly mismatched IR signal is therefore
@@ -745,7 +801,7 @@ harmful relative to the available visible stream even after FAM transformation.
   \centering
   \includegraphics[width=\textwidth]{images/rtdetr_carnation_paired_map50.png}
   \caption{Paired Carnation results for the three modality conditions. The
-  stress test shows partial damage mitigation by FAM, not correction of the
+  stress test shows relative advantage under mismatch by FAM, not correction of the
   severe mismatch.}
   \label{fig:carnation-paired}
 \end{figure}
@@ -753,6 +809,83 @@ harmful relative to the available visible stream even after FAM transformation.
 The Carnation result defines a boundary of the internal paired-modality
 finding: fusion can outperform VIS on the matched MtErie population, but not
 under this extreme cross-sensor scale mismatch.
+
+\section{Confirmation on previously unused WiSARD acquisitions}
+\label{sec:unused-acquisition-confirmation}
+
+The frozen confirmation campaign evaluates 20 existing checkpoints on
+Carnation 0025/0026 and FHL 0407/0408. Neither acquisition appeared in the
+preserved model-development configurations or outputs. Pairing is by
+exact numeric identifier, yielding 1,313 Carnation pairs and 1,035 FHL pairs.
+These are previously unused internal acquisition sets, not an external holdout.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Frozen acquisition-level confirmation. Values are mean \mapfifty{}
+  over five paired checkpoints; intervals and standard deviations refer to the
+  five within-seed differences.}
+  \label{tab:unused-acquisition-confirmation}
+  \begin{adjustbox}{max width=\textwidth}
+  \begin{tabular}{llrrrr}
+    \toprule
+    Contrast & Acquisition & Reference & Candidate & Paired delta & Wins \\
+    \midrule
+    Historical FAM -- Base & Carnation & 0.3945 & 0.4905 & $(+0.0960\pm0.0595)$ & 5/5 \\
+    Historical FAM -- Base & FHL & 0.2953 & 0.4507 & $(+0.1554\pm0.0909)$ & 5/5 \\
+    Stage-B FAM fusion -- VIS & Carnation & 0.4316 & 0.4336 & $(+0.0019\pm0.0402)$ & 3/5 \\
+    Stage-B FAM fusion -- VIS & FHL & 0.4064 & 0.3808 & $(-0.0256\pm0.0170)$ & 1/5 \\
+    Stage-B RCRA -- FAM & Carnation & 0.4336 & 0.4151 & $(-0.0184\pm0.1149)$ & 2/5 \\
+    Stage-B RCRA -- FAM & FHL & 0.3808 & 0.4174 & $(+0.0366\pm0.1201)$ & 3/5 \\
+    \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
+
+The central historical contrast replicates: FAM exceeds the baseline in all ten
+acquisition--seed comparisons. Giving both acquisitions equal weight produces
+a descriptive macro-average paired gain of $(0.1257\pm0.0521)$, with a 95\%
+interval of [0.0610, 0.1904].
+
+The additional contrasts prevent a stronger interpretation. On Stage-B FAM,
+fusion is essentially tied with VIS on Carnation and is 0.0256 lower on FHL.
+RCRA alternates large positive and negative seed effects and retains a
+macro-average interval spanning zero. FAM can therefore be a better fusion
+operator than the baseline without guaranteeing that IR helps every checkpoint
+on every acquisition.
+
+\section{Controlled synthetic geometric stress}
+\label{sec:synthetic-geometric-stress}
+
+The synthetic stress applies IR-only translations and isotropic scaling to the
+same two acquisitions. In total, 560 new checkpoint--transformation inferences
+are combined with 40 frozen identity results. \Cref{fig:synthetic-stress}
+reports the mean signed relative drop. Positive values are losses, while negative
+values indicate that the perturbation accidentally improved \mapfifty{}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{images/rtdetr_synthetic_geometric_stress_curves.png}
+  \caption{Signed relative \mapfifty{} drop under IR-only translations and
+  rescaling, averaged first across directions within checkpoint and then over
+  five seeds. Non-monotone negative drops show why these transformations cannot
+  be interpreted as calibrated displacement from a known optimum.}
+  \label{fig:synthetic-stress}
+\end{figure}
+
+The response is acquisition-dependent and non-monotone. On Carnation, FAM
+often limits the effect of perturbation, including a smaller mean loss under
+scale 0.9 than Base. On FHL, however, translations improve the baseline more
+than FAM in all five seeds. This yields signed robustness contrasts favoring
+Base even though FAM retains higher absolute accuracy. A synthetic shift
+may be compensating an existing sensor mismatch or changing features
+favorably, rather than measuring distance from correct registration.
+
+The predeclared strong hypothesis---that FAM is always more tolerant to
+geometric perturbation---is therefore not supported. Likewise RCRA has no
+stable advantage over FAM across acquisition, magnitude, and seed. This does
+not undo the absolute FAM gain in \Cref{sec:unused-acquisition-confirmation},
+but it limits its mechanism: the gain cannot generally be attributed to a
+superior physical-registration curve.
 
 \section{Computational cost}
 \label{sec:compute}
@@ -824,7 +957,7 @@ direct alignment operation at inference.
   The FAM operation is the same as the one expanded in
   \Cref{fig:fam-architecture} and is therefore not duplicated internally.
   During unimodal inference the excluded backbone is not executed and FAM is
-  bypassed Consequently, unimodal Base--FAM differences are indirect
+  bypassed. Consequently, unimodal Base--FAM differences are indirect
   effects of training rather than direct alignment effects.}
   \label{fig:yolo-architecture}
 \end{figure}
@@ -848,7 +981,7 @@ epoch after observing MtErie would be retrospective test tuning.
 The final comparison fixes two configurations: dual-backbone Base and
 dual-backbone with FAM, both with feature gating 20/20/60. Each uses paired
 seeds 40--44, 200 fixed epochs, disabled early stopping, no validation-based selection,
-and the final \texttt{last.pt} checkpoint. The 200-epoch horizon was retained 
+and the final \texttt{last.pt} checkpoint. The 200-epoch horizon was retained
 because it was declared in the historical YAML schedule before the final results were observed.
 
 All ten runs completed 200 epochs. Their VIS+IR results are shown in \Cref{tab:yolo-raw}.
@@ -931,20 +1064,118 @@ historical early score.
 This pattern is compatible with late overfitting or specialization to the
 training sessions, but training loss alone does not establish the cause. The
 valid conclusion is that the declared 200-epoch protocol yields a negative FAM
-transfer result. A new YOLO study should reuse the complete-video Stage-A split
-defined in this thesis and freeze a YOLO-specific checkpoint rule before any
-new MtErie evaluation.
+transfer result. A validation-led replication of YOLOv10 would require the
+complete-video Stage-A split and a checkpoint rule fixed before any new
+MtErie evaluation. The YOLO26 comparison below already uses that decision
+structure, with its own frozen training budget.
+
+\section{Five-seed Stage-A detector-transfer comparisons}
+\label{sec:detector-stage-a-comparison}
+
+RT-DETRv2 and YOLO26 use the same five-seed Stage-A decision procedure as the
+alignment ablations in \Cref{sec:validation-led-campaign}. Each detector has
+its own Base control, and both branches use the same 3,123 training pairs
+and 896 whole-video validation pairs. All ten RT-DETRv2 runs complete ten
+epochs, and all ten YOLO26 runs complete fifty epochs. The primary outcome is
+the validation-selected best; the last epoch is reported independently.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Detector-transfer Stage-A validation \mapfifty{}, mean \(\pm\)
+  sample standard deviation across five seeds. Comparisons are within each
+  detector: budgets and optimization recipes differ across families.}
+  \label{tab:detector-stage-a-five-seed}
+  \begin{tabular}{lrrr}
+    \toprule
+    Configuration & Epochs & Best & Final epoch \\
+    \midrule
+    RT-DETRv2 Base & 10 & 0.1544 \(\pm\) 0.0093 & 0.0908 \(\pm\) 0.0460 \\
+    RT-DETRv2 FAM & 10 & 0.1764 \(\pm\) 0.0255 & 0.0987 \(\pm\) 0.0160 \\
+    YOLO26 Base & 50 & 0.0507 \(\pm\) 0.0163 & 0.0013 \(\pm\) 0.0022 \\
+    YOLO26 FAM & 50 & 0.0273 \(\pm\) 0.0149 & 0.0001 \(\pm\) 0.0001 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Paired FAM minus Base contrasts on Stage-A validation.
+  Promotion uses only the best-checkpoint row and requires both a mean gain
+  of at least 0.01 and at least four wins.}
+  \label{tab:detector-stage-a-deltas}
+  \begin{adjustbox}{max width=\textwidth}
+  \begin{tabular}{llrrrl}
+    \toprule
+    Detector & Checkpoint & Mean delta \(\pm\) SD & Wins & 95\% CI & Role / decision \\
+    \midrule
+    RT-DETRv2 & best & +0.0220 \(\pm\) 0.0344 & 3/5 & [-0.0207,+0.0648] & do not promote \\
+    RT-DETRv2 & latest & +0.0079 \(\pm\) 0.0538 & 2/5 & [-0.0589,+0.0747] & diagnostic \\
+    YOLO26 & best & -0.0234 \(\pm\) 0.0148 & 1/5 & [-0.0418,-0.0050] & do not promote \\
+    YOLO26 & last & -0.0012 \(\pm\) 0.0022 & 0/5 & [-0.0039,+0.0016] & diagnostic \\
+    \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
+
+\subsection{RT-DETRv2 with FAM}
+
+FAM increases mean best-validation \mapfifty{} from 0.1544 to 0.1764.
+The mean paired gain of 0.0220 exceeds the required 0.01, but is positive in
+only three of five pairs. Its median is 0.0396 and its 95\% interval spans
+zero. The candidate therefore fails the sign-consistency condition, not the
+mean-gain condition. It would be incorrect to describe this result as a
+negative mean FAM effect or to claim that the gain observed with RT-DETR v1
+must disappear in RT-DETRv2.
+
+The final-checkpoint contrast is also positive on average but wins only two
+pairs and has a wider interval. It does not provide a stable alternative to
+the primary result. All five pairs use matched recorded runtime and source
+manifests, transferred detection-head initialization, and paired input traces.
+These controls reduce avoidable differences; they do not make native CUDA
+deterministic or force an equal whole-model hash when FAM adds parameters.
+No Stage B or new MtErie evaluation is performed for this comparison.
+
+\subsection{YOLO26 dual-backbone Base and FAM}
+
+YOLO26 FAM has lower best-validation \mapfifty{} than Base in four of
+five pairs. The mean paired difference is \(-0.0234\), with a 95\% interval
+below zero. Neither the mean-gain nor the four-win condition is satisfied.
+Both branches have very low final-epoch performance: the unrounded aggregate
+means from the recorded metrics are 0.001262 for Base and 0.000092 for
+FAM. Thus the best-checkpoint comparison and the final-epoch diagnostic both
+need to be retained when interpreting the training behavior.
+
+All runs contain fifty epochs and fifty checkpoint-selection records.
+Strict loading and finite-parameter checks pass for best and last checkpoints.
+The five Base--FAM pairs match in initialization and recorded input traces.
+The ten serialized-best validation replays pass, with maximum absolute
+live/replay difference 0.0002525 against tolerance 0.003. The live
+checkpoint-selection values remain the primary metrics in
+\Cref{tab:detector-stage-a-five-seed}.
+
+This is a measured five-seed FAM effect for the implemented dual-backbone
+YOLO26 configuration. The low absolute performance of both branches limits
+its practical interpretation and does not show that stock YOLO26 or every
+possible RGB--thermal adaptation is unsuitable. The comparison does not
+enter Stage B.
 
 \section{Cross-architecture summary}
 
-The three extension families provide different strengths of evidence.
+The detector families provide different strengths of evidence.
 Deformable DETR shows an exploratory increase in median VIS+IR from 0.249 to
 0.294 when FAM is added, but its intervals overlap and its protocol predates
 the final controls. Complete DINO base is weak under the studied configuration,
 so FAM is not tested on that implementation. YOLOv10 uses a final paired-seed
-protocol and shows a negative mean FAM effect.
+protocol and shows a negative mean FAM effect. RT-DETRv2 and YOLO26 both
+provide five-seed Stage-A Base--FAM comparisons. RT-DETRv2 has a positive
+mean gain but insufficient paired wins, whereas YOLO26 has a negative mean
+gain and very low final performance in both branches.
 
-The thesis therefore does not demonstrate positive architectural
-transferability. It demonstrates that the FAM concept can be implemented in
+The thesis therefore does not establish a consistently positive architectural
+transfer effect. It demonstrates that the FAM concept can be implemented in
 multiple detector families, that a promising exploratory trend exists in one,
-and that the controlled YOLOv10 transfer does not reproduce the RT-DETR gain.
+and that no controlled transfer comparison demonstrates an improvement
+meeting its declared stability criterion. The positive RT-DETRv2 mean must
+be distinguished from the negative YOLO means. These within-detector results
+do not justify a ranking across different training recipes, horizons,
+checkpoint policies, and evaluation populations.
