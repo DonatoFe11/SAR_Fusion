@@ -319,7 +319,7 @@ def generate_experimental_design():
     line(ctx, 55, 326, 705, 326, colour=TEAL, width=1)
     draw_text(
         ctx,
-        "RT-DETR FAM: architecture, RCRA, box-guided and mixed consistency\n"
+        "RT-DETR FAM: zero-offset initialization, architecture and alignment\n"
         "RT-DETRv2 and YOLO26: Base versus FAM\n"
         "Budget: 10 epochs for RT-DETR / v2; 50 epochs for YOLO26",
         55, 351, size=14, line_height=23,

@@ -429,14 +429,20 @@ For every pyramid level, the FAM concatenates RGB and IR features and predicts
 \end{align}
 
 The standalone FAM constructor initializes the offset/mask predictor to zero,
-which gives null offsets and masks of 0.5. In the complete RT-DETR model used
-in the experiments, however, the subsequent Hugging Face \texttt{post\_init()}
+which gives null offsets and masks of 0.5. In the standard complete RT-DETR
+configuration, however, the subsequent Hugging Face \texttt{post\_init()}
 step replaces the predictor weights with seed-dependent random values.
 RT-DETRv2 preserves this effective initialization. Null offsets and constant
 masks are therefore not guaranteed at the start of training in these models.
 The standard FAM does \emph{not} start as a mathematical identity. Even with
 null offsets, the DCNv2 filter weights and modulation masks do not in general
 make the filtered output equal to the input.
+
+The initialization ablation in \Cref{sec:zero-offset-method} explicitly zeros
+only the offset-predictor rows after complete pretrained model construction.
+It preserves the standard mask and DCNv2 initialization and leaves the offsets
+trainable, separating the initial sampling displacement from an
+identity-initialized operator or permanently fixed sampling locations.
 
 Because there is no ground-truth displacement field, the thesis uses the term
 \emph{geometric-functional transformation}. Nonzero offsets show that the

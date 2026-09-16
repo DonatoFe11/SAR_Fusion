@@ -49,6 +49,71 @@ Le sezioni archiviate sui pilot mixed, box-guided e YOLO26 conservano soltanto
 la provenienza dei vecchi artefatti: i loro divieti sugli altri seed e i loro
 risultati non descrivono le campagne aggregate riportate qui.
 
+## RT-DETR + FAM: inizializzazione dei soli offset a zero, Stage A
+
+Gli artefatti
+[`rtdetr_fam_zero_offset_stage_a.csv`](rtdetr_fam_zero_offset_stage_a.csv) e
+[`rtdetr_fam_zero_offset_stage_a.json`](rtdetr_fam_zero_offset_stage_a.json)
+documentano cinque nuovi training sui seed 40--44 e il confronto appaiato con
+i cinque controlli FAM standard Stage A già disponibili. Il CSV contiene
+cinque righe con ID delle run, epoche selezionate, metriche `best`/`latest`,
+delta e replay del best; il JSON conserva protocollo, statistiche e provenienza.
+Queste cinque candidate sono aggiuntive alle 35 repliche del precedente
+artefatto Stage A; i controlli sono riutilizzati e non contati come nuovi training.
+
+L'intervento azzera soltanto pesi e bias delle righe `0:18` di `offset_conv`
+a P3/P4/P5 dopo l'inizializzazione completa del detector pretrained. Le maschere,
+i filtri DCNv2 e gli altri parametri restano quelli del controllo, così come
+lo stato RNG; gli offset rimangono apprendibili. Non è un confronto con Base
+senza FAM, né una variante `identity_dcnv2` o con offset congelati.
+
+Il protocollo mantiene 3.123 coppie train, 896 coppie validation, dieci epoche,
+AdamW `2e-5`, batch 4 e Modal Dropout nativo 20/20/60. Tutti i seed completano
+il budget, senza filtro sul seed 40. Il primario è `best` sulla validation
+mAP@50 con `min_delta=0.001`; `latest` all'epoca 10 è diagnostico.
+Le deviazioni standard riportate sono campionarie.
+
+| Checkpoint | FAM standard, media ± DS | Offset-zero, media ± DS | Delta appaiato, media ± DS | IC t 95% del delta | Vittorie |
+|---|---:|---:|---:|---|---:|
+| `best` (primario) | 0,164563 ± 0,019554 | 0,152080 ± 0,016686 | −0,012482 ± 0,025718 | [−0,044416; +0,019451] | 1/5 |
+| `latest` (diagnostico) | 0,084014 ± 0,026683 | 0,095808 ± 0,024515 | +0,011794 ± 0,018057 | [−0,010628; +0,034215] | 3/5 |
+
+La regola congelata richiede delta medio `best >= +0.01` e almeno quattro
+seed positivi: **nessuna promozione allo Stage B e nessuna valutazione test**.
+Il vantaggio medio diagnostico di `latest` non sostituisce il criterio primario.
+Entrambi gli intervalli comprendono zero; il risultato descrive questa
+campagna e non dimostra un peggioramento universale dell'inizializzazione a zero.
+Questi valori di validation non vanno confrontati direttamente con la media
+test storica `0.3780`.
+
+Verifica del 16 settembre 2026: statistiche ricalcolate dai cinque record;
+selezione best e latest ricostruite dalle dieci metriche live per seed;
+inizializzazioni ricostruite coerenti con i controlli e con le trace candidate;
+29 file del manifest coerenti con gli hash registrati. I cinque replay già
+salvati riproducono esattamente il best live (errore assoluto `0.0`, tolleranza
+`0.0002`) con caricamento stretto: 1.051 tensori serializzati e 48 alias esatti
+ricostruiscono i 1.099 tensori di stato. Questo export non esegue training,
+inferenze o nuovi replay; conserva gli hash checkpoint registrati.
+
+La lettura su CPU dei soli parametri offset nei dieci checkpoint verifica
+30 predittori: tutte le 540 righe dei pesi sono non nulle e le 18 righe di
+ciascun predittore sono distinte; tutti i 540 bias sono non nulli e i valori
+controllati sono finiti. Si verifica quindi l'apprendimento dei parametri,
+non la qualità dell'allineamento o gli offset in pixel.
+
+Il riuso dei controlli verifica configurazione e inizializzazione, ma non
+certifica uno snapshot sorgente, un ambiente o una traiettoria numerica storica
+interamente identici. Non sono stati ripetuti i replay dei controlli storici.
+Metodo e limiti sono documentati nella
+[`nota sperimentale`](../../rtdetr_fam_zero_offset_stage_a.md).
+
+SHA-256 della fonte numerica locale
+[`decision.json`](../../../out/rtdetr_fam_zero_offset_stage_a/decision.json):
+
+```text
+0fbc3e12bf235c498069b33f6e889590a605acf85fde49e9b00da65ee0ed9650
+```
+
 ## RT-DETR + FAM: selezione `best` contro `latest`
 
 Il file

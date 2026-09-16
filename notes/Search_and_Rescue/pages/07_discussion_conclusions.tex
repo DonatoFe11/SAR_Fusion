@@ -115,6 +115,17 @@ not prove that high-resolution features or reliability modeling are generally
 unsuitable; they reject the implemented recipes under the common ten-epoch
 protocol.
 
+Zero-offset initialization also fails Stage A: resetting only the initial
+sampling offsets reduces best-validation mean \mapfifty{} by 0.0125 and wins
+only one of five pairs. The final-epoch mean gain of 0.0118 has three positive
+pairs and does not change the decision based on validation-selected best
+checkpoints. Both paired confidence intervals include zero. The predictors
+learn nonzero, distinct weight rows in every inspected level and checkpoint,
+so their initially identical zero rows do not remain identical. This isolates
+an initialization intervention from the historical Identity DCNv2 operator,
+while providing no evidence of improved physical registration or a reliable
+performance advantage under the tested protocol.
+
 RCRA is the only extension to pass Stage A. Its learned coefficient mainly
 suppresses the FAM residual at P3 and P4 and reacts to either missing modality
 in all five seeds; a three-parameter scalar control cannot reproduce the
@@ -218,8 +229,9 @@ historical locked study establishes that standard FAM improves Base
 RT-DETR consistently on the internal benchmark and primarily raises recall.
 The validation-led campaign does not confirm a replacement: RCRA has a
 positive but unstable Stage-B mean effect, while P2, global upsampling,
-post-FAM gating, scalar residual calibration, mixed consistency, and
-box-guided alignment fail their five-seed Stage-A development rules.
+zero-offset initialization, post-FAM gating, scalar residual calibration,
+mixed consistency, and box-guided alignment fail their five-seed Stage-A
+development rules.
 Standard FAM therefore remains the selected model and the reference for
 subsequent candidate comparisons.
 
@@ -286,11 +298,15 @@ not an independent replication. The Modal Dropout coordinate-system ablation
 uses only one predeclared screening seed and supports rejection of that recipe,
 not a five-seed population estimate.
 
-The mixed-consistency and Box-Guided comparisons reuse the five completed
-standard-FAM Stage-A controls. Shared model, training, data, and split settings
-were checked, and reconstructed initialization hashes match for all five
-seeds. Mixed consistency also adds student-path random draws that can alter
-later Modal Dropout realizations. Seed pairing therefore evaluates the complete
+The zero-offset initialization, mixed-consistency, and Box-Guided comparisons
+reuse the five completed standard-FAM Stage-A controls. Shared model,
+training, data, and split settings were checked, and reconstructed
+initialization hashes match for all five
+seeds. For zero-offset initialization, the intervention additionally preserves
+all unaffected parameters and random-number-generator state. Reconstructing
+these initial states does not certify identical historical source snapshots
+or environments. Mixed consistency adds student-path random draws that can
+alter later Modal Dropout realizations. Seed pairing therefore evaluates the complete
 training intervention rather than isolating the consistency loss under
 identical intermediate tensors. Strict checkpoint loading and recorded replay
 checks constrain execution and evaluation errors, but cannot remove these
@@ -333,9 +349,10 @@ The reported tests are exploratory and are not corrected for the number of
 contrasts. Checkpoints, rather than frames, boxes, diagnostic samples, or
 feature cells, are the experimental units.
 
-The Stage-A comparisons of mixed consistency, Box-Guided P3, RT-DETRv2, and
-YOLO26 likewise retain five paired checkpoints per contrast. Their confidence
-intervals describe between-seed variability on the fixed validation split, not
+The Stage-A comparisons of zero-offset initialization, mixed consistency,
+Box-Guided P3, RT-DETRv2, and YOLO26 likewise retain five paired checkpoints
+per contrast. Their confidence intervals describe between-seed variability on
+the fixed validation split, not
 uncertainty across new acquisitions. Selection is governed by the predeclared
 mean-gain and sign-consistency thresholds, not a post-hoc significance filter.
 
@@ -439,10 +456,10 @@ confirmation.
 
 The historical locked study shows that standard FAM improves Base RT-DETR in
 all five paired seeds and consistently increases recall. The
-validation-led campaign rejects P2, global upsampling, post-FAM gates,
-scalar residual control, mixed consistency, and box-guided alignment under the
-common five-seed protocol. RCRA is the only
-candidate to pass Stage A and learns the intended conditional mechanism, but
+validation-led campaign rejects P2, global upsampling, zero-offset
+initialization, post-FAM gates, scalar residual control, mixed consistency,
+and box-guided alignment under the common five-seed protocol. RCRA is the
+only candidate to pass Stage A and learns the intended conditional mechanism, but
 its full-data gain appears in only 3/5 seeds. Under the rule fixed before
 Stage-B evaluation, standard FAM therefore remains the selected model.
 

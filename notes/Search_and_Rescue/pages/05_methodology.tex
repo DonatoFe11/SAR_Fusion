@@ -15,9 +15,10 @@ Stage A trains each configuration on 3,123 paired frames and selects its
 \texttt{best} checkpoint on the same 896-frame whole-video validation split.
 All five seeds complete their fixed budget: ten epochs for RT-DETR and
 RT-DETRv2, fifty for YOLO26. The final checkpoint is retained as a mandatory
-diagnostic. This design covers the spatial-resolution, reliability,
-residual-alignment, mixed-consistency, box-guided, and detector-transfer
-comparisons without making a performance decision from an individual run.
+diagnostic. This design covers the spatial-resolution, offset-initialization,
+reliability, residual-alignment, mixed-consistency, box-guided, and
+detector-transfer comparisons without making a performance decision from an
+individual run.
 
 Stage B is conditional on the aggregate Stage-A promotion rule. It restores
 all 4,019 training frames and trains each promoted candidate and its matched
@@ -483,6 +484,35 @@ with one input-independent coefficient per pyramid level, for only three new
 parameters. It uses the same residual equation, neutral initialization, and
 dedicated learning rate. This tests whether any RCRA gain can be reproduced by
 simple global per-level calibration rather than conditional local selection.
+
+\subsection{Zero-offset initialization}
+\label{sec:zero-offset-method}
+
+This ablation tests whether standard FAM benefits from starting with null
+sampling offsets. The complete pretrained RT-DETR v1 model is first built,
+including Hugging Face initialization and transfer of the COCO person head.
+Only then are the weights and biases of predictor rows \texttt{0:18} set to
+zero at P3, P4, and P5. Mask-predictor rows \texttt{18:27}, DCNv2 filters,
+backbones, and detection heads retain their control initialization. The masks
+are therefore not forced to 0.5, while all offset parameters remain trainable.
+Unlike the Identity DCNv2 ablation, this intervention changes only the initial
+offsets and does not make the full FAM operator an identity.
+
+The five candidate runs use the common Stage-A split, seeds 40--44, ten complete
+epochs, AdamW at \(2\times10^{-5}\), batch size four, and native-coordinate
+Modal Dropout at 20/20/60. The five standard-FAM Stage-A controls are reused.
+Before each run, the reconstructed standard-model hash must match the paired
+control's recorded initialization; the intervention must preserve all
+unaffected parameters, parameter identities, and random-number-generator
+state.
+
+Each serialized \texttt{best} checkpoint is strictly reloaded in a separate
+process and evaluated on the same 896 validation pairs. The allowed absolute
+live--replay \mapfifty{} difference is 0.0002; the live checkpoint-selection
+score remains primary. Only after all five training runs and replays are
+complete is the common mean-gain and four-win promotion rule applied.
+Epoch-10 \texttt{latest} scores remain diagnostic. This comparison does not
+use the historical full-data test mean of 0.3780 as its control.
 
 \subsection{Mixed native/paired consistency training}
 
