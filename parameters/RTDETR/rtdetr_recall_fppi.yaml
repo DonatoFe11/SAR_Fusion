@@ -1,0 +1,36 @@
+# Analysis requested by the supervisor, specified before the new dense sweep.
+# These datasets have already been inspected: this is post-hoc characterization,
+# NOT a new holdout, model selection, or deployment-threshold calibration.
+protocol:
+  id: rtdetr_historical_recall_fppi_v1
+  specified_on: "2026-09-17"
+  checkpoint: latest
+  seeds: [40, 41, 42, 43, 44]
+  configurations: [historical_additive, historical_fam]
+  acquisitions: [mterie, carnation_0025_0026, fhl_0407_0408]
+  condition: vis_ir
+  ground_truth: vis
+  mterie_source_protocol: parameters/RTDETR/rtdetr_paired_modality_evaluation.yaml
+  confirmation_source_protocol: parameters/RTDETR/rtdetr_unused_acquisition_confirmation.yaml
+  # Preserve each original inventory/pairing rule and exact checkpoint hashes.
+  collection_threshold: 0.0
+  postprocessing: native_single_class_queries_no_added_nms
+  iou_threshold: 0.5
+  matching: confidence_descending_best_unmatched_iou
+  equal_scores: atomic_threshold_group_stable_prediction_order
+  sweep: all_distinct_prediction_scores_plus_reject_all
+  fppi_denominator: all_images_including_empty_frames
+  fppi_budgets: [0.1, 0.5, 1.0]
+  fppi_grid: {min: 0.01, max: 10.0, points: 301}
+  budget_rule: maximum_empirical_recall_at_or_below_budget_no_interpolation
+  aggregation: paired_seeds_mean_sample_sd_on_common_fppi_grid
+  evaluation_seed: 42
+  batch_size: 4
+  workers: 4
+  output_dir: out/rtdetr_recall_fppi
+  interpretation:
+    model_selection_allowed: false
+    checkpoint_selection_allowed: false
+    deployment_threshold_selection_allowed: false
+    frame_independence_claim_allowed: false
+    negative_results_must_be_reported: true
