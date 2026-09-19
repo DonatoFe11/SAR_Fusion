@@ -60,6 +60,12 @@ def fake_plot(grid_rows, output_dir, complete):
 
 
 class TestRTDETRFROCReport(unittest.TestCase):
+    def test_configuration_labels_use_thesis_names(self):
+        self.assertEqual(report_module.CONFIGURATION_LABELS, {
+            "historical_additive": "RT-DETR Base",
+            "historical_fam": "RT-DETR + FAM",
+        })
+
     def test_complete_report_has_per_seed_budgets_and_paired_statistics(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(report_module, "_plot", fake_plot):
             output_dir = Path(directory)

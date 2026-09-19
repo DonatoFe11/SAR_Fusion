@@ -30,7 +30,7 @@ ACQUISITION_LABELS = {
     "fhl_0407_0408": "FHL 0407/0408",
 }
 CONFIGURATION_LABELS = {
-    "historical_additive": "RT-DETR Additive",
+    "historical_additive": "RT-DETR Base",
     "historical_fam": "RT-DETR + FAM",
 }
 STEM = "rtdetr_recall_fppi"
