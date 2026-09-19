@@ -8,6 +8,43 @@ Nei nomi storici degli artefatti e nei campi macchina, `additive` identifica la
 configurazione chiamata **Base** nella tesi: entrambe le configurazioni terminano
 con un'addizione, mentre soltanto FAM trasforma prima le feature IR.
 
+## Recall a parità di falsi positivi per immagine
+
+Il protocollo `rtdetr_historical_recall_fppi_v1` è completo: 30 valutazioni,
+due configurazioni storiche (Base/Additive e FAM), cinque `latest` seed 40--44
+e tre popolazioni, senza nuovi training. MtErie contiene 708 frame paired;
+Carnation 0025/0026 ne contiene 1.313 e FHL 0407/0408 ne contiene 1.035.
+Tutti i confronti usano fusion VIS+IR e le medesime annotazioni VIS.
+
+- [`rtdetr_recall_fppi_summary.csv`](rtdetr_recall_fppi_summary.csv): nove
+  riepiloghi ai budget 0.1, 0.5 e 1 FP/immagine, con media, SD e vittorie;
+- [`rtdetr_recall_fppi_budgets.csv`](rtdetr_recall_fppi_budgets.csv): 90 punti
+  per checkpoint e budget, con soglia descrittiva, FPPI raggiunta, TP e FP;
+- [`rtdetr_recall_fppi_paired.csv`](rtdetr_recall_fppi_paired.csv): 45 delta
+  appaiati (budget e popolazioni riusano gli stessi checkpoint, non sono
+  repliche indipendenti);
+- [`rtdetr_recall_fppi_grid.csv`](rtdetr_recall_fppi_grid.csv): 1.806 righe,
+  301 budget comuni per ciascuna combinazione configurazione/popolazione;
+- [`rtdetr_recall_fppi.json`](rtdetr_recall_fppi.json): protocollo, completezza,
+  hash, provenienza e percorsi delle cache;
+- [`rtdetr_recall_fppi.pdf`](../images/rtdetr_recall_fppi.pdf): figura a tre
+  pannelli inclusa nella sottosezione `sec:recall-fppi` della tesi.
+
+A 0.5 FPPI il delta medio di recall è +0.1102 su MtErie, +0.0981 su Carnation
+e +0.1479 su FHL, con 5/5 vittorie per popolazione. L'unica sconfitta ai budget
+prefissati è Carnation seed 43 a 0.1 FPPI (-0.0057). L'analisi è post-hoc e
+non seleziona soglie operative; il matching in ordine di confidenza differisce
+dal precedente error analysis in ordine di IoU. Le bande mostrano SD tra seed,
+non intervalli di confidenza sui frame. Metodo completo e risultati sono nel
+[report](../../rtdetr_recall_fppi.md).
+
+Rigenerazione offline dalle cache complete, nell'ambiente `sarfusion`:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python scripts/run_rtdetr_recall_fppi.py --summarize-only
+```
+
 ## Confronti Stage A a cinque seed: allineamento e trasferimento
 
 Gli artefatti usati dalle tabelle aggregate della tesi sono

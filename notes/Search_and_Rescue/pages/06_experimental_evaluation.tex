@@ -689,17 +689,18 @@ the selected model.
 \section{Detection error analysis}
 \label{sec:error-analysis}
 
-This analysis uses the historical locked Base and FAM checkpoints from
-\Cref{sec:rtdetr-main-results}. It characterizes the established FAM gain over
-Base RT-DETR and is not a post-selection comparison of RCRA and the matched
+These analyses use the historical locked Base and FAM checkpoints from
+\Cref{sec:rtdetr-main-results}. They characterize the established FAM gain over
+Base RT-DETR and do not compare RCRA with the matched
 current-code Stage-B FAM control.
 
 \subsection{Protocol}
 
 The error analysis compares the five Base RT-DETR and five standard-FAM final
 checkpoints on all 708 MtErie frames and 1,770 objects. Predictions are matched
-one-to-one to annotations at IoU at least 0.50. The primary evaluation retains
-all predictions with confidence at least 0.01, as in the final mAP evaluation.
+one-to-one to annotations by descending IoU, with a minimum IoU of 0.50.
+The primary evaluation retains all predictions with confidence at least 0.01,
+as in the final mAP evaluation.
 For the predefined sensitivity analysis, this same prediction set is
 additionally thresholded at 0.05, 0.10, 0.25, and 0.50 when reporting
 precision, recall, and false positives. These thresholds are not used for model
@@ -759,6 +760,106 @@ seeds.
 At threshold 0.01, both configurations generate approximately 48--51 false
 positives per image. This threshold is appropriate for collecting a broad set
 of candidates for AP computation but is not an operational alarm threshold.
+
+\subsection{Recall at matched false-positive budgets}
+\label{sec:recall-fppi}
+
+A common confidence threshold does not necessarily produce the same number
+of false positives in two detectors. A subsequent post-hoc analysis therefore
+asks whether the historical FAM recall advantage persists at a matched budget
+of false positives per image (FPPI). It reuses the five epoch-10 \texttt{latest}
+checkpoints per configuration, seeds 40--44, in VIS+IR (fusion) mode without further
+training or model selection. The three evaluation populations are the 708
+paired MtErie frames and the 1,313 Carnation 0025/0026 and 1,035 FHL 0407/0408
+pairs from \Cref{sec:unused-acquisition-confirmation}. Carnation 0025/0026 is
+distinct from the 739-frame scale-mismatch acquisition in \Cref{sec:carnation}.
+Each contrast preserves its frozen pairing and uses identical VIS annotations
+for Base and FAM. The additional populations contain 5,238 and 2,022 VIS
+ground-truth boxes, respectively.
+
+One inference pass collects all 300 native queries per image with collection
+threshold zero and no added non-maximum suppression. Confidence is then swept
+offline over every distinct prediction score, retaining predictions with
+\(s\geq\tau\), where \(s\) is the confidence score of a predicted box and
+\(\tau\) is the confidence threshold. Within each image, predictions are
+processed in descending confidence order and matched to the highest-IoU
+unassigned annotation at IoU at least 0.50. Duplicates are false positives.
+This differs from the descending-IoU matching used in \Cref{tab:error-thresholds}:
+lower-confidence predictions cannot reassign matches already made at a higher
+threshold. The earlier analysis is retained with its original matching rule.
+
+For each checkpoint, \(\mathrm{recall}=\mathrm{TP}/N_{\mathrm{GT}}\) and
+\(\mathrm{FPPI}=\mathrm{FP}/N_{\mathrm{images}}\). All frames, including those
+without annotated persons, contribute to \(N_{\mathrm{images}}\); no frames
+are excluded based on their false-positive counts. At each FPPI budget, the
+reported recall is the highest empirically attainable value without exceeding
+that budget, without interpolation or splitting tied scores. For each model,
+the five seed-specific curves are evaluated at the same 301 logarithmically
+spaced FPPI budgets between 0.01 and 10. The mean and sample standard deviation
+of these recall values are then computed across the five seeds at each budget.
+The budgets 0.1, 0.5, and 1 FPPI were specified before this dense sweep and are
+all reported in \Cref{tab:recall-fppi}. The confidence sweep is unconstrained
+by these budgets: recall and FPPI are first computed at every distinct
+prediction score. The three budgets are then used only to summarize the
+resulting curves at common false-positive limits. These are descriptive
+reference points, not operationally validated SAR limits.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{images/rtdetr_recall_fppi.pdf}
+  \caption{Recall at matched false-positive budgets for historical Base
+  (additive fusion) and FAM RT-DETR checkpoints in VIS+IR mode. Curves show
+  five-seed means and shaded bands show sample standard deviations at common
+  FPPI budgets, with one-to-one confidence-ordered matching at IoU 0.50.
+  The bands describe training variability, not confidence intervals over
+  frames or unseen acquisitions.}
+  \label{fig:recall-fppi}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Recall at the three predefined FPPI budgets. Base, FAM, and paired
+  FAM--Base differences are mean \(\pm\) sample standard deviation across five
+  seeds. Wins count strictly positive paired differences.}
+  \label{tab:recall-fppi}
+  \begin{adjustbox}{max width=\textwidth}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Population & FPPI $\leq$ & Base & FAM & Paired delta & Wins \\
+    \midrule
+    MtErie & 0.1 & $0.1610\pm0.0493$ & $0.2217\pm0.0338$ & $+0.0607\pm0.0393$ & 5/5 \\
+           & 0.5 & $0.3266\pm0.0739$ & $0.4367\pm0.0885$ & $+0.1102\pm0.0615$ & 5/5 \\
+           & 1.0 & $0.4296\pm0.0662$ & $0.5368\pm0.0778$ & $+0.1072\pm0.0600$ & 5/5 \\
+    \midrule
+    Carnation 0025/0026 & 0.1 & $0.1797\pm0.0496$ & $0.2670\pm0.0579$ & $+0.0873\pm0.0550$ & 4/5 \\
+                       & 0.5 & $0.3688\pm0.0745$ & $0.4669\pm0.0531$ & $+0.0981\pm0.0318$ & 5/5 \\
+                       & 1.0 & $0.4507\pm0.0757$ & $0.5467\pm0.0542$ & $+0.0960\pm0.0388$ & 5/5 \\
+    \midrule
+    FHL 0407/0408 & 0.1 & $0.1632\pm0.0604$ & $0.2777\pm0.0666$ & $+0.1145\pm0.0946$ & 5/5 \\
+                  & 0.5 & $0.3804\pm0.0884$ & $0.5283\pm0.0664$ & $+0.1479\pm0.1255$ & 5/5 \\
+                  & 1.0 & $0.4903\pm0.0895$ & $0.6310\pm0.0567$ & $+0.1407\pm0.1112$ & 5/5 \\
+    \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
+
+FAM has higher mean recall at all nine population--budget combinations and
+at every displayed grid point in \Cref{fig:recall-fppi}. At 0.5 FPPI, the mean
+paired gains are 11.02 percentage points on MtErie, 9.81 on Carnation, and
+14.79 on FHL, with positive differences in all five seeds within each
+population. The only negative paired difference at the predefined budgets is
+Carnation seed 43 at 0.1 FPPI: recall decreases from 0.2367 to 0.2310
+(\(-0.57\) percentage points). Individual-seed curves also cross elsewhere;
+the mean advantage does not establish universal dominance.
+
+The recall gain therefore persists at a fixed false-positive budget rather
+than arising solely from accepting more detections at the same confidence.
+This is descriptive evidence on already-consulted populations, not a blind
+confirmation or a new architecture-selection result. The confidence thresholds
+corresponding to each FPPI budget vary across checkpoints and evaluation sets and
+are not selected for deployment. FPPI counts false boxes per frame, not video
+alarm events: temporal correlation and alarm aggregation must be considered
+before inferring operator workload.
 
 \subsection{Qualitative examples}
 

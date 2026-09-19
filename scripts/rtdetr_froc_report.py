@@ -118,7 +118,8 @@ def _plot(grid_rows, output_dir, complete):
     import matplotlib.pyplot as plt
 
     colors = {"historical_additive": "#4477AA", "historical_fam": "#CC6677"}
-    fig, axes = plt.subplots(1, 3, figsize=(12.4, 3.6), sharey=True)
+    # Keep labels readable when the three panels occupy a 15.5 cm thesis column.
+    fig, axes = plt.subplots(1, 3, figsize=(8.2, 3.6), sharey=True)
     for axis, acquisition in zip(axes, EXPECTED_COUNTS):
         for configuration in CONFIGURATIONS:
             rows = [
@@ -159,7 +160,9 @@ def _plot(grid_rows, output_dir, complete):
     paths = []
     for extension in ("pdf", "png"):
         path = output_dir / f"{STEM}.{extension}"
-        fig.savefig(path, dpi=220, bbox_inches="tight")
+        # Embed TrueType outlines for reliable inclusion through XeLaTeX.
+        with matplotlib.rc_context({"pdf.fonttype": 42}):
+            fig.savefig(path, dpi=220, bbox_inches="tight")
         paths.append(path)
     plt.close(fig)
     return paths
@@ -273,13 +276,14 @@ def _markdown(report, summary_rows):
         "Configurazione: [`rtdetr_recall_fppi.yaml`](../parameters/RTDETR/rtdetr_recall_fppi.yaml).",
         "Le predizioni dense sono conservate in `out/rtdetr_recall_fppi/predictions/`;",
         "le curve esatte e gli altri risultati sono in `out/rtdetr_recall_fppi/`.",
-        "", "## Inserimento successivo nella tesi", "",
-        "La figura e la tabella possono integrare l'error analysis spiegando se",
-        "il guadagno di recall persiste a parità di budget di falsi positivi.",
-        "Occorre esplicitare matching, media sui seed, acquisizioni separate e",
-        "carattere post-hoc. Non sostituiscono mAP, non costituiscono una nuova",
-        "selezione architetturale e non autorizzano una soglia di deployment",
-        "ottimizzata sui set di test. I file `.tex` non sono stati modificati.", "",
+        "", "## Integrazione nella tesi", "",
+        "La sottosezione `sec:recall-fppi` del capitolo sperimentale include la figura",
+        "PDF e tutti i nove confronti ai budget prefissati. Il testo chiarisce matching,",
+        "media sui seed, popolazioni separate, carattere post-hoc e l'eccezione di",
+        "Carnation seed 43 a 0.1 FPPI. Abstract, discussione e limiti riprendono il",
+        "risultato a parità di budget; l'appendice e il README degli artefatti indicano",
+        "le fonti numeriche e il comando di rigenerazione. Non vengono modificate le",
+        "decisioni sulle architetture né selezionate soglie operative sui set di test.", "",
     ])
     return "\n".join(lines)
 

@@ -160,12 +160,20 @@ known shifts.
 FAM primarily changes the recall side of the precision--recall trade-off. At
 confidence 0.25, it improves mean recall by 0.0990 in all five paired seeds and
 reduces the frequency of non-empty frames with at least one missed target. This
-is relevant to SAR, where a missed person can have high cost. False positives
-do not decrease consistently, however, and the 0.01 threshold used for AP
-collection is not operational because it produces roughly fifty false
-positives per image.
+is relevant to SAR, where a missed person can have high cost. At a common
+confidence threshold, false positives do not decrease consistently, however,
+and the 0.01 threshold used for AP collection is not operational because it
+produces roughly fifty false positives per image.
 
-Carnation exposes a geometric boundary. FAM outperforms Base RT-DETR under the
+The post-hoc recall--FPPI comparison in \Cref{sec:recall-fppi} separates this
+threshold-dependent observation from performance at a matched false-positive
+budget. At 0.5 FPPI, historical FAM increases mean recall by 0.1102 on MtErie,
+0.0981 on Carnation 0025/0026, and 0.1479 on FHL 0407/0408, with positive
+differences in all five seeds within each population. This supports a better
+recall--false-positive trade-off at the reported budgets, not universal
+curve dominance or a validated deployment threshold.
+
+Carnation 0023/0024 exposes a geometric boundary. FAM outperforms Base RT-DETR under the
 severe scale mismatch, but adding IR remains worse than using VIS alone in
 every FAM checkpoint. The experiment therefore establishes a relative FAM
 advantage under mismatch, not correction or mitigation of the underlying
@@ -185,8 +193,8 @@ or generically real-time improvement.
 
 \subsection{RQ5: architectural transferability}
 
-Consistently positive transfer is not established. Deformable DETR provides a promising
-exploratory median trend, but its uncertainty intervals overlap and its
+Consistently positive transfer is not established. Deformable DETR provides a
+promising exploratory median trend, but its observed ranges overlap and its
 protocol is not aligned with the final campaign. Complete DINO base is too weak
 under the studied configuration to justify FAM variants. Under the controlled
 YOLOv10 protocol, FAM decreases mean VIS+IR performance and wins in only two of
@@ -319,6 +327,16 @@ localization quality or SAR utility. Secondary COCO mAP, mAP@75, mAR, and error
 metrics reduce dependence on one score but do not measure response time,
 operator workload, alarm calibration, energy consumption, or consequences of
 false alarms.
+
+Recall--FPPI curves make the cost in false detections explicit but still count
+boxes per frame, not distinct alarm events. Consecutive frames are correlated,
+and tracking or temporal aggregation would change the operator-facing alarm
+rate. These curves describe performance on evaluation sets that had already
+been examined in earlier analyses. The shaded bands show variability
+across five training seeds on these fixed sets, not uncertainty about
+performance on new acquisitions. The confidence sweep does not establish
+a confidence threshold for operational use, but it characterizes
+the recall--false-positive trade-off.
 
 Offset magnitude, feature cosine similarity, RMSE, smoothing, and PCA are
 internal proxies. Without camera calibration or ground-truth correspondences,

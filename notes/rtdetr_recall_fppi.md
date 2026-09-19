@@ -121,11 +121,12 @@ Configurazione: [`rtdetr_recall_fppi.yaml`](../parameters/RTDETR/rtdetr_recall_f
 Le predizioni dense sono conservate in `out/rtdetr_recall_fppi/predictions/`;
 le curve esatte e gli altri risultati sono in `out/rtdetr_recall_fppi/`.
 
-## Inserimento successivo nella tesi
+## Integrazione nella tesi
 
-La figura e la tabella possono integrare l'error analysis spiegando se
-il guadagno di recall persiste a parità di budget di falsi positivi.
-Occorre esplicitare matching, media sui seed, acquisizioni separate e
-carattere post-hoc. Non sostituiscono mAP, non costituiscono una nuova
-selezione architetturale e non autorizzano una soglia di deployment
-ottimizzata sui set di test. I file `.tex` non sono stati modificati.
+La sottosezione `sec:recall-fppi` del capitolo sperimentale include la figura
+PDF e tutti i nove confronti ai budget prefissati. Il testo chiarisce matching,
+media sui seed, popolazioni separate, carattere post-hoc e l'eccezione di
+Carnation seed 43 a 0.1 FPPI. Abstract, discussione e limiti riprendono il
+risultato a parità di budget; l'appendice e il README degli artefatti indicano
+le fonti numeriche e il comando di rigenerazione. Non vengono modificate le
+decisioni sulle architetture né selezionate soglie operative sui set di test.

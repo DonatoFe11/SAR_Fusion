@@ -132,6 +132,9 @@ class TestRTDETRFROCReport(unittest.TestCase):
             self.assertIn("post-hoc", markdown)
             self.assertIn("5/5", markdown)
             self.assertIn("non sono", markdown)
+            self.assertIn("## Integrazione nella tesi", markdown)
+            self.assertIn("`sec:recall-fppi`", markdown)
+            self.assertNotIn("I file `.tex` non sono stati modificati", markdown)
 
     def test_partial_report_does_not_invent_paired_observations(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(report_module, "_plot", fake_plot):
@@ -193,6 +196,8 @@ class TestRTDETRFROCReport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             paths = report_module._plot(rows, Path(directory), True)
             self.assertEqual(paths[0].read_bytes()[:4], b"%PDF")
+            self.assertIn(b"/FontFile2", paths[0].read_bytes())
+            self.assertNotIn(b"/Subtype /Type3", paths[0].read_bytes())
             self.assertEqual(paths[1].read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
 

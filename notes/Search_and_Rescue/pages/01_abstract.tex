@@ -20,17 +20,21 @@ with a freshly trained matched control using final checkpoints only.
 
 In the historical locked comparison, standard FAM improves Base RT-DETR in all
 five seeds, increasing mean \mapfifty{} from \(0.3080\pm0.0677\) to
-\(0.3780\pm0.0440\). Its main behavioral effect is higher recall: at confidence
-0.25, the mean paired increase is 0.0990 and occurs in every seed. Internal
-inspection confirms learned transformations at P3 and P4 without establishing
-physical RGB--IR registration, and reveals a compensated P5 collapse in one
-high-performing checkpoint. The validation-led campaign rejects the tested P2,
-global \(800\times800\), zero-offset initialization, post-FAM gating, scalar
-residual, mixed-consistency, and box-guided variants. Reliability-Conditioned
-Residual Alignment (RCRA) is the only candidate promoted from Stage A. In
-matched full-data Stage B, it
-obtains \(0.3753\pm0.0538\), against \(0.3569\pm0.0422\) for the matched FAM
-control, but wins only three of five seeds and therefore does not replace FAM.
+\(0.3780\pm0.0440\). Its main behavioral effect is higher recall. A post-hoc
+analysis varies the detection confidence threshold and measures the resulting
+recall and average number of false positives per image. When comparing the highest
+recall attainable without exceeding an average of 0.5 false positives per image,
+FAM achieves a mean recall gain over additive fusion of 9.8--14.8 percentage
+points across the three evaluated populations, with positive differences in all
+five paired seeds within each population. Internal inspection confirms learned
+transformations at P3 and P4 without establishing physical RGB--IR registration,
+and reveals a compensated P5 collapse in one high-performing checkpoint. The
+validation-led campaign rejects the tested P2, global \(800\times800\),
+zero-offset initialization, post-FAM gating, scalar residual, mixed-consistency,
+and box-guided variants. Reliability-Conditioned Residual Alignment (RCRA) is
+the only candidate promoted from Stage A. In matched full-data Stage B, it obtains
+\(0.3753\pm0.0538\), against \(0.3569\pm0.0422\) for the matched FAM control,
+but wins only three of five seeds and therefore does not replace FAM.
 
 A post-selection audit of the matched Stage-B FAM checkpoints on the same 708
 paired frames shows that fusion exceeds VIS in all five seeds by

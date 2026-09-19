@@ -645,6 +645,13 @@ transformation is adopted as preprocessing or used to reselect a model.
 
 \section{Statistical reporting}
 
+The post-hoc recall--FPPI analysis in \Cref{sec:recall-fppi} reuses the
+historical Base and FAM epoch-10 \texttt{latest} checkpoints, seeds 40--44,
+on MtErie, Carnation 0025/0026, and FHL 0407/0408.
+It summarizes recall at common false-positive budgets within each evaluation set,
+without changing any training, checkpoint-selection, or confirmation rule.
+These descriptive curves do not select confidence thresholds for deployment.
+
 Five-seed configuration summaries report means and sample standard deviations;
 architectural contrasts report within-seed mean differences, 95\% Student
 \(t\)-intervals, and paired wins. The compact artifacts retain per-seed values,
