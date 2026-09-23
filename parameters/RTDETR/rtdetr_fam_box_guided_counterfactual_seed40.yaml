@@ -58,8 +58,8 @@ diagnostic_gate:
   if_pass: guidance_non_degrading_on_stage_a_validation
   if_fail: guidance_not_supported_as_inference_contributor
 
-output_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.json
-output_csv: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.csv
+output_json: notes/Thesis/results/rtdetr_fam_box_guided_counterfactual_v1.json
+output_csv: notes/Thesis/results/rtdetr_fam_box_guided_counterfactual_v1.csv
 
 interpretation:
   changes_checkpoint_selection: false

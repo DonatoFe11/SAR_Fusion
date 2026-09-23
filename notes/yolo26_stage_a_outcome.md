@@ -95,4 +95,4 @@ conclusione circoscritta alla configurazione valutata, non l'affermazione che
 le prestazioni del task siano in assoluto non migliorabili.
 
 I dati di audit versionati sono in
-[`Search_and_Rescue/results/yolo26_additive_seed40_stage_a_repair_v1.json`](Search_and_Rescue/results/yolo26_additive_seed40_stage_a_repair_v1.json).
+[`Thesis/results/yolo26_additive_seed40_stage_a_repair_v1.json`](Thesis/results/yolo26_additive_seed40_stage_a_repair_v1.json).

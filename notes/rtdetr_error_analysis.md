@@ -150,15 +150,15 @@ Gli output completi frame-level restano nella directory `out` ignorata da Git.
 Per la tesi è stato creato anche un pacchetto compatto versionato:
 
 - i 50 riepiloghi checkpoint/soglia in
-  [`Search_and_Rescue/results/rtdetr_error_analysis_checkpoints.csv`](Search_and_Rescue/results/rtdetr_error_analysis_checkpoints.csv);
-- il [confronto appaiato alla soglia primaria](Search_and_Rescue/images/rtdetr_additive_fam_error_summary.png);
-- la [sensitivity analysis multi-soglia](Search_and_Rescue/images/rtdetr_additive_fam_threshold_sensitivity.png);
+  [`Thesis/results/rtdetr_error_analysis_checkpoints.csv`](Thesis/results/rtdetr_error_analysis_checkpoints.csv);
+- il [confronto appaiato alla soglia primaria](Thesis/images/rtdetr_additive_fam_error_summary.png);
+- la [sensitivity analysis multi-soglia](Thesis/images/rtdetr_additive_fam_threshold_sensitivity.png);
 - due tavole con tutti i sei frame qualitativi predefiniti a soglia
-  [`0.01`](Search_and_Rescue/images/rtdetr_error_qualitative_conf_001.jpg) e
-  [`0.25`](Search_and_Rescue/images/rtdetr_error_qualitative_conf_025.jpg).
+  [`0.01`](Thesis/images/rtdetr_error_qualitative_conf_001.jpg) e
+  [`0.25`](Thesis/images/rtdetr_error_qualitative_conf_025.jpg).
 
 Provenienza, conteggi e checksum dell'aggregato completo sono riportati nel
-[`README` degli artefatti](Search_and_Rescue/results/README.md).
+[`README` degli artefatti](Thesis/results/README.md).
 
 Lo smoke test sui due checkpoint seed 43 aveva verificato l'intero percorso su
 un batch e marcato correttamente l'output come `protocol_complete: false`. La

@@ -217,10 +217,10 @@ remains to be run.
 - frozen seed-40 weight audit:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.yaml`;
 - seed-40 audit outputs:
-  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.json`
-  and `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.csv`;
+  `notes/Thesis/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.json`
+  and `notes/Thesis/results/rtdetr_fam_reliability_gate_lr10x_weight_audit_seed40.csv`;
 - five-seed validation table:
-  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_lr10x_stage_a_validation.csv`;
+  `notes/Thesis/results/rtdetr_fam_reliability_gate_lr10x_stage_a_validation.csv`;
 - regression tests: `tests/test_rtdetr_reliability_gating.py` and
   `tests/test_rtdetr_reliability_gate_weight_audit.py`.
 

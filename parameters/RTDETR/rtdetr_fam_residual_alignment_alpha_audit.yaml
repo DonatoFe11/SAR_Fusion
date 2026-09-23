@@ -11,5 +11,5 @@ expected_validation_batches: 75
 histogram_bins: 400
 low_alpha_threshold: 0.9
 high_alpha_threshold: 1.1
-output_json: notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.json
-output_csv: notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.csv
+output_json: notes/Thesis/results/rtdetr_fam_residual_alignment_alpha_audit.json
+output_csv: notes/Thesis/results/rtdetr_fam_residual_alignment_alpha_audit.csv

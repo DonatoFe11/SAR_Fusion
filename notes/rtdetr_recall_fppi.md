@@ -92,13 +92,13 @@ Il CSV per seed riporta anche FPPI effettivamente raggiunta, soglia,
 TP e FP del punto empirico: la soglia descrive quel checkpoint su
 quell'acquisizione e non è una soglia ottimizzata per il deployment.
 
-- [Curve PDF](Search_and_Rescue/images/rtdetr_recall_fppi.pdf)
-- [Curve PNG](Search_and_Rescue/images/rtdetr_recall_fppi.png)
-- [Riepilogo CSV](Search_and_Rescue/results/rtdetr_recall_fppi_summary.csv)
-- [Budget per seed](Search_and_Rescue/results/rtdetr_recall_fppi_budgets.csv)
-- [Delta appaiati](Search_and_Rescue/results/rtdetr_recall_fppi_paired.csv)
-- [Griglia aggregata](Search_and_Rescue/results/rtdetr_recall_fppi_grid.csv)
-- [Metadati JSON](Search_and_Rescue/results/rtdetr_recall_fppi.json)
+- [Curve PDF](Thesis/images/rtdetr_recall_fppi.pdf)
+- [Curve PNG](Thesis/images/rtdetr_recall_fppi.png)
+- [Riepilogo CSV](Thesis/results/rtdetr_recall_fppi_summary.csv)
+- [Budget per seed](Thesis/results/rtdetr_recall_fppi_budgets.csv)
+- [Delta appaiati](Thesis/results/rtdetr_recall_fppi_paired.csv)
+- [Griglia aggregata](Thesis/results/rtdetr_recall_fppi_grid.csv)
+- [Metadati JSON](Thesis/results/rtdetr_recall_fppi.json)
 
 ## Riproduzione
 

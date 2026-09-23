@@ -47,5 +47,5 @@ mechanism_gate:
   maximum_fraction_guidance_at_least_half_cancelled: 0.50
   if_pass: box_guidance_mechanism_supported
   if_fail: box_guidance_mechanism_not_supported
-output_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.json
-output_csv: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.csv
+output_json: notes/Thesis/results/rtdetr_fam_box_guided_mechanism_audit_v1.json
+output_csv: notes/Thesis/results/rtdetr_fam_box_guided_mechanism_audit_v1.csv

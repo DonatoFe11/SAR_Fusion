@@ -16,7 +16,7 @@ import cairo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "notes" / "Search_and_Rescue" / "images"
+OUT = ROOT / "notes" / "Thesis" / "images"
 PREVIEW_OUT = Path("/tmp/thesis_figure_previews")
 
 FONT = "DejaVu Sans"

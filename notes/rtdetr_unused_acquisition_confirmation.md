@@ -289,7 +289,7 @@ generalizzazione fuori da WiSARD e alla popolazione SAR reale non è dimostrata.
   `8f7bee0e9597897ebf3ed339a98e2627c10ff7350f8c31b68b576460c020677c`;
 - insieme ordinato dei 50 file grezzi, hash composito SHA-256
   `3cff6bf475ab304d012fed4001d6084b6206ed972e4251905d2d07779ec175cf`;
-- [tabella compatta versionata](Search_and_Rescue/results/rtdetr_unused_acquisition_confirmation.csv),
+- [tabella compatta versionata](Thesis/results/rtdetr_unused_acquisition_confirmation.csv),
   identica byte per byte al CSV prodotto dal runner, SHA-256
   `a314bbf1d5eb7ffce296945a4f892231c2cbb713ba1436295c9941a73b4233c8`;
 - integrazione nei capitoli di metodologia, valutazione e discussione da

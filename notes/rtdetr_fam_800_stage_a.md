@@ -126,5 +126,5 @@ that higher resolution can never help under another training recipe.
 - checkpoint-free probe:
   `parameters/RTDETR/rtdetr_fam_800_runtime_probe.yaml`;
 - compact five-seed results:
-  `notes/Search_and_Rescue/results/rtdetr_fam_800_stage_a_validation.csv`;
+  `notes/Thesis/results/rtdetr_fam_800_stage_a_validation.csv`;
 - regression tests: `tests/test_rtdetr_fam_high_resolution.py`.

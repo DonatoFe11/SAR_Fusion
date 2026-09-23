@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import statistics
@@ -195,7 +196,7 @@ EXPECTED_COUNTERFACTUAL_PREREQUISITE = {
         "b891a2395996f2c6a95992bdd272a211625eb19a805020d7bb9e60cfe7f9ec0c"
     ),
     "result_json": (
-        "notes/Search_and_Rescue/results/"
+        "notes/Thesis/results/"
         "rtdetr_fam_box_guided_counterfactual_v1.json"
     ),
     "schema_version": 1,
@@ -223,7 +224,7 @@ EXPECTED_MECHANISM_PREREQUISITE = {
         "7278a05a279730d483e7108c3a8fe9d09f9400c6fbf1b0bfffbf783d2004e4f5"
     ),
     "result_json": (
-        "notes/Search_and_Rescue/results/"
+        "notes/Thesis/results/"
         "rtdetr_fam_box_guided_mechanism_audit_v1.json"
     ),
     "schema_version": 1,
@@ -640,6 +641,42 @@ def _load_json_object(path, description):
     return value
 
 
+def _historical_thesis_outputs(protocol):
+    """Restore only output locations when checking pre-rename provenance."""
+    historical = deepcopy(protocol)
+    if isinstance(historical, dict):
+        for key in ("output_json", "output_csv"):
+            value = historical.get(key)
+            if isinstance(value, str) and value.startswith("notes/Thesis/"):
+                historical[key] = value.replace(
+                    "notes/Thesis/", "notes/Search_and_Rescue/", 1
+                )
+    return historical
+
+
+def _verify_prerequisite_protocol(prerequisite, repo_root, kind):
+    protocol_path = (Path(repo_root) / prerequisite["protocol_path"]).resolve()
+    if file_sha256(protocol_path) != prerequisite["protocol_file_sha256"]:
+        # The frozen hashes still identify the original experiment. Accept
+        # exactly the directory relocation, while rejecting all other edits.
+        historical_bytes = protocol_path.read_bytes()
+        for key in (b"output_json", b"output_csv"):
+            historical_bytes = historical_bytes.replace(
+                key + b": notes/Thesis/", key + b": notes/Search_and_Rescue/"
+            )
+        if hashlib.sha256(historical_bytes).hexdigest() != prerequisite[
+            "protocol_file_sha256"
+        ]:
+            raise RuntimeError(f"Seed-40 {kind} protocol file changed")
+    protocol = load_yaml(protocol_path)
+    historical = _historical_thesis_outputs(protocol)
+    if stable_json_hash(_canonical_json_value(historical)) != prerequisite[
+        "protocol_payload_sha256"
+    ]:
+        raise RuntimeError(f"Seed-40 {kind} protocol payload changed")
+    return protocol
+
+
 def verify_counterfactual_prerequisite(
     prerequisite,
     candidate_checkpoint,
@@ -648,14 +685,9 @@ def verify_counterfactual_prerequisite(
     repo_root=REPO_ROOT,
 ):
     """Verify the passed seed-40 validation counterfactual and checkpoint identity."""
-    protocol_path = (Path(repo_root) / prerequisite["protocol_path"]).resolve()
-    if file_sha256(protocol_path) != prerequisite["protocol_file_sha256"]:
-        raise RuntimeError("Seed-40 counterfactual protocol file changed")
-    frozen_protocol = load_yaml(protocol_path)
-    if stable_json_hash(_canonical_json_value(frozen_protocol)) != prerequisite[
-        "protocol_payload_sha256"
-    ]:
-        raise RuntimeError("Seed-40 counterfactual protocol payload changed")
+    frozen_protocol = _verify_prerequisite_protocol(
+        prerequisite, repo_root, "counterfactual"
+    )
     protocol_identity = {
         "protocol_id": frozen_protocol.get("protocol_id"),
         "project": frozen_protocol.get("project"),
@@ -830,14 +862,9 @@ def verify_mechanism_prerequisite(
     repo_root=REPO_ROOT,
 ):
     """Verify the passed seed-40 mechanism artifact used before expansion."""
-    protocol_path = (Path(repo_root) / prerequisite["protocol_path"]).resolve()
-    if file_sha256(protocol_path) != prerequisite["protocol_file_sha256"]:
-        raise RuntimeError("Seed-40 mechanism protocol file changed")
-    frozen_protocol = load_yaml(protocol_path)
-    if stable_json_hash(_canonical_json_value(frozen_protocol)) != prerequisite[
-        "protocol_payload_sha256"
-    ]:
-        raise RuntimeError("Seed-40 mechanism protocol payload changed")
+    frozen_protocol = _verify_prerequisite_protocol(
+        prerequisite, repo_root, "mechanism"
+    )
     protocol_identity = {
         "protocol_id": frozen_protocol.get("protocol_id"),
         "project": frozen_protocol.get("project"),
@@ -866,9 +893,9 @@ def verify_mechanism_prerequisite(
         raise RuntimeError("Mechanism result schema differs from the freeze")
     if result.get("protocol_sha256") != prerequisite["protocol_payload_sha256"]:
         raise RuntimeError("Mechanism result points to a different protocol")
-    if _canonical_json_value(result.get("protocol")) != _canonical_json_value(
-        frozen_protocol
-    ):
+    if _canonical_json_value(
+        _historical_thesis_outputs(result.get("protocol"))
+    ) != _canonical_json_value(_historical_thesis_outputs(frozen_protocol)):
         raise RuntimeError("Mechanism result embedded protocol differs from its file")
     if result.get("training_config_sha256") != prerequisite[
         "training_config_sha256"

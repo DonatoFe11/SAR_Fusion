@@ -321,9 +321,9 @@ method section should distinguish:
   `parameters/RTDETR/rtdetr_fam_residual_alignment_alpha_audit.yaml` and
   `scripts/run_rtdetr_fam_residual_alignment_alpha_audit.py`;
 - performance table:
-  `notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_stage_a_validation.csv`;
+  `notes/Thesis/results/rtdetr_fam_residual_alignment_stage_a_validation.csv`;
 - alpha audit outputs:
-  `notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.json`
-  and `notes/Search_and_Rescue/results/rtdetr_fam_residual_alignment_alpha_audit.csv`;
+  `notes/Thesis/results/rtdetr_fam_residual_alignment_alpha_audit.json`
+  and `notes/Thesis/results/rtdetr_fam_residual_alignment_alpha_audit.csv`;
 - regression tests: `tests/test_rtdetr_residual_alignment.py` and
   `tests/test_rtdetr_residual_alignment_alpha_audit.py`.

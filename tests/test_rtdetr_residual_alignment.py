@@ -43,7 +43,7 @@ PROBE_PATH = (
 RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_residual_alignment_stage_a_validation.csv"
 )

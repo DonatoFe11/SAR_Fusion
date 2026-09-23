@@ -59,14 +59,14 @@ AUDIT_PATH = (
 AUDIT_RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_scalar_alignment_control_audit.csv"
 )
 PERFORMANCE_RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_scalar_alignment_control_stage_a_validation.csv"
 )

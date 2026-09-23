@@ -30,7 +30,7 @@ MANIFEST_PATH = (
 RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_rcra_full_data_stage_b_evaluation.csv"
 )

@@ -658,7 +658,7 @@ soddisfatto. I punti 18 e successivi costituiscono l'estensione ora autorizzata.
     la terza scelta detector-level. **Decisione applicata:** la guida apprende
     la geometria ma non migliora abbastanza la detection; il cost-volume non è
     giustificato e la prossima linea da valutare è RT-DETRv2 + FAM.
-27. Aggiornare `notes/Search_and_Rescue/main.tex` dopo la chiusura della nuova
+27. Aggiornare `notes/Thesis/main.tex` dopo la chiusura della nuova
     campagna oppure dopo il suo arresto fail-closed. **Da fare:** RT-DETRv2 e
     YOLO26 sono ora entrambi chiusi, quindi non restano altri training necessari
     prima del consolidamento della tesi.

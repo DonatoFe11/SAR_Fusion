@@ -14,6 +14,8 @@ from scripts.run_rtdetr_fam_box_guided_mechanism_audit import (
 )
 from scripts.run_rtdetr_fam_box_guided_stage_a_five_seed_audit import (
     DEFAULT_PROTOCOL,
+    _historical_thesis_outputs,
+    _verify_prerequisite_protocol,
     EXPECTED_COUNTERFACTUAL_RESULT_IMPLEMENTATION_PATHS,
     EXPECTED_SEEDS,
     load_source_configs,
@@ -34,6 +36,27 @@ from scripts.run_rtdetr_fam_box_guided_stage_a_five_seed_audit import (
 
 
 class TestBoxGuidedFiveSeedStageAAudit(unittest.TestCase):
+    def test_thesis_relocation_preserves_frozen_protocol_hashes(self):
+        root = Path(__file__).resolve().parents[1]
+        protocol = load_yaml(DEFAULT_PROTOCOL)
+        for kind in ("counterfactual", "mechanism"):
+            with self.subTest(kind=kind):
+                prerequisite = protocol[f"seed40_{kind}_prerequisite"]
+                migrated = _verify_prerequisite_protocol(prerequisite, root, kind)
+                self.assertTrue(migrated["output_json"].startswith("notes/Thesis/"))
+                self.assertEqual(migrated["output_json"], prerequisite["result_json"])
+
+                with TemporaryDirectory() as directory:
+                    target = Path(directory) / prerequisite["protocol_path"]
+                    target.parent.mkdir(parents=True)
+                    original = (root / prerequisite["protocol_path"]).read_text()
+                    target.write_text(original.replace("notes/Thesis/", "notes/Thesis/other/"))
+                    with self.assertRaisesRegex(RuntimeError, "protocol file changed"):
+                        _verify_prerequisite_protocol(prerequisite, directory, kind)
+                    target.write_text(original.replace("checkpoint: best", "checkpoint: last"))
+                    with self.assertRaisesRegex(RuntimeError, "protocol file changed"):
+                        _verify_prerequisite_protocol(prerequisite, directory, kind)
+
     def test_protocol_and_real_grid_indices_are_frozen(self):
         protocol = load_yaml(DEFAULT_PROTOCOL)
         validate_protocol(protocol)
@@ -377,7 +400,9 @@ class TestBoxGuidedFiveSeedStageAAudit(unittest.TestCase):
         )
         # JSON publication stringifies the integer keys in the frozen target
         # match-count distribution; the verifier must compare canonically.
-        serialized_mechanism_protocol = json.loads(json.dumps(mechanism_protocol))
+        serialized_mechanism_protocol = json.loads(
+            json.dumps(_historical_thesis_outputs(mechanism_protocol))
+        )
         population = mechanism_protocol["target_population"]
         mechanism = {
             "schema_version": 1,

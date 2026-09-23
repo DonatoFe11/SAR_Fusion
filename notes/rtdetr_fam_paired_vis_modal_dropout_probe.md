@@ -193,7 +193,7 @@ python scripts/run_rtdetr_fam_paired_vis_modal_dropout_probe_evaluation.py
 ```
 
 The compact versioned table is
-`notes/Search_and_Rescue/results/rtdetr_fam_paired_vis_modal_dropout_probe_evaluation.csv`.
+`notes/Thesis/results/rtdetr_fam_paired_vis_modal_dropout_probe_evaluation.csv`.
 The complete aggregate remains under
 `out/rtdetr_fam_paired_vis_modal_dropout_probe_evaluation/` and is marked
 `protocol_complete: true`.

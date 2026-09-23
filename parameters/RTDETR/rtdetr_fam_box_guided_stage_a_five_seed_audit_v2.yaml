@@ -78,7 +78,7 @@ seed40_counterfactual_prerequisite:
   protocol_path: parameters/RTDETR/rtdetr_fam_box_guided_counterfactual_seed40.yaml
   protocol_file_sha256: 37eed97e8c468b21c1e581fa07d6d1d7bbbf2b790ac62417e14ce1255de67acd
   protocol_payload_sha256: b891a2395996f2c6a95992bdd272a211625eb19a805020d7bb9e60cfe7f9ec0c
-  result_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.json
+  result_json: notes/Thesis/results/rtdetr_fam_box_guided_counterfactual_v1.json
   schema_version: 1
   seed: 40
   project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
@@ -94,7 +94,7 @@ seed40_mechanism_prerequisite:
   protocol_path: parameters/RTDETR/rtdetr_fam_box_guided_mechanism_audit_seed40.yaml
   protocol_file_sha256: 2b7a5d97fafb7d0cd822bbf58edf90eda5f87020843b63f223f265a7c0cb7835
   protocol_payload_sha256: 7278a05a279730d483e7108c3a8fe9d09f9400c6fbf1b0bfffbf783d2004e4f5
-  result_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.json
+  result_json: notes/Thesis/results/rtdetr_fam_box_guided_mechanism_audit_v1.json
   schema_version: 1
   seed: 40
   project: RTDETR_FAM_BoxGuided_SequenceVal_Seed40
@@ -104,7 +104,7 @@ seed40_mechanism_prerequisite:
   require_mechanism_gate_passed: true
 
 implementation_sources:
-  scripts/run_rtdetr_fam_box_guided_stage_a_five_seed_audit.py: 29effd3e3902a06d56fa6fd5cb239582b915ddc98d5cf816eba723a8cf856a27
+  scripts/run_rtdetr_fam_box_guided_stage_a_five_seed_audit.py: ec850081f3550749ae6a2f469eb3725c97f1652074cfe551a6479ff594cafab2
   scripts/run_rtdetr_fam_box_guided_mechanism_audit.py: d0d868f75a4de4c064b61c774dc9d8056dd82f8bd8f977b41f1822e2b9dcf14d
   scripts/run_rtdetr_fam_box_guided_counterfactual.py: 07ba892af68b1f9a38b80e3ce7e91af8283d66a3d242503b7155d06a85f41375
 
@@ -159,5 +159,5 @@ stage_a_promotion_gate:
   if_pass: promote_box_guided_candidate_to_stage_b
   if_fail: do_not_promote_box_guided_candidate
 
-output_json: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.json
-output_csv: notes/Search_and_Rescue/results/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.csv
+output_json: notes/Thesis/results/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.json
+output_csv: notes/Thesis/results/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.csv

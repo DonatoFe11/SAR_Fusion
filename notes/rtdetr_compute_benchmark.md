@@ -126,7 +126,7 @@ conserva l'ordine alternato predefinito.
 ## Artefatti
 
 Il riepilogo versionato è
-[`rtdetr_compute_benchmark.csv`](Search_and_Rescue/results/rtdetr_compute_benchmark.csv).
+[`rtdetr_compute_benchmark.csv`](Thesis/results/rtdetr_compute_benchmark.csv).
 Il JSON completo locale è
 `out/rtdetr_additive_fam_compute_benchmark.json`, dichiara
 `protocol_complete: true` e ha SHA-256:

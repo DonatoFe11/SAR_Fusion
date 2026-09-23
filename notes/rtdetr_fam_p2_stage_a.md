@@ -266,9 +266,9 @@ are `lbrr41te`, `61wyomy4`, `aflizsb0` and `y4q7b3sz`; seed 40 is `k0uugy3n`.
 - Matched batch-2 FAM control:
   `parameters/RTDETR/rtdetr_fam_sequence_validation_batch2_control_seed40.yaml`
 - Five-seed validation table:
-  `notes/Search_and_Rescue/results/rtdetr_fam_p2_stage_a_validation.csv`
+  `notes/Thesis/results/rtdetr_fam_p2_stage_a_validation.csv`
 - Matched-control table:
-  `notes/Search_and_Rescue/results/rtdetr_fam_p2_batch2_control.csv`
+  `notes/Thesis/results/rtdetr_fam_p2_batch2_control.csv`
 - Implementation: `sarfusion/models/rtdetr_fusion.py`,
   `sarfusion/models/detr.py` and `sarfusion/models/__init__.py`
 - Regression tests: `tests/test_rtdetr_p2.py`

@@ -253,9 +253,9 @@ once using the complete frozen result chain.
   `parameters/RTDETR/rtdetr_fam_scalar_alignment_control_audit.yaml` and
   `scripts/run_rtdetr_fam_scalar_alignment_control_audit.py`;
 - compact performance table:
-  `notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_stage_a_validation.csv`;
+  `notes/Thesis/results/rtdetr_fam_scalar_alignment_control_stage_a_validation.csv`;
 - scalar audit outputs:
-  `notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.json`
+  `notes/Thesis/results/rtdetr_fam_scalar_alignment_control_audit.json`
   and
-  `notes/Search_and_Rescue/results/rtdetr_fam_scalar_alignment_control_audit.csv`;
+  `notes/Thesis/results/rtdetr_fam_scalar_alignment_control_audit.csv`;
 - regression tests: `tests/test_rtdetr_scalar_alignment_control.py`.

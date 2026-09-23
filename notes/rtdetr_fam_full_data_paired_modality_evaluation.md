@@ -178,7 +178,7 @@ if it were interchangeable with native IR detection.
 ## Artifacts and thesis treatment
 
 The compact versioned result is
-`notes/Search_and_Rescue/results/rtdetr_fam_full_data_paired_modality_evaluation.csv`.
+`notes/Thesis/results/rtdetr_fam_full_data_paired_modality_evaluation.csv`.
 The complete local output is under
 `out/rtdetr_fam_full_data_paired_modality_evaluation/`.
 
@@ -186,7 +186,7 @@ The post-hoc native-IR diagnostic is reproduced by
 `parameters/RTDETR/rtdetr_fam_full_data_native_ir_coordinate_diagnostic.yaml`
 and `scripts/run_rtdetr_fam_full_data_native_ir_coordinate_diagnostic.py`. Its
 compact result is
-`notes/Search_and_Rescue/results/rtdetr_fam_full_data_native_ir_coordinate_diagnostic.csv`;
+`notes/Thesis/results/rtdetr_fam_full_data_native_ir_coordinate_diagnostic.csv`;
 the complete local output is under
 `out/rtdetr_fam_full_data_native_ir_coordinate_diagnostic/`.
 

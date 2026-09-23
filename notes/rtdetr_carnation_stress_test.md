@@ -243,9 +243,9 @@ riferimento RGB reale è assente.
 Gli output completi e i 30 JSON restano in
 `out/rtdetr_carnation_stress_test/`. Gli artefatti compatti versionati sono:
 
-- [`rtdetr_carnation_stress_test.csv`](Search_and_Rescue/results/rtdetr_carnation_stress_test.csv),
+- [`rtdetr_carnation_stress_test.csv`](Thesis/results/rtdetr_carnation_stress_test.csv),
   con le 30 unità checkpoint/modalità;
-- [`rtdetr_carnation_paired_map50.png`](Search_and_Rescue/images/rtdetr_carnation_paired_map50.png),
+- [`rtdetr_carnation_paired_map50.png`](Thesis/images/rtdetr_carnation_paired_map50.png),
   con i confronti appaiati per seed.
 
 L'aggregato completo ha SHA-256:

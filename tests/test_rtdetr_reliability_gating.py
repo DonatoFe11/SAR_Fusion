@@ -67,7 +67,7 @@ GATE_LR10X_FIVE_SEED_PATH = (
 GATE_LR10X_RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_reliability_gate_lr10x_stage_a_validation.csv"
 )

@@ -300,7 +300,7 @@ revision should present:
   `parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_evaluation.yaml` and
   `scripts/run_rtdetr_fam_rcra_full_data_stage_b_evaluation.py`;
 - compact paired result:
-  `notes/Search_and_Rescue/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv`;
+  `notes/Thesis/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv`;
 - complete local output:
   `out/rtdetr_fam_rcra_full_data_stage_b_evaluation/`;
 - regression tests: `tests/test_rtdetr_fam_rcra_full_data_stage_b.py`.

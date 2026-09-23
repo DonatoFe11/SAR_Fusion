@@ -64,7 +64,7 @@ seed, hashes `best` and `latest`, caches each evaluation and writes a paired
 aggregate. Its frozen protocol is
 `parameters/RTDETR/rtdetr_fam_sequence_validation_checkpoint_evaluation.yaml`.
 The versioned compact table is
-`notes/Search_and_Rescue/results/rtdetr_fam_sequence_checkpoint_evaluation.csv`.
+`notes/Thesis/results/rtdetr_fam_sequence_checkpoint_evaluation.csv`.
 The complete local JSON is marked `protocol_complete: true` and has SHA-256
 `1402142280d299d94bffc8628a756e6d15d42867c260425bcce6c27bfd80357e`.
 

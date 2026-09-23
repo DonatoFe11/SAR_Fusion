@@ -219,14 +219,14 @@ Do not run MtErie until all five validation results have been aggregated.
 - Five-seed expansion grid:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_sequence_validation_five_seed.yaml`
 - Five-seed validation results:
-  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_stage_a_validation.csv`
+  `notes/Thesis/results/rtdetr_fam_reliability_gate_stage_a_validation.csv`
 - Learned-weight audit protocol:
   `parameters/RTDETR/rtdetr_fam_reliability_gate_weight_audit.yaml`
 - Learned-weight audit runner:
   `scripts/run_rtdetr_fam_reliability_gate_weight_audit.py`
 - Learned-weight audit results:
-  `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_weight_audit.json`
-  and `notes/Search_and_Rescue/results/rtdetr_fam_reliability_gate_weight_audit.csv`
+  `notes/Thesis/results/rtdetr_fam_reliability_gate_weight_audit.json`
+  and `notes/Thesis/results/rtdetr_fam_reliability_gate_weight_audit.csv`
 - Audit regression tests:
   `tests/test_rtdetr_reliability_gate_weight_audit.py`
 - Operational probe:

@@ -44,7 +44,7 @@ File operativi:
   checkpoint e dell'aggiornamento FAM;
 - `scripts/replay_rtdetr_v2_stage_a_validation.py`: replay validation
   indipendente e decisione automatica del gate;
-- `notes/Search_and_Rescue/results/rtdetr_v2_fam_stage_a_validation.csv`:
+- `notes/Thesis/results/rtdetr_v2_fam_stage_a_validation.csv`:
   risultato canonico sintetico.
 
 ## Modifica valutata

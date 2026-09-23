@@ -42,10 +42,10 @@ File principali:
   e [runner](../scripts/run_rtdetr_fam_box_guided_mechanism_audit.py);
 - [protocollo controfattuale validation active-vs-zero](../parameters/RTDETR/rtdetr_fam_box_guided_counterfactual_seed40.yaml)
   e [runner](../scripts/run_rtdetr_fam_box_guided_counterfactual.py);
-- [risultato meccanicistico JSON](Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.json)
-  e [CSV](Search_and_Rescue/results/rtdetr_fam_box_guided_mechanism_audit_v1.csv);
-- [risultato controfattuale JSON](Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.json)
-  e [CSV](Search_and_Rescue/results/rtdetr_fam_box_guided_counterfactual_v1.csv);
+- [risultato meccanicistico JSON](Thesis/results/rtdetr_fam_box_guided_mechanism_audit_v1.json)
+  e [CSV](Thesis/results/rtdetr_fam_box_guided_mechanism_audit_v1.csv);
+- [risultato controfattuale JSON](Thesis/results/rtdetr_fam_box_guided_counterfactual_v1.json)
+  e [CSV](Thesis/results/rtdetr_fam_box_guided_counterfactual_v1.csv);
 - [protocollo Stage A aggregato a cinque seed, condizionale](../parameters/RTDETR/rtdetr_fam_box_guided_stage_a_five_seed_audit_v2.yaml)
   e [runner](../scripts/run_rtdetr_fam_box_guided_stage_a_five_seed_audit.py).
 

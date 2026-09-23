@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("notes/Search_and_Rescue/results/yolo26_integration_audit.json"),
+        default=Path("notes/Thesis/results/yolo26_integration_audit.json"),
     )
     return parser.parse_args()
 

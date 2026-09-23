@@ -267,7 +267,7 @@ adottata come preprocessing e la scelta finale del FAM standard non cambia.
   `a5f2d1e69ad043b61fed108c6fa00b697989418e7689d7e9df6a24900af7f3f8`;
 - aggregato JSON completo, SHA-256
   `96d3ac9be143452cbbdb2ce359169aa8b4d9f39928ed9e5628651279cec7e2bd`;
-- [CSV versionato con i 600 punti](Search_and_Rescue/results/rtdetr_synthetic_geometric_stress.csv),
+- [CSV versionato con i 600 punti](Thesis/results/rtdetr_synthetic_geometric_stress.csv),
   SHA-256 `f37b984c61e9aab51afa7706d57407d898048c9feb9691a5fb5e40d3405613ef`;
-- [curve versionate](Search_and_Rescue/images/rtdetr_synthetic_geometric_stress_curves.png),
+- [curve versionate](Thesis/images/rtdetr_synthetic_geometric_stress_curves.png),
   SHA-256 `55f49b8847175f825671718c6ed1cd129ca978b817e92520674f0a6b4796a13d`.

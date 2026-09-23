@@ -93,7 +93,7 @@ selezionate dal criterio congelato.
 
 Risultati versionati:
 
-- [CSV completo](Search_and_Rescue/results/rtdetr_fam_mixed_consistency_probe_evaluation.csv),
+- [CSV completo](Thesis/results/rtdetr_fam_mixed_consistency_probe_evaluation.csv),
   SHA-256 `5cb36e63d7a5758215e9fa4cf431e3ad4e56d7b285259dd00466d7627b608d65`;
 - aggregato JSON locale completo, SHA-256
   `1115324e84ab68a781695de4d65eadb7ac272a28886b411a07badae9eb1434bd`;

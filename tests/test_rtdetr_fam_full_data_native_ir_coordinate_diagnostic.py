@@ -21,7 +21,7 @@ PROTOCOL_PATH = (
 RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_full_data_native_ir_coordinate_diagnostic.csv"
 )

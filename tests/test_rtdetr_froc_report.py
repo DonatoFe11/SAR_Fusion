@@ -124,7 +124,7 @@ class TestRTDETRFROCReport(unittest.TestCase):
     def test_publication_copies_assets_but_does_not_change_thesis_tex(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(report_module, "_plot", fake_plot):
             root = Path(directory)
-            thesis_dir = root / "notes" / "Search_and_Rescue"
+            thesis_dir = root / "notes" / "Thesis"
             thesis_dir.mkdir(parents=True)
             thesis = thesis_dir / "main.tex"
             thesis.write_text("unchanged thesis")

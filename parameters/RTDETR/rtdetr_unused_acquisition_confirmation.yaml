@@ -32,7 +32,7 @@ protocol:
 
   selection_source:
     protocol: parameters/RTDETR/rtdetr_fam_rcra_full_data_stage_b_evaluation.yaml
-    result_csv: notes/Search_and_Rescue/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv
+    result_csv: notes/Thesis/results/rtdetr_fam_rcra_full_data_stage_b_evaluation.csv
     required_decision: fail_retain_fam
 
   acquisitions:

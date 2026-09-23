@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the non-self-referential YOLO26 Stage A source manifest."""
+"""Generate the post-rename Stage A manifest while preserving the thesis archive."""
 
 from __future__ import annotations
 
@@ -8,7 +8,12 @@ import json
 from pathlib import Path
 
 
+ARCHIVED_MANIFEST = "parameters/YOLO26/stage_a_source_manifest.json"
+OUTPUT_MANIFEST = "parameters/YOLO26/stage_a_source_manifest_thesis_paths_v1.json"
+
+
 FILES = (
+    ARCHIVED_MANIFEST,
     "requirements-yolo26.txt",
     "sarfusion/yolo26/__init__.py",
     "sarfusion/yolo26/fam.py",
@@ -52,11 +57,14 @@ def main() -> int:
         )
     manifest = {
         "schema": "sarfusion.yolo26.stage_a.source.v1",
+        "source_revision": "thesis_paths_v1",
+        "archived_source_manifest": ARCHIVED_MANIFEST,
+        "archived_source_manifest_sha256": sha256(repository / ARCHIVED_MANIFEST),
         "ultralytics": "8.4.138",
         "ultralytics_tag_commit": "dad7bb4534c95021bc14969ab25d77b77c4efdc3",
         "files": items,
     }
-    output = repository / "parameters/YOLO26/stage_a_source_manifest.json"
+    output = repository / OUTPUT_MANIFEST
     output.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
