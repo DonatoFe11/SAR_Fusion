@@ -1,0 +1,514 @@
+\chapter{Discussion and Conclusions}
+\label{chap:discussion}
+
+\section{Answers to the research questions}
+
+\subsection{RQ1: experimental reliability}
+
+The observed RT-DETR variability is large enough to change single-run model
+rankings. Nominally identical native-CUDA executions diverge after the first
+backward pass even when initialization, input, and initial loss agree. The
+transferred COCO person head reduces amplification of those perturbations but
+does not remove them, and DCNv2 prevents strict deterministic FAM training in
+the studied environment.
+
+Reliable comparison consequently requires more than recording a seed. The
+historical locked protocol combines paired seed values, isolated processes, a
+fixed training horizon, epoch-10 checkpoints, identical pretrained-head
+transfer, training-only Modal Dropout, and distributional reporting. It turns
+the single-run SSJ result into a repeatable selection of standard FAM over the
+Base RT-DETR configuration.
+
+The validation-led campaign additionally shows that the checkpoint-selection rule
+materially affects the measured result. Holding out the complete FHL
+0401/0402 video and selecting \texttt{best} within a fixed ten-epoch budget
+improves MtErie over \texttt{latest} in all five FAM Stage-A seeds. This is
+checkpoint selection, not early stopping: every run still completes ten
+epochs. Separating validation-led Stage A from full-data Stage B also prevents
+an apparent gain from being created by comparing different optimization
+datasets or code revisions.
+
+The methodological answer to RQ1 is therefore that experimental design is part
+of the result. Paired replication, a complete-video development split,
+predeclared promotion rules, and a configuration-matched full-data confirmation
+are all needed before replacing the baseline. The selected split is still
+internal, and MtErie remains previously consulted rather than blind.
+
+The acquisition-level confirmation demonstrates the complementary role
+of freezing data inventories, checkpoint hashes, and contrasts before
+inference. It provides stronger evidence than another MtErie evaluation, but
+does not turn internal WiSARD sequences into an external holdout. The
+mixed-consistency, box-guided, RT-DETRv2, and YOLO26 comparisons apply the same
+five-seed Stage-A decision structure as the other candidates. No performance
+decision is taken on an individual seed: the complete budget is run for every
+seed, the validation-selected \texttt{best} is primary, and the final epoch is
+a mandatory diagnostic. Promotion requires both a mean paired gain of at least
+0.01 and positive gains in at least four of five seeds. The fixed horizon is
+ten epochs for RT-DETR and RT-DETRv2 and fifty for YOLO26.
+
+\subsection{RQ2: RT-DETR effectiveness and modality use}
+
+In the historical locked comparison, standard FAM improves Base RT-DETR in
+every paired seed and raises mean \mapfifty{} by 0.0700. The
+improvement is supported by COCO mAP, mAP@75, mAR, and the recall analysis. IR
+feature dropout and SSJ do not provide a reliable increment over FAM; Identity
+DCNv2 is highly variable, and Grid Sample is close but not consistently
+superior.
+
+The historical native-sensor modality table evaluates VIS, IR, and fusion on
+different frame populations and annotations, therefore it cannot support a
+direct cross-modality ranking. The post-selection audit holds all of these
+variables fixed for the five current-code FAM checkpoints. On the same 708
+paired MtErie frames and VIS ground truth, fusion exceeds VIS in 5/5 seeds
+by \(0.0373\pm0.0223\), with a 95\% interval of [0.0095, 0.0650]. This provides
+the supported evidence that the thermal stream adds information beyond VIS
+on the selected internal population.
+
+The very low \(0.0215\pm0.0091\) masked-IR/VIS-ground-truth score is a
+different robustness construct. It removes RGB, which supplies the reference
+for the asymmetric FAM, but still requests boxes in VIS coordinates from IR
+that has only been resized and padded. A post-hoc native-coordinate diagnostic
+obtains \(0.5618\pm0.0498\) on the same IR counterparts with native IR
+annotations, ruling out a collapsed thermal branch. Replacing native IR dropout
+with the paired VIS-coordinate convention fails the frozen seed-40 ablation: it
+reduces native-IR performance in that screening run without solving
+paired missing-RGB prediction.
+
+The acquisition-level confirmation strengthens the architectural result while
+narrowing the modality claim. Historical FAM exceeds Base in all five
+seeds on both previously unused acquisitions, with gains of 0.0960 on
+Carnation and 0.1554 on FHL. On the matched Stage-B checkpoints, however,
+fusion is effectively tied with VIS on Carnation and is worse on FHL. A better
+fusion operator does not imply that the thermal input helps uniformly on every
+acquisition.
+
+The answer to RQ2 is therefore conditional. FAM consistently improves the
+Base RT-DETR reference, and fusion contributes beyond VIS under a
+same-frame paired evaluation. Modal Dropout supports native-sensor operation
+under its training contract, but it does not make the asymmetric fusion model
+robust to every possible missing-reference and coordinate-system intervention.
+
+\subsection{RQ3: mechanism, levels, and improved alignment}
+
+The FAM predicts nonzero transformations at P3 and P4 across all five standard
+historical checkpoints. Its offset scale and transformed features vary with
+seed, level, and acquisition session. SSJ changes P3 behavior consistently,
+increasing offset magnitude and smoothing, even though detection does not
+improve. Grid Sample is internally more stable but does not establish that a
+pure warp is equivalent to DCNv2.
+
+The diagnostics do not demonstrate physical RGB--IR registration. DCNv2 mixes
+geometric sampling, filtering, mask modulation, and channel interaction. The
+supported interpretation is a task-oriented geometric-functional
+transformation. The P5 seed-41 collapse reinforces this distinction: a
+spatially constant internal branch coexists with the best historical FAM
+checkpoint because the rest of the detector compensates for it. Smoothly
+bounding offsets removes the collapse in five new runs but lowers mean
+accuracy, so a mechanistically effective correction is not automatically a
+better detector.
+
+The validation-led extension campaign rejects several simple improvement
+hypotheses. Adding P2 loses in 5/5 seeds, a matched micro-batch control does not
+explain that deficit, global \(800\times800\) input wins only 1/5 comparisons,
+and two post-FAM reliability gates fail their promotion rules. These results do
+not prove that high-resolution features or reliability modeling are generally
+unsuitable; they reject the implemented recipes under the common ten-epoch
+protocol.
+
+Zero-offset initialization also fails Stage A: resetting only the initial
+sampling offsets reduces best-validation mean \mapfifty{} by 0.0125 and wins
+only one of five pairs. The final-epoch mean gain of 0.0118 has three positive
+pairs and does not change the decision based on validation-selected best
+checkpoints. Both paired confidence intervals include zero. The predictors
+learn nonzero, distinct weight rows in every inspected level and checkpoint,
+so their initially identical zero rows do not remain identical. This isolates
+an initialization intervention from the historical Identity DCNv2 operator,
+while providing no evidence of improved physical registration or a reliable
+performance advantage under the tested protocol.
+
+RCRA is the only extension to pass Stage A. Its learned coefficient mainly
+suppresses the FAM residual at P3 and P4 and reacts to either missing modality
+in all five seeds; a three-parameter scalar control cannot reproduce the
+validation gain. In matched full-data Stage B, however, RCRA improves mean
+\mapfifty{} by 0.0184 but wins only 3/5 seeds, with an interval spanning
+[-0.0550, 0.0918]. It therefore fails the frozen stability condition. The
+answer to RQ3 is again asymmetric: reliability-conditioned residual selection
+is mechanistically active and promising, but its performance gain is not
+stable enough to replace standard FAM.
+
+Mixed consistency training and Box-Guided P3 are evaluated against the same
+five standard-FAM Stage-A controls as the other RT-DETR candidates. Mixed
+consistency reduces best-checkpoint mean \mapfifty{} from
+\(0.1646\pm0.0196\) to \(0.1094\pm0.0328\), with negative paired differences
+in all five seeds. Box-Guided P3 obtains \(0.1723\pm0.0233\), but its mean
+gain of 0.0077 and two positive pairs fail both promotion conditions. Its
+final-epoch gain is only 0.0005. Neither recipe is promoted to full-data Stage B.
+These results reject the tested detection recipes, not their underlying
+mechanistic objectives. Five-seed geometric counterfactuals for box-guided
+alignment and isolated-modality evaluations for mixed consistency were not
+performed and their outcomes cannot be inferred from the fusion comparison.
+
+The synthetic stress supplies a second limitation. FAM does not exhibit a
+universally more favorable signed degradation curve than Base; some FHL
+translations improve the unmodified Base reference more. The
+supported mechanism remains a task-oriented geometric-functional
+transformation, not verified physical registration or invariant tolerance to
+known shifts.
+
+\subsection{RQ4: operational relevance}
+
+FAM primarily changes the recall side of the precision--recall trade-off. At
+confidence 0.25, it improves mean recall by 0.0990 in all five paired seeds and
+reduces the frequency of non-empty frames with at least one missed target. This
+is relevant to SAR, where a missed person can have high cost. At a common
+confidence threshold, false positives do not decrease consistently, however,
+and the 0.01 threshold used for AP collection is not operational because it
+produces roughly fifty false positives per image.
+
+The post-hoc recall--FPPI comparison in \Cref{sec:recall-fppi} separates this
+threshold-dependent observation from performance at a matched false-positive
+budget. At 0.5 FPPI, historical FAM increases mean recall by 0.1102 on MtErie,
+0.0981 on Carnation 0025/0026, and 0.1479 on FHL 0407/0408, with positive
+differences in all five seeds within each population. This supports a better
+recall--false-positive trade-off at the reported budgets, not universal
+curve dominance or a validated deployment threshold.
+
+Carnation 0023/0024 exposes a geometric boundary. FAM outperforms Base RT-DETR under the
+severe scale mismatch, but adding IR remains worse than using VIS alone in
+every FAM checkpoint. The experiment therefore establishes a relative FAM
+advantage under mismatch, not correction or mitigation of the underlying
+sensor misalignment.
+
+On the two larger previously unused internal acquisitions, FAM's absolute
+advantage over Base persists in all ten acquisition--seed comparisons.
+The controlled perturbations show, however, that operational robustness cannot
+be reduced to a monotone translation or scale curve without calibrated sensor
+geometry. These findings motivate acquisition-specific validation rather than
+a universal alignment claim.
+
+The performance gain also has a material computational cost: 77.5\% more
+parameters, 46.2\% more proxy GFLOPs, 17.9\% more detector latency, and higher
+CUDA memory on the measured GPU. These values prevent describing FAM as a free
+or generically real-time improvement.
+
+\subsection{RQ5: architectural transferability}
+
+Consistently positive transfer is not established. Deformable DETR provides a
+promising exploratory median trend, but its observed ranges overlap and its
+protocol is not aligned with the final campaign. Complete DINO base is too weak
+under the studied configuration to justify FAM variants. Under the controlled
+YOLOv10 protocol, FAM decreases mean VIS+IR performance and wins in only two of
+five seeds.
+
+The five-seed Stage-A contrasts distinguish RT-DETRv2 from YOLO26
+(\Cref{tab:detector-stage-a-five-seed,tab:detector-stage-a-deltas}). RT-DETRv2
+FAM increases best-checkpoint mean \mapfifty{} from \(0.1544\pm0.0093\) to
+\(0.1764\pm0.0255\). Its paired gain of \(0.0220\pm0.0344\) exceeds the
+0.01 mean threshold, but only three of five differences are positive; the
+95\% interval is [-0.0207, 0.0648]. This is a positive but unstable mean effect,
+not evidence of uniformly harmful transfer. The four-of-five consistency
+condition is not met, so RT-DETRv2 FAM is not promoted to Stage B.
+
+YOLO26 FAM decreases best-checkpoint mean \mapfifty{} from
+\(0.0507\pm0.0163\) to \(0.0273\pm0.0149\), with a paired difference of
+\(-0.0234\pm0.0148\) and only one positive pair. All ten Base and FAM
+runs complete fifty epochs. Final-epoch means fall to 0.001262 and 0.000092,
+respectively, showing substantial degradation in both variants. The selected
+best checkpoints are predominantly early because they are selected by the
+declared validation rule over the full completed budget, not because the
+comparison was restricted to the first epoch. YOLO26 FAM fails Stage A and
+does not enter Stage B.
+
+The negative YOLOv10 result is scientifically useful. It shows that the RT-DETR
+gain depends on the surrounding representation, fusion interface, optimization
+trajectory, or checkpoint regime and cannot be assumed from the local FAM
+operation alone. RT-DETRv2 indicates that architectural similarity can coexist
+with a favorable mean effect that remains insufficiently stable across paired
+seeds. The low YOLO26 scores and final-epoch degradation limit attribution to
+this dual-backbone port and training recipe, not the detector family in
+general. None of these results shows that YOLOv10,
+RT-DETRv2, YOLO26, or DINO is intrinsically unsuitable for RGB--thermal
+detection.
+
+\section{Overall interpretation}
+
+The most defensible conclusion combines complementary experimental contrasts. The
+historical locked study establishes that standard FAM improves Base
+RT-DETR consistently on the internal benchmark and primarily raises recall.
+The validation-led campaign does not confirm a replacement: RCRA has a
+positive but unstable Stage-B mean effect, while P2, global upsampling,
+zero-offset initialization, post-FAM gating, scalar residual calibration,
+mixed consistency, and box-guided alignment fail their five-seed Stage-A
+development rules.
+Standard FAM therefore remains the selected model and the reference for
+subsequent candidate comparisons.
+
+That choice is strengthened by the previously unused acquisition campaign:
+historical FAM beats historical Base in 10/10 acquisition--seed contrasts.
+The detector-transfer comparisons do not establish a general FAM advantage.
+RT-DETRv2 has a positive mean effect but wins only three of five seeds and
+fails the same Stage-A consistency requirement. Within YOLO26, FAM loses to
+Base in four of five paired seeds, while both
+variants have very low final-epoch scores. Its different optimization budget
+and evaluation pipeline preclude interpreting the absolute YOLO26 and RT-DETR
+scores as a controlled cross-family ranking.
+
+The paired modality audit strengthens one part of that conclusion and narrows
+another. Fusion exceeds VIS on the same 708 frames in all five selected
+checkpoints, so the thermal stream contributes useful information. Conversely,
+masked IR in VIS coordinates is not interchangeable with native IR detection.
+Reporting the coordinate contract is necessary to distinguish sensor
+complementarity from missing-reference robustness.
+
+At the same time, FAM is internally variable and computationally expensive.
+One feature level can collapse without visible degradation in the headline
+metric, a correction that makes the mechanism safer can make the detector
+worse, and a more adaptive RCRA mechanism can improve the mean without being
+stable across seeds. Architecture transfer and external scale mismatch further
+show that an alignment-inspired inductive bias is not sufficient on its own.
+Controlled synthetic perturbations add that higher absolute detection accuracy
+and a more favorable signed relative-drop curve are distinct properties.
+
+These results support a broader methodological point: evaluating multimodal
+fusion should combine output metrics, coordinate-controlled modality tests,
+paired replication, internal diagnostics, out-of-distribution stress, and
+cost. Any one of these views alone would have produced an incomplete model
+selection.
+
+\section{Threats to validity}
+
+\subsection{Internal validity}
+
+Native CUDA execution is nondeterministic, particularly for deformable
+operators. Pairing seeds controls intended stochastic sources but cannot pair
+the microscopic CUDA perturbations of two architectures. Five independent
+checkpoints estimate the resulting distribution but do not exhaust it.
+
+The level ablations are interventions on already trained networks. Bypassed
+representations are outside the training path and cannot be interpreted as the
+performance of a newly trained P3-only or P3+P5 architecture. The P5 audit and
+the choice of a bounded correction followed observation of the MtErie
+checkpoint. Freezing one hypothesis before five new trainings reduces further
+adaptation, but the correction remains post-hoc with respect to the internal
+benchmark.
+
+The standalone YOLOv10 evaluator differs slightly from the automatic
+Ultralytics validator. The predefined tolerance is recorded as missed rather
+than changed after inference. Comparisons among modalities use the same
+standalone evaluator, while automatic VIS+IR results remain primary for the
+training protocol.
+
+The whole-sequence split, promotion thresholds, and Stage-B confirmation rule
+were frozen before their respective comparisons. Nevertheless, the candidate
+sequence was designed within the same study and after extensive prior
+experimentation. Stage A is therefore an internal model-development procedure,
+not an independent replication. The Modal Dropout coordinate-system ablation
+uses only one predeclared screening seed and supports rejection of that recipe,
+not a five-seed population estimate.
+
+The zero-offset initialization, mixed-consistency, and Box-Guided comparisons
+reuse the five completed standard-FAM Stage-A controls. Shared model,
+training, data, and split settings were checked, and reconstructed
+initialization hashes match for all five
+seeds. For zero-offset initialization, the intervention additionally preserves
+all unaffected parameters and random-number-generator state. Reconstructing
+these initial states does not certify identical historical source snapshots
+or environments. Mixed consistency adds student-path random draws that can
+alter later Modal Dropout realizations. Seed pairing therefore evaluates the complete
+training intervention rather than isolating the consistency loss under
+identical intermediate tensors. Strict checkpoint loading and recorded replay
+checks constrain execution and evaluation errors, but cannot remove these
+attribution limits or native-CUDA divergence.
+
+\subsection{Construct validity}
+
+\mapfifty{} emphasizes detection at IoU 0.50 and is not a complete measure of
+localization quality or SAR utility. Secondary COCO mAP, mAP@75, mAR, and error
+metrics reduce dependence on one score but do not measure response time,
+operator workload, alarm calibration, energy consumption, or consequences of
+false alarms.
+
+Recall--FPPI curves make the cost in false detections explicit but still count
+boxes per frame, not distinct alarm events. Consecutive frames are correlated,
+and tracking or temporal aggregation would change the operator-facing alarm
+rate. These curves describe performance on evaluation sets that had already
+been examined in earlier analyses. The shaded bands show variability
+across five training seeds on these fixed sets, not uncertainty about
+performance on new acquisitions. The confidence sweep does not establish
+a confidence threshold for operational use, but it characterizes
+the recall--false-positive trade-off.
+
+Offset magnitude, feature cosine similarity, RMSE, smoothing, and PCA are
+internal proxies. Without camera calibration or ground-truth correspondences,
+they do not validate physical registration. PCA figures also depend on a
+low-dimensional projection and are used illustratively.
+
+Native-sensor and paired masked-modality AP operationalize different
+constructs. The former changes the image canvas and ground truth with the
+sensor, while the latter fixes a VIS-coordinate population and zeros channels.
+The native-IR diagnostic is therefore evidence against branch collapse, not a
+direct ranking against fusion. Likewise, \texttt{adapt\_ir2rgb} is a
+resize-and-pad transformation and should not be interpreted as calibrated
+registration.
+
+The box-centre displacement used by Box-Guided P3 is a weak geometric proxy,
+not dense pixel correspondence. Detection results alone do not establish
+whether that target was learned consistently across seeds, let alone physical
+registration or geometric generalization. Similarly, the signed relative drop
+under synthetic translation and scaling confuses sensitivity with the
+possibility of accidentally compensating a pre-existing mismatch.
+
+\subsection{Statistical conclusion validity}
+
+Five paired runs permit estimation of effect direction and variability but
+produce wide intervals. Exact Wilcoxon tests have coarse resolution, and the
+smallest attainable two-sided value for five nonzero signed pairs is 0.0625.
+The reported tests are exploratory and are not corrected for the number of
+contrasts. Checkpoints, rather than frames, boxes, diagnostic samples, or
+feature cells, are the experimental units.
+
+The Stage-A comparisons of zero-offset initialization, mixed consistency,
+Box-Guided P3, RT-DETRv2, and YOLO26 likewise retain five paired checkpoints
+per contrast. Their confidence intervals describe between-seed variability on
+the fixed validation split, not
+uncertainty across new acquisitions. Selection is governed by the predeclared
+mean-gain and sign-consistency thresholds, not a post-hoc significance filter.
+
+\subsection{External validity}
+
+MtErie was repeatedly consulted during study development and is not a blind
+holdout. Its locked and Stage-B comparisons are internally useful but may
+overstate performance on a new acquisition. The official 273-frame FHL
+validation remains too small and shifted for stable selection. The replacement
+896-frame whole-video split is much more informative and removes same-video
+adjacency, but FHL 0401/0402 and the remaining FHL training video still belong
+to the same acquisition campaign.
+
+Carnation 0025/0026 and FHL 0407/0408 were unused before the frozen
+confirmation and contain substantially more paired frames, but they remain
+internal WiSARD acquisitions. They strengthen acquisition-level replication
+without demonstrating generalization outside WiSARD, to a different sensor
+platform, or to the SAR population at large.
+
+Carnation is one deliberately severe scale-mismatch case. It reveals a
+specific boundary but cannot estimate performance across SAR domains. The
+study uses one dataset, one main RT-DETR size, one YOLOv10 size, one
+RT-DETRv2 configuration, one YOLO26 size, and one GPU for
+latency. Different cameras, calibration, target scales, thermal conditions,
+hardware, or training budgets may change the conclusions.
+
+Deformable DETR and DINO results use an exploratory protocol. RT-DETRv2 and
+YOLO26 follow the five-seed Stage-A decision procedure within the two-stage
+framework, but neither satisfies the promotion rule and therefore neither
+enters Stage B. Detector-specific recipes, budgets, and evaluators remain
+different. Their Stage-A validation scores also have a different population
+and checkpoint role from the full-data MtErie results. These tables cannot form
+a quantitatively homogeneous architecture leaderboard with final RT-DETR and
+YOLOv10.
+
+\section{Future work}
+
+\subsection{Independent confirmation of the model-selection protocol}
+
+This thesis implements a train-derived, whole-video validation protocol and
+shows that the five validation-selected FAM checkpoints outperform their
+corresponding epoch-10 checkpoints on MtErie in all five Stage-A seeds. The
+next priority is therefore not to create that split again, but to test
+whether the rule transfers beyond the FHL acquisition campaign. A genuinely
+independent paired sequence should be reserved before architecture development,
+and the checkpoint metric, horizon, promotion thresholds, and allowed search
+space should be fixed before observing it.
+
+The RT-DETR ten-epoch design deliberately avoids early stopping. Future work
+may compare fixed-budget checkpoint selection with early stopping, but only
+under the same independent validation population and equal maximum compute.
+This would help determine whether the late YOLOv10 degradation reflects
+overfitting, schedule mismatch, or a detector-specific checkpoint problem.
+
+\subsection{Improving the alignment architecture}
+
+The negative and unstable results narrow the next useful hypotheses. Repeating
+P2, global \(800\times800\) input, or another learning-rate search on the same
+post-FAM gate would add little evidence. More targeted directions are:
+
+\begin{enumerate}[label=\arabic*.]
+  \item use camera calibration, dense paired cross-modal annotations, or a
+        controlled acquisition rig with known physical geometry to supervise
+        and evaluate alignment explicitly;
+  \item train auxiliary modality-specific heads or coordinate-consistency
+        losses so that native IR and paired VIS-coordinate robustness are not
+        forced into one ambiguous objective;
+  \item evaluate RCRA on an independent sequence and with more seeds before
+        altering its descriptors or optimization, to distinguish a real
+        conditional-alignment effect from training variance;
+  \item revisit mixed native/paired consistency only with a new mechanism and
+        an independent development population; the tested teacher--student
+        formulation should not be retuned on the same FHL validation;
+  \item reduce FAM or RCRA cost through channel compression or selective
+        application to the most useful levels, followed by a complete inference
+        benchmark rather than training-time measurements alone.
+\end{enumerate}
+
+These candidates should not be searched retrospectively on MtErie. A small
+number of mechanistically justified variants should be frozen on an independent
+development protocol and followed by paired replication and the same internal
+audit used in this thesis.
+
+\subsection{Broader evaluation and deployment}
+
+Further work should include multiple external RGB--thermal acquisitions,
+calibrated scale and translation experiments, additional missing-sensor
+patterns, confidence calibration, and end-to-end latency including image
+loading, preprocessing, transfer, postprocessing, and visualization. Deployment
+experiments should report power and memory limits of the target UAV hardware
+rather than extrapolating from a laptop GPU.
+
+\section{Conclusions}
+
+This thesis evaluated RGB--thermal fusion for UAV Search and Rescue from a
+reliability-first perspective. Its study of the inherited RT-DETR Feature
+Alignment Module combines paired multi-seed comparison, direct inspection of
+learned transformations, temporal and whole-video validation audits,
+acquisition-level stress testing, and configuration-matched candidate
+confirmation.
+
+The historical locked study shows that standard FAM improves Base RT-DETR in
+all five paired seeds and consistently increases recall. The
+validation-led campaign rejects P2, global upsampling, zero-offset
+initialization, post-FAM gates, scalar residual control, mixed consistency,
+and box-guided alignment under the common five-seed protocol. RCRA is the
+only candidate to pass Stage A and learns the intended conditional mechanism, but
+its full-data gain appears in only 3/5 seeds. Under the rule fixed before
+Stage-B evaluation, standard FAM therefore remains the selected model.
+
+The corrected paired modality audit shows that this FAM model benefits from
+thermal information beyond VIS on the same 708 frames. It also exposes a sharp
+coordinate-contract boundary: paired masked IR with VIS ground truth is very
+weak, while native IR on native annotations remains functional. A one-seed
+attempt to replace native dropout with the paired contract fails to resolve the
+first condition and sharply reduces native-IR performance in that run.
+
+The frozen confirmation on Carnation 0025/0026 and FHL 0407/0408 strengthens
+the central architectural result: historical FAM exceeds Base in all ten
+acquisition--seed comparisons, with a macro-average gain of 0.1257 \mapfifty{}.
+At the same time, fusion does not uniformly exceed VIS on the matched Stage-B
+checkpoints. The synthetic intervention also rejects the stronger claim that
+FAM always degrades more gracefully under IR translation or rescaling.
+
+The within-family transfer comparisons delimit the architectural result.
+RT-DETRv2 FAM improves the best-checkpoint mean by 0.0220 but wins only three
+of five seeds, so the Stage-A stability condition prevents promotion.
+YOLO26 FAM has a lower best-checkpoint mean than its paired Base control
+and wins only one of five seeds; both variants degrade strongly over the
+fifty-epoch horizon. Full-budget replication and validation-selected checkpoints
+are essential to interpret this result as a property of the tested recipe,
+without extending it to all uses of FAM or all YOLO26 architectures.
+
+The principal outcome is therefore both architectural and methodological. FAM
+is the strongest confirmed RT-DETR configuration in this study, but it is
+not a universal alignment solution and no new architecture is shown to improve
+it reliably. Repeated runs, predeclared development and confirmation stages,
+coordinate-controlled modality evaluation, internal diagnostics, frozen
+acquisition confirmation, controlled stress cases, and computational cost are
+necessary to determine whether an
+apparent fusion gain is reliable, interpretable, and transferable.

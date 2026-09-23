@@ -1,0 +1,70 @@
+{
+  "protocol_id": "rtdetr_fam_zero_offset_stage_a_v1",
+  "seeds": [
+    40,
+    41,
+    42,
+    43,
+    44
+  ],
+  "control_project": "RTDETR_FAM_SequenceVal_Fixed10_Protocol",
+  "controls": [
+    {
+      "seed": 40,
+      "run_id": "m7xjslb6",
+      "files": "wandb/run-20260814_203405-m7xjslb6/files",
+      "config_sha256": "5fd991b244843805ca1b78c4a1e404009c91bfaec87add10e1dcb818af4e6fa6",
+      "initial_model_sha256": "71239fb4f41478d90db630a601b5d84b0c4433abcf6e0b792dd57b8f32f275e9",
+      "best_epoch": 1,
+      "best_map50": 0.1521475464105606,
+      "latest_map50": 0.03973805531859398
+    },
+    {
+      "seed": 41,
+      "run_id": "2kil4xq9",
+      "files": "wandb/run-20260814_232554-2kil4xq9/files",
+      "config_sha256": "47ecf400ca97f1cfecaae9a3708ca704691ed8e6225e3e908cd36dafa698d30f",
+      "initial_model_sha256": "b9718a7336a3c51b62d4480e55c740488c4c18f4e7cbed883de265bbb6cf422d",
+      "best_epoch": 4,
+      "best_map50": 0.14235958456993103,
+      "latest_map50": 0.10302940756082535
+    },
+    {
+      "seed": 42,
+      "run_id": "fu87g1i2",
+      "files": "wandb/run-20260815_020741-fu87g1i2/files",
+      "config_sha256": "963fa1cfe0df81d579826a6628c58f6c0127a499fdff0cab03445bcf15496a81",
+      "initial_model_sha256": "3c487991b36edd9e471abb68677966fe91a3769f316dc2f8abe51aa2ad686e7e",
+      "best_epoch": 6,
+      "best_map50": 0.16546642780303955,
+      "latest_map50": 0.09459450095891953
+    },
+    {
+      "seed": 43,
+      "run_id": "pz5tzni4",
+      "files": "wandb/run-20260815_051325-pz5tzni4/files",
+      "config_sha256": "d5259f1833358523e8fe66ff0d7a262050b5be780658a3939d822e8d96cd462b",
+      "initial_model_sha256": "f717f0b9c6b3f2fa581f2726f59537154cde73c9dba3cc098e79b208f1d908b8",
+      "best_epoch": 1,
+      "best_map50": 0.19393183290958405,
+      "latest_map50": 0.07898081839084625
+    },
+    {
+      "seed": 44,
+      "run_id": "398272cv",
+      "files": "wandb/run-20260815_081411-398272cv/files",
+      "config_sha256": "331b34a7f80992d7a777a28854ad05be6f63fe6a19cf2222de54e1388d92bd57",
+      "initial_model_sha256": "d22253985e41ac4ab189b05bf8e0ba300074422382261e7eb27342fd69d1e450",
+      "best_epoch": 1,
+      "best_map50": 0.16890789568424225,
+      "latest_map50": 0.10372947156429291
+    }
+  ],
+  "promotion": {
+    "mean_delta_min": 0.01,
+    "min_positive_seeds": 4
+  },
+  "replay_tolerance": 0.0002,
+  "expected_train_frames": 3123,
+  "expected_val_frames": 896
+}

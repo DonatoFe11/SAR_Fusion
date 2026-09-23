@@ -1,6 +1,51 @@
 from pathlib import Path
 
+import torch
 import yaml
+
+
+def _exact_tensor_alias_identity(tensor):
+    """Identify exact tensor aliases without grouping unrelated views."""
+    if not isinstance(tensor, torch.Tensor) or tensor.layout != torch.strided:
+        return None
+    return (
+        tensor.device.type,
+        tensor.device.index,
+        tensor.untyped_storage().data_ptr(),
+        tensor.storage_offset(),
+        tuple(tensor.shape),
+        tuple(tensor.stride()),
+        tensor.dtype,
+    )
+
+
+def complete_shared_state_dict_aliases(model, state_dict):
+    """Restore only exact tied-tensor aliases omitted by Safetensors.
+
+    Accelerator intentionally serializes one key for parameters shared by
+    several module paths.  A subsequent strict ``load_state_dict`` needs all
+    aliases.  This function reconstructs a missing key only when the current
+    model proves that it is an exact storage/offset/shape/stride alias of a key
+    present in the checkpoint; every unrelated mismatch remains strict.
+    """
+    completed = dict(state_dict)
+    alias_groups = {}
+    for name, tensor in model.state_dict().items():
+        identity = _exact_tensor_alias_identity(tensor)
+        if identity is not None:
+            alias_groups.setdefault(identity, []).append(name)
+
+    restored = {}
+    for names in alias_groups.values():
+        available = [name for name in names if name in completed]
+        if not available:
+            continue
+        source_name = available[0]
+        for name in names:
+            if name not in completed:
+                completed[name] = completed[source_name]
+                restored[name] = source_name
+    return completed, restored
 
 
 def _wandb_config_value(config, key):

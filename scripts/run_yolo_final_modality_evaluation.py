@@ -327,7 +327,7 @@ def render_paired_map50(combined, output_dir):
                 )
                 values.append(row["metrics"]["map_50"])
             axis.plot([0, 1], values, marker="o", alpha=0.75, label=f"seed {seed}")
-        axis.set_xticks([0, 1], ["Additive", "FAM"])
+        axis.set_xticks([0, 1], ["Base", "FAM"])
         axis.set_title(title)
         axis.set_ylabel("mAP@50")
         axis.grid(alpha=0.25)

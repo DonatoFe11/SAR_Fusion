@@ -163,7 +163,5 @@ Miniconda3-latest-Linux-x86_64.sh
 
 external/
 
-.commandcode
-
 modal_eval_md
 modal_eval_feature_gating

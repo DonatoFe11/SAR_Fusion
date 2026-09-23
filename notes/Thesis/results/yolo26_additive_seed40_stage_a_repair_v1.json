@@ -1,0 +1,47 @@
+{
+  "schema": "sarfusion.yolo26.stage_a.repair_outcome.v1",
+  "status": "closed_vitality_failed",
+  "commit": "622e9bc0889b434e93d55fcb74031488c34cfbb4",
+  "source_manifest_sha256": "f6ef8616ce45b834cdb8bb7a777ecb6c89c545f7fa028580366d053fc981e48f",
+  "dataset_content_sha256": "c92b43c2f69b35e61816f8c2c95f8bea76bec2a1eaa112f36f4303ed92bbdbaf",
+  "pilot_reference": {
+    "best_epoch": 2,
+    "best_map50": 0.06472,
+    "best_map50_95": 0.01907,
+    "epoch_50_map50": 0.00001
+  },
+  "repair_run": {
+    "arm": "additive",
+    "seed": 40,
+    "epochs": 50,
+    "best_epoch": 1,
+    "best_map50": 0.04353,
+    "best_map50_95": 0.02145,
+    "best_eligible_epoch": 13,
+    "best_eligible_map50": 0.01535,
+    "epoch_50_map50": 0.00511,
+    "epoch_50_map50_95": 0.00277,
+    "epochs_below_map50_0_01": 46,
+    "test_evaluated": false
+  },
+  "gates": {
+    "integrity": "passed",
+    "optimizer_repair": "passed",
+    "warmup_bias_lr": 0.0,
+    "max_epoch_end_bias_lr": 0.00095999,
+    "validation_replay": "passed",
+    "validation_replay_absolute_error": 0.00010927860979381698,
+    "vitality": "failed",
+    "vitality_epoch_from": 4,
+    "vitality_threshold_map50": 0.1
+  },
+  "artifacts": {
+    "control_audit_sha256": "5612f1378948f2be9f3bf3071063f38f8330f15dd105443f5bdac3b343f8ee5e",
+    "completion_sha256": "8925d39df25d3ce39017851ea8cecb6eadceef18c27ab75582c9db9360fca38c",
+    "results_csv_sha256": "b6a31271f82c0da7accefb67e78b77bf108f4d7d71616f71028c9c2295a81818",
+    "best_checkpoint_sha256": "4592fa6c053dd648230f6e3731cbc1fbe59980c06a54592ae15803bc8d5ad2ff",
+    "last_checkpoint_sha256": "de9e5158de94592dc6ee355accaac7ab9e03d7eada550be028b9cc6724367f5b"
+  },
+  "decision": "Do not launch YOLO26 FAM, seeds 41-44, Stage B, or a third repair. Retain RT-DETR plus standard FAM as the thesis main model."
+}
+

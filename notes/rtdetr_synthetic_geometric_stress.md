@@ -270,4 +270,4 @@ adottata come preprocessing e la scelta finale del FAM standard non cambia.
 - [CSV versionato con i 600 punti](Search_and_Rescue/results/rtdetr_synthetic_geometric_stress.csv),
   SHA-256 `f37b984c61e9aab51afa7706d57407d898048c9feb9691a5fb5e40d3405613ef`;
 - [curve versionate](Search_and_Rescue/images/rtdetr_synthetic_geometric_stress_curves.png),
-  SHA-256 `c94eb817972c06abbfe2c742c69432c7c140d8343988947424bf11b2808b5854`.
+  SHA-256 `55f49b8847175f825671718c6ed1cd129ca978b817e92520674f0a6b4796a13d`.

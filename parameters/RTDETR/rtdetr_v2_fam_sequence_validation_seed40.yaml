@@ -1,0 +1,99 @@
+# RT-DETRv2 + standard DCNv2 FAM candidate.  Launch only after the additive
+# control above completes successfully under the same source manifest and
+# environment.  Seed 41--44 remain unauthorized until the frozen seed-40 gate
+# in notes/rtdetr_v2_fam_stage_a.md passes.
+
+experiment:
+  name: RTDETRv2_FAM_SequenceVal_Seed40
+  group: RTDETRv2_fam_sequence_validation_seed40_v1
+  continue_with_errors: false
+  start_from_grid: 0
+  start_from_run: 0
+  search: grid
+  isolate_runs: true
+
+parameters:
+  seed: [40]
+  repetition: [0]
+  task: [detection]
+  run_test: [false]
+  test_checkpoint: [best]
+  strict_checkpoint_loading: [true]
+
+  reproducibility:
+    deterministic: [false]
+    warn_only: [false]
+    trace: [true]
+    training_source_manifest_id: [rtdetr_v2_fam_training_source_v1]
+    training_source_manifest_sha256: [d32e9870cbd847990f8e65e17b747f41d6294f3b1d749bcb9fecbb838f3d477f]
+    data_seed: [40]
+    model_seed: [40]
+    training_seed: [40]
+    trace_batches: [20]
+    trace_tensor_batches: [5]
+    trace_model_steps: [3]
+
+  tracker:
+    ignored_files: ["*.bin,*.safetensors"]
+    val_image_log_frequency: [50]
+    tags: [[RTDETRv2, FAM, CurrentDCNv2, SequenceValidation, Seed40, StageA]]
+
+  train:
+    max_epochs: [10]
+    run_validation: [true]
+    compute_validation_loss: [false]
+    val_frequency: [1]
+    save_checkpoints: [true]
+    save_final_checkpoint_only: [true]
+    checkpoint_min_delta: [0.001]
+    compile: [false]
+    initial_lr: [0.00002]
+    optimizer: [AdamW]
+    watch_metric: [map_50]
+    greater_is_better: [true]
+
+  loss:
+
+  model:
+    name: [fusion_rtdetr_v2]
+    params:
+      id2label:
+        0: [person]
+      threshold: [0.01]
+      use_fam: [true]
+      fam_variant: [current_dcnv2]
+      fam_initialization: [historical_hf_post_init]
+      freeze_fam: [false]
+      ir_dropout_rate: [0.0]
+      spatial_jitter_std: [0.0]
+      reuse_pretrained_class_head: [true]
+      pretrained_model_name: [PekingU/rtdetr_v2_r50vd]
+      pretrained_revision: ["282494075698cab9faa1096ae26856890030c817"]
+
+  dataset:
+    name: [wisard]
+    root: [dataset/WiSARD]
+    preprocessor:
+      path: [PekingU/rtdetr_v2_r50vd]
+      revision: ["282494075698cab9faa1096ae26856890030c817"]
+      use_fast: [false]
+    folders: [vis_ir]
+    train_folders:
+      - - [210924_FHL_Enterprise_VIS_0405, 210924_FHL_Enterprise_IR_0406]
+        - [220109_Baker_Enterprise_VIS_1, 220109_Baker_Enterprise_IR_1]
+    val_folders:
+      - - [210924_FHL_Enterprise_VIS_0401, 210924_FHL_Enterprise_IR_0402]
+    single_class: [true]
+    modal_dropout: [true]
+    modal_dropout_probs: [[0.2, 0.2, 0.6]]
+    use_tiling: [false]
+
+  dataloader:
+    num_workers: [8]
+    batch_size: [4]
+    evaluation_batch_size: [12]
+
+  val_evaluation:
+    metrics:
+
+other_grids: []

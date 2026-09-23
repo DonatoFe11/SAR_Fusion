@@ -1,0 +1,34 @@
+{
+  "schema": "sarfusion.yolo26.stage_a.pilot_archive.v1",
+  "status": "integrity_passed_performance_failed",
+  "git_commit": "212f2b7f5dad3516421adc2a51b33b76bddc5c07",
+  "run_dir": "runs/yolo26_stage_a/additive_seed40",
+  "source_manifest_sha256": "25050c9e43040ea8299bf346b93a6813afadb12c3b0fb14d79a0136b3dd50f80",
+  "dataset_content_sha256": "c92b43c2f69b35e61816f8c2c95f8bea76bec2a1eaa112f36f4303ed92bbdbaf",
+  "artifacts": {
+    "control_audit.json": "05c16f7eb199f915b55f1e0168509f1901abd0b8fc6825dbec12a975a72eee3c",
+    "results.csv": "fa27083572e1307fa76e40519cba35e26ccb81ecc8a49d84616a5dad65d3cb77",
+    "weights/best.pt": "7615fa7bc5822e2d8d24e86dbcda036c773194dd21e86bd84a3561bc37ab7063",
+    "weights/last.pt": "615256a315aeb6e7d114cd88da962f13bb00f118ed5bc003b2822848a39c2a1c"
+  },
+  "metrics": {
+    "epochs_completed": 50,
+    "best_epoch": 2,
+    "best_mAP50": 0.06472,
+    "best_mAP50_95": 0.01907,
+    "last_mAP50": 0.00001,
+    "last_mAP50_95": 0.0,
+    "serialized_best_mAP50": 0.0646860358119801,
+    "checkpoint_replay_absolute_error": 0.00003396418801990264
+  },
+  "diagnosis": {
+    "confirmed_integrity_failures": [],
+    "primary_recipe_issue": "Explicit AdamW bypassed the upstream auto-optimizer guard and left warmup_bias_lr=0.1.",
+    "observed_bias_learning_rates": {
+      "epoch_1": 0.0670423,
+      "epoch_2": 0.0340291
+    },
+    "caveat": "The diagnosis is compatible with the collapse but is not a causal ablation."
+  },
+  "decision": "Do not launch the matched FAM arm under v1; allow one pre-frozen repair changing only warmup_bias_lr to 0.0."
+}

@@ -1,0 +1,20 @@
+schema: sarfusion.yolo26.stage_a.split.v1
+root: dataset/WiSARD
+
+# SHA256 over relative paths, sizes and bytes of RGB, IR and labels for all
+# 4,019 pairs (3,123 train + 896 development-validation).
+expected_content_sha256: c92b43c2f69b35e61816f8c2c95f8bea76bec2a1eaa112f36f4303ed92bbdbaf
+
+train:
+  expected_pairs: 3123
+  pairs:
+    - rgb: 210924_FHL_Enterprise_VIS_0405
+      ir: 210924_FHL_Enterprise_IR_0406
+    - rgb: 220109_Baker_Enterprise_VIS_1
+      ir: 220109_Baker_Enterprise_IR_1
+
+val:
+  expected_pairs: 896
+  pairs:
+    - rgb: 210924_FHL_Enterprise_VIS_0401
+      ir: 210924_FHL_Enterprise_IR_0402

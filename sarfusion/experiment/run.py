@@ -26,6 +26,7 @@ from sarfusion.utils.structures import DataDict
 from sarfusion.experiment.utils import WrapperModule
 from sarfusion.models.loss import build_loss
 from sarfusion.models import build_model
+from sarfusion.models.checkpoints import complete_shared_state_dict_aliases
 from sarfusion.utils.metrics import DetectionEvaluator, Evaluator, build_evaluator
 from sarfusion.utils.reproducibility import (
     ReproducibilityTrace,
@@ -243,8 +244,24 @@ class Run:
                 attention_modules,
             )
         if self.repro_trace.enabled:
+            model_trace = model_digests(self.model)
+            detector = getattr(self.model, "model", None)
+            transfer_report = getattr(
+                detector, "pretrained_transfer_report", None
+            )
+            if transfer_report is not None:
+                model_trace["pretrained_transfer_report"] = deepcopy(
+                    transfer_report
+                )
+            fam_initialization = getattr(
+                self.model, "fam_initialization", None
+            )
+            if fam_initialization is not None:
+                model_trace["fam_initialization"] = str(
+                    fam_initialization
+                )
             self.repro_trace.write(
-                "model_initialized", **model_digests(self.model)
+                "model_initialized", **model_trace
             )
         logger.info("Creating criterion")
         self.model = WrapperModule(self.model, self.criterion)
@@ -1427,8 +1444,38 @@ class Run:
             )
             with safe_open(filename, framework="pt") as f:
                 weights = {k: f.get_tensor(k) for k in f.keys()}
-            self.model.load_state_dict(weights, strict=False)
-            logger.info(f"Checkpoint '{checkpoint_type}' restored from {filename}")
+            strict = bool(
+                self.params.get("strict_checkpoint_loading", False)
+            )
+            restored_aliases = {}
+            if strict:
+                weights, restored_aliases = complete_shared_state_dict_aliases(
+                    self.model, weights
+                )
+            incompatible = self.model.load_state_dict(
+                weights, strict=strict
+            )
+            missing_keys = getattr(incompatible, "missing_keys", [])
+            unexpected_keys = getattr(incompatible, "unexpected_keys", [])
+            if not strict and (missing_keys or unexpected_keys):
+                logger.warning(
+                    "Permissive checkpoint restore reported missing=%s, "
+                    "unexpected=%s",
+                    missing_keys,
+                    unexpected_keys,
+                )
+            logger.info(
+                "Checkpoint '%s' restored from %s (strict=%s)",
+                checkpoint_type,
+                filename,
+                strict,
+            )
+            if restored_aliases:
+                logger.info(
+                    "Reconstructed %s exact tied-tensor aliases omitted by "
+                    "Safetensors",
+                    len(restored_aliases),
+                )
 
         except FileNotFoundError:
             raise FileNotFoundError(

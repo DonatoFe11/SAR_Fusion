@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
 import platform
@@ -41,6 +42,26 @@ BOX_GUIDED_TRAINING_SOURCE_FILES = (
     "sarfusion/utils/structures.py",
     "sarfusion/utils/utils.py",
 )
+RTDETR_V2_FAM_TRAINING_SOURCE_MANIFEST_ID = (
+    "rtdetr_v2_fam_training_source_v1"
+)
+RTDETR_V2_FAM_TRAINING_SOURCE_FILES = (
+    "environment.yml",
+    "requirements-rtdetrv2.txt",
+    "main.py",
+)
+RTDETR_V2_FAM_TRAINING_SOURCE_GLOBS = ("sarfusion/**/*.py",)
+TRAINING_SOURCE_FILES = {
+    BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID: BOX_GUIDED_TRAINING_SOURCE_FILES,
+    RTDETR_V2_FAM_TRAINING_SOURCE_MANIFEST_ID: (
+        RTDETR_V2_FAM_TRAINING_SOURCE_FILES
+    ),
+}
+TRAINING_SOURCE_GLOBS = {
+    RTDETR_V2_FAM_TRAINING_SOURCE_MANIFEST_ID: (
+        RTDETR_V2_FAM_TRAINING_SOURCE_GLOBS
+    ),
+}
 _SHA256_HEX_LENGTH = 64
 
 
@@ -67,7 +88,7 @@ def build_training_source_manifest(
     *,
     repo_root: str | os.PathLike | None = None,
 ) -> dict:
-    """Hash the frozen local source surface for box-guided RT-DETR training.
+    """Hash the frozen local source surface for a declared training protocol.
 
     The manifest is deliberately an explicit, versioned list rather than a
     recursive source-tree hash.  This keeps generated files and unrelated
@@ -75,16 +96,33 @@ def build_training_source_manifest(
     model, data stream, auxiliary loss, validation metric, and checkpoint
     selection part of the scientific contract.
     """
-    if manifest_id != BOX_GUIDED_TRAINING_SOURCE_MANIFEST_ID:
-        raise ValueError(f"Unknown training-source manifest id: {manifest_id!r}")
+    try:
+        declared_files = TRAINING_SOURCE_FILES[manifest_id]
+    except KeyError as error:
+        raise ValueError(
+            f"Unknown training-source manifest id: {manifest_id!r}"
+        ) from error
 
     root = (
         Path(repo_root).resolve()
         if repo_root is not None
         else Path(__file__).resolve().parents[2]
     )
+    source_files = list(declared_files)
+    for pattern in TRAINING_SOURCE_GLOBS.get(manifest_id, ()):
+        matches = sorted(
+            path.relative_to(root).as_posix()
+            for path in root.glob(pattern)
+            if path.is_file()
+        )
+        if not matches:
+            raise FileNotFoundError(
+                f"Training-source glob matched no files: {pattern!r}"
+            )
+        source_files.extend(matches)
+    source_files = tuple(dict.fromkeys(source_files))
     file_hashes = {}
-    for relative_path in BOX_GUIDED_TRAINING_SOURCE_FILES:
+    for relative_path in source_files:
         source_path = (root / relative_path).resolve()
         try:
             source_path.relative_to(root)
@@ -334,6 +372,13 @@ def prepare_rtdetr_model_for_determinism(model: torch.nn.Module):
     """Ensure RT-DETR cannot select its non-deterministic custom CUDA kernel."""
     changed = 0
     for module in model.modules():
+        if module.__class__.__name__ == (
+            "RTDetrV2MultiscaleDeformableAttention"
+        ):
+            raise RuntimeError(
+                "Deterministic RT-DETRv2 attention is not implemented; run "
+                "the preregistered RT-DETRv2 Stage A with deterministic=false"
+            )
         if module.__class__.__name__ == "RTDetrMultiscaleDeformableAttention":
             module.disable_custom_kernels = True
             changed += 1
@@ -405,6 +450,28 @@ class ReproducibilityTrace:
 
 
 def runtime_fingerprint() -> dict:
+    package_versions = {}
+    for package in (
+        "accelerate",
+        "huggingface-hub",
+        "numpy",
+        "opencv-python",
+        "pillow",
+        "pycocotools",
+        "safetensors",
+        "scipy",
+        "timm",
+        "tokenizers",
+        "torchmetrics",
+        "torchvision",
+        "transformers",
+        "ultralytics",
+        "wandb",
+    ):
+        try:
+            package_versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            package_versions[package] = None
     result = {
         "python": platform.python_version(),
         "torch": torch.__version__,
@@ -416,6 +483,7 @@ def runtime_fingerprint() -> dict:
         "deterministic_warn_only": torch.is_deterministic_algorithms_warn_only_enabled(),
         "cudnn_deterministic": torch.backends.cudnn.deterministic,
         "cudnn_benchmark": torch.backends.cudnn.benchmark,
+        "package_versions": package_versions,
     }
     if torch.cuda.is_available():
         result["gpu"] = torch.cuda.get_device_name(torch.cuda.current_device())

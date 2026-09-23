@@ -1,0 +1,284 @@
+{
+  "schema": "sarfusion.thesis.rtdetr_fam_zero_offset_stage_a.v1",
+  "verification_date": "2026-09-16",
+  "protocol_id": "rtdetr_fam_zero_offset_stage_a_v1",
+  "metric": "validation mAP@50",
+  "metric_scale": [
+    0,
+    1
+  ],
+  "stage": "A",
+  "seeds": [
+    40,
+    41,
+    42,
+    43,
+    44
+  ],
+  "source_data_csv": "rtdetr_fam_zero_offset_stage_a.csv",
+  "source_data_csv_sha256": "7aee5ae2597757403b897f01622df0d3b961473ef85c67cc56abc332b4ad8611",
+  "provenance": {
+    "path_base": "repository root",
+    "note": "notes/rtdetr_fam_zero_offset_stage_a.md",
+    "decision": {
+      "path": "out/rtdetr_fam_zero_offset_stage_a/decision.json",
+      "sha256": "0fbc3e12bf235c498069b33f6e889590a605acf85fde49e9b00da65ee0ed9650"
+    },
+    "protocol": {
+      "path": "parameters/RTDETR/rtdetr_fam_zero_offset_stage_a_protocol.json",
+      "sha256": "f30a81bab74af83d452c77f358a3276a089fa8a7151193738a9b73ddbd1714f9"
+    },
+    "candidate_config": {
+      "path": "parameters/RTDETR/rtdetr_fam_zero_offset_stage_a_five_seed.yaml",
+      "sha256": "2e87b7631eab5734dc00be35ac2298f72c4f28febd9b488fa0a0e2369c2ed15a"
+    },
+    "candidate_project": "RTDETR_FAM_ZeroOffset_StageA_FiveSeed",
+    "control_project": "RTDETR_FAM_SequenceVal_Fixed10_Protocol",
+    "candidate_source_manifest_id": "rtdetr_fam_zero_offset_training_source_v1",
+    "candidate_source_manifest_sha256": "ef969a5792db4c118a4ce6074d57532a4347269758ac0abbda8cb7673d532a67",
+    "candidate_source_manifest_file_count": 29,
+    "per_seed_record_path": "out/rtdetr_fam_zero_offset_stage_a/seed{seed}",
+    "verification_scope": "Read-only recalculation from frozen decision, protocol, completion, validation, initialization and replay records; initial trace and current source-file hashes checked. Bounded CPU inspection of learned offset parameters is documented below. No training, inference, model construction or new control replay."
+  },
+  "intervention": {
+    "model": "RT-DETR v1 + standard FAM",
+    "pretrained_checkpoint": "PekingU/rtdetr_r50vd",
+    "operation": "Zero offset_conv weight and bias rows 0:18 at P3/P4/P5 after pretrained model construction and person-head transfer.",
+    "offsets_trainable": true,
+    "mask_rows_18_27_unchanged": true,
+    "dcnv2_parameters_unchanged": true,
+    "other_parameters_and_rng_preserved": true,
+    "identity_dcnv2_initialization": false,
+    "frozen_offsets": false
+  },
+  "protocol": {
+    "training_pairs": 3123,
+    "training_sequences": [
+      "FHL_VIS_0405_IR_0406",
+      "Baker_VIS_1_IR_1"
+    ],
+    "validation_pairs": 896,
+    "validation_sequences": [
+      "FHL_VIS_0401_IR_0402"
+    ],
+    "epochs": 10,
+    "optimizer": "AdamW",
+    "learning_rate": 2e-05,
+    "training_batch_size": 4,
+    "modal_dropout_coordinate_contract": "native",
+    "modal_dropout_rgb_ir_fusion_probabilities": [
+      0.2,
+      0.2,
+      0.6
+    ],
+    "early_stopping": false,
+    "seed40_performance_filter": false,
+    "primary_checkpoint": "best live validation mAP@50 with min_delta=0.001",
+    "diagnostic_checkpoint": "latest, epoch 10",
+    "best_epoch_indexing": "one-based",
+    "promotion": {
+      "mean_delta_min": 0.01,
+      "min_positive_seeds": 4
+    },
+    "primary_is_live_selection_metric_not_maximum_of_live_and_replay": true,
+    "control_reuse_limit": "Matched recipe and initial state, not identical historical runtime/source provenance.",
+    "control_is_standard_fam_not_base_without_fam": true,
+    "not_comparable_to_historical_test_map50_0_3780": true
+  },
+  "aggregation": {
+    "statistical_unit": "paired training seed/checkpoint, not epochs or frames",
+    "delta": "candidate minus standard-FAM control",
+    "sample_sd_ddof": 1,
+    "ci": "mean +/- t(0.975, df=4) * sample_sd / sqrt(5); delta intervals use paired differences",
+    "t_critical": 2.7764451051977987,
+    "ci_interpretation": "Descriptive seed variability on the fixed Stage-A validation split, not an acquisition-generalization interval."
+  },
+  "statistics": {
+    "control_best": {
+      "n": 5,
+      "mean": 0.1645626574754715,
+      "sample_sd": 0.019553502184892938,
+      "median": 0.16546642780303955,
+      "ci95_t": [
+        0.14028377777369125,
+        0.18884153717725174
+      ]
+    },
+    "candidate_best": {
+      "n": 5,
+      "mean": 0.15208021700382232,
+      "sample_sd": 0.016685744476912026,
+      "median": 0.14841575920581818,
+      "ci95_t": [
+        0.1313621288036133,
+        0.17279830520403133
+      ]
+    },
+    "best_delta": {
+      "n": 5,
+      "mean": -0.01248244047164917,
+      "sample_sd": 0.02571845357086039,
+      "median": -0.009127438068389893,
+      "ci95_t": [
+        -0.04441611836006162,
+        0.01945123741676328
+      ]
+    },
+    "control_latest": {
+      "n": 5,
+      "mean": 0.0840144507586956,
+      "sample_sd": 0.02668297555452805,
+      "median": 0.09459450095891953,
+      "ci95_t": [
+        0.050883160647686936,
+        0.11714574086970425
+      ]
+    },
+    "candidate_latest": {
+      "n": 5,
+      "mean": 0.09580816775560379,
+      "sample_sd": 0.024514703364681287,
+      "median": 0.09973955154418945,
+      "ci95_t": [
+        0.06536914316103429,
+        0.1262471923501733
+      ]
+    },
+    "latest_delta": {
+      "n": 5,
+      "mean": 0.011793716996908187,
+      "sample_sd": 0.018057475001524746,
+      "median": 0.003384314477443695,
+      "ci95_t": [
+        -0.010627599610949594,
+        0.034215033604765965
+      ]
+    }
+  },
+  "decision": {
+    "best_positive_seeds": 1,
+    "latest_positive_seeds_diagnostic": 3,
+    "stage_a_performance_gate_passed": false,
+    "stage_b_launched": false,
+    "test_evaluated": false,
+    "next_step": "No Stage B under the frozen rule"
+  },
+  "audit_summary": {
+    "completed_ten_epoch_candidate_histories": 5,
+    "best_selection_reconstructed_from_history": 5,
+    "reference_initialization_matches_archived_control": 5,
+    "candidate_initialization_matches_trace": 5,
+    "offset_only_intervention_reports_valid": 5,
+    "current_manifest_files_match_candidate_traces": true,
+    "recorded_best_replays_within_tolerance": 5,
+    "replay_tolerance": 0.0002,
+    "maximum_absolute_replay_map50_error": 0.0,
+    "replay_validation_pairs": 896,
+    "replay_validation_batches": 75,
+    "serialized_tensors_per_checkpoint": 1051,
+    "exact_shared_weight_aliases_restored": 48,
+    "strict_state_tensors_per_model": 1099,
+    "historical_control_replays_repeated": false,
+    "trained_offset_parameter_audit": {
+      "method": "CPU-only slice reads of offset_conv weight/bias rows 0:18 in the ten saved candidate best/latest checkpoints; no model construction or inference.",
+      "checkpoints": 10,
+      "predictors": 30,
+      "weight_rows": 540,
+      "bias_values": 540,
+      "all_checked_values_finite": true,
+      "all_weight_rows_nonzero": true,
+      "all_eighteen_weight_rows_distinct_within_each_predictor": true,
+      "all_bias_values_nonzero": true,
+      "limitation": "Learned parameter inspection does not measure offsets in pixels or establish improved VIS-IR alignment."
+    },
+    "checkpoint_hash_scope": "SHA-256 values preserved from training_complete.json and checked against replay metadata; checkpoint bytes were not rehashed during this thesis export.",
+    "limitation": "Matched configuration and initialization do not certify identical historical source snapshot, environment, or numerical training trajectory."
+  },
+  "per_seed_provenance": [
+    {
+      "seed": 40,
+      "control_config_sha256": "5fd991b244843805ca1b78c4a1e404009c91bfaec87add10e1dcb818af4e6fa6",
+      "control_and_reconstructed_initial_model_sha256": "71239fb4f41478d90db630a601b5d84b0c4433abcf6e0b792dd57b8f32f275e9",
+      "candidate_initial_model_sha256": "fc8555f7aba50fcdd4cf189befefb5578177798376b8041f56667514dfd61939",
+      "unchanged_parameters_sha256": "48c568134fbb6fc45271be344921b1d5f31f891e49b974ad4715d3db08e9ba53",
+      "candidate_checkpoint_sha256_recorded": {
+        "best": "d10774e666e384be307760ed385230185a193c5cf126db67604ca6e6f88afbeb",
+        "latest": "86c5fa42104b4a0b1c71f109c8ccabf99bac5e9c3741264957c77568585b0ec4"
+      },
+      "source_records_sha256": {
+        "training_complete.json": "b7fd466a2a544482d732b2191e34cf852356c980d29e6aedd4325c9872c8ec1f",
+        "validation.json": "d3c8e8ea329bb47ce54af561ba8a7cdd3634a6d434314a3bd8e8a175d510e5a2",
+        "initialization.json": "a38d3cce46dbff5c18e70ee89674c608e7305f4aba3c56b3e9cc7802ba3ea81e",
+        "replay.json": "37fa68ec7fd72b920ca58b44d1730d21fca7e18d082a5467b5a4e1030c7178f5"
+      }
+    },
+    {
+      "seed": 41,
+      "control_config_sha256": "47ecf400ca97f1cfecaae9a3708ca704691ed8e6225e3e908cd36dafa698d30f",
+      "control_and_reconstructed_initial_model_sha256": "b9718a7336a3c51b62d4480e55c740488c4c18f4e7cbed883de265bbb6cf422d",
+      "candidate_initial_model_sha256": "dbc5df39ed3e2cfaf28952e149f95c9ede956345788212418e4746ac54bbf066",
+      "unchanged_parameters_sha256": "071cba82f106c050a5a786bf283d6e639d3ecabe889f33a57dffb2f808ef6f62",
+      "candidate_checkpoint_sha256_recorded": {
+        "best": "372c40a261471aa0a81a06104800c89d365c2fb303cf163b2b1b44d40cdae459",
+        "latest": "a6f1874c2a83796a96d5c83d062820df5ea18afde67a8871877eb067d17161fd"
+      },
+      "source_records_sha256": {
+        "training_complete.json": "954de797374d281be4578f03f9403e7b3c2d2d36e934ce55083bb53c7a8e62ba",
+        "validation.json": "d72a86456d3f3c27ff4be05b8feebc76b50726cd0607faeed93ae7601b55f157",
+        "initialization.json": "fcf19d140d78c4638f67a096996d07f8847c79ab8afc2182b4f2cafafd6cb1e9",
+        "replay.json": "e83d4466160cd60e12f8bbe1c5d735733c1b5213b9b282d0e3b400b1ee0f6d70"
+      }
+    },
+    {
+      "seed": 42,
+      "control_config_sha256": "963fa1cfe0df81d579826a6628c58f6c0127a499fdff0cab03445bcf15496a81",
+      "control_and_reconstructed_initial_model_sha256": "3c487991b36edd9e471abb68677966fe91a3769f316dc2f8abe51aa2ad686e7e",
+      "candidate_initial_model_sha256": "68ba0fbb9746e0c40cdf0af2a125bfbcb8fbc9554c8ce2a6b27510f82dba0ef4",
+      "unchanged_parameters_sha256": "ae4990dea16608c0336920186d3b60430919ae78e8e8253c3674642664bd94cb",
+      "candidate_checkpoint_sha256_recorded": {
+        "best": "0775b2dddd5363b2854bc1043f024e5bfb29e1c8e64d49effe8675d744e281e6",
+        "latest": "55d6fdaace4f3d80b64b5dc2bf2ff2faad0aee9c492d2e409b48e4a7ebd3d057"
+      },
+      "source_records_sha256": {
+        "training_complete.json": "b6d6995e2ab7b42badd886817ea0cd40fbbf2f35563b527941de42416828d0d2",
+        "validation.json": "1510232225521ba76a5f3c257dd492b3f73b41dad14fc04fa4248f626b4cc316",
+        "initialization.json": "6272f2a3477007cb2aa82959d41604968fe1182ec175ed69001c2eb96a1a0397",
+        "replay.json": "07d2719955fcc33f8bc803722faaff73064a90fe9faf77106388eb7981988df0"
+      }
+    },
+    {
+      "seed": 43,
+      "control_config_sha256": "d5259f1833358523e8fe66ff0d7a262050b5be780658a3939d822e8d96cd462b",
+      "control_and_reconstructed_initial_model_sha256": "f717f0b9c6b3f2fa581f2726f59537154cde73c9dba3cc098e79b208f1d908b8",
+      "candidate_initial_model_sha256": "cc928e17a1bcbe31d9cf66ab221357ce86d29b3ed73f8b64c4f3ff0e84b1b81f",
+      "unchanged_parameters_sha256": "fca588845e15fe1b143e94028a64d3e7d39e64f7913a41c2a3acd7d286b2aee9",
+      "candidate_checkpoint_sha256_recorded": {
+        "best": "13df8b89bade7d581d3bba8df300c6fddb0b4cc20f7adec5cf3635c275cc37e5",
+        "latest": "b6e37c73d31cb1f23b856d537ca7c2623e2fffcec5867c6db141fb2eca081679"
+      },
+      "source_records_sha256": {
+        "training_complete.json": "9ec99c34fd2844388fb96924de224daab46875475acf14d24ac8f7ccef8f32a9",
+        "validation.json": "579ff2adc73f9a4ce8d9ba18920bbed1103e01370d73f54d85c98af942232a22",
+        "initialization.json": "3ff844f3ee94904a96f8429f9e1d79c5c5f4f609795116a8d1c5c181e4661985",
+        "replay.json": "ecb0e933b63959e4c2a75a06d57fc6b5fa52a7c24e9b45a6129045a0bcd2c00a"
+      }
+    },
+    {
+      "seed": 44,
+      "control_config_sha256": "331b34a7f80992d7a777a28854ad05be6f63fe6a19cf2222de54e1388d92bd57",
+      "control_and_reconstructed_initial_model_sha256": "d22253985e41ac4ab189b05bf8e0ba300074422382261e7eb27342fd69d1e450",
+      "candidate_initial_model_sha256": "723e181e8c85571620f3eb60e811eb6c07a86ae7016763f5a30ffef2b10b10db",
+      "unchanged_parameters_sha256": "03994f7377c1b68777fc298dd3c572274627dfa28e02af2685773745a482d5da",
+      "candidate_checkpoint_sha256_recorded": {
+        "best": "c0393a90272c6aa6f6625fbfae939e9516f711e596cfc24f74db9160ff52a805",
+        "latest": "80c3c9b1befbf2b37fe243637b2d76f1eac4d7b256c984bab9216e52cd7fd4ca"
+      },
+      "source_records_sha256": {
+        "training_complete.json": "005e9b46f1b52c1864c17123c70d163f0f4def779ca4added4cfbee37da266ab",
+        "validation.json": "335c10d8284cc2ab3e7b922ccd547732dacd22649364b5849c49912135f0e88d",
+        "initialization.json": "7e85a9d3b6766c3e9c27c88e7baba40af398536a450a4bad466fface91567ccb",
+        "replay.json": "260ec8953249f33c9c3160387ee5f93c3438383a73c6f1d1002815799200f666"
+      }
+    }
+  ]
+}
