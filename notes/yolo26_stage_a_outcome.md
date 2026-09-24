@@ -28,7 +28,7 @@ sono stati superati dalla campagna v2, senza cancellarne i risultati.
 La linea YOLO26 è **completata e chiusa allo Stage A**. Il controllo Additive
 seed 40 ha completato sia il pilot originario sia l'unico repair consentito,
 ma non ha raggiunto una baseline sufficientemente vitale. Il candidato FAM,
-i seed 41--44 e uno Stage B non sono quindi autorizzati.
+i seed 41--44 e lo Stage B non sono quindi stati avviati nel protocollo v1.
 
 Questo esito non dimostra che FAM sia inefficace con YOLO26: il FAM non è stato
 addestrato perché è fallito il prerequisito del controllo. Dimostra invece che

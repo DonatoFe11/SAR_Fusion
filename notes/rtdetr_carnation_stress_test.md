@@ -2,7 +2,7 @@
 
 ## Stato
 
-Il protocollo `rtdetr_carnation_stress_test_v1` è stato congelato e versionato
+Ho fissato e versionato il protocollo `rtdetr_carnation_stress_test_v1`
 il 12 agosto 2026 **prima di eseguire inferenza o osservare metriche su
 Carnation**. La campagna è terminata regolarmente: 30/30 valutazioni, 739
 campioni ciascuna, dieci checkpoint caricati senza chiavi mancanti o inattese e

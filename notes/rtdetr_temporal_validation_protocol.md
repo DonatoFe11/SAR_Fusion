@@ -1,6 +1,6 @@
 # RT-DETR train-derived temporal validation pilot (retired)
 
-> **Status: retired after the seed-40 pilot. Do not launch seeds 41--44.**
+> **I stopped this protocol after the seed-40 pilot; seeds 41--44 were not run.**
 > The definitive replacement always trains for ten epochs and selects `best`
 > on a completely held-out video. See
 > `notes/rtdetr_sequence_validation_fixed10_protocol.md`.
@@ -18,8 +18,8 @@ Technical smoke project: `RTDETR_FAM_TemporalVal_Smoke`
 
 The previous RT-DETR campaign used ten fixed epochs and the final `latest`
 checkpoint because the existing validation set was a single strongly shifted
-FHL session and was unsuitable for checkpoint selection. The new campaign needs
-a validation signal that can support early stopping without consulting MtErie.
+FHL session and was unsuitable for checkpoint selection. I then looked for a validation signal that could support early stopping
+without consulting MtErie.
 
 This protocol creates that signal exclusively from the paired sequences already
 assigned to training. It does not retroactively invalidate the fixed-epoch
@@ -285,10 +285,10 @@ does not change model optimization or the computed metrics. If batch 12 causes
 an out-of-memory error on the 8 GB GPU during the smoke, reduce only
 `evaluation_batch_size` before freezing and launching the campaign.
 
-## Thesis changes to apply later
+## Notes for interpreting the protocol
 
-The thesis `.tex` files are intentionally unchanged for now. In the final
-revision:
+At this stage I collected the following points before revising the thesis.
+They record the distinctions I needed to preserve between experiments:
 
 - describe the old fixed-epoch campaign, this retired pilot and the definitive
   whole-sequence fixed-ten-epoch protocol separately;

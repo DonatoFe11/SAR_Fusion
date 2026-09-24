@@ -22,7 +22,7 @@ precedenti sono salvati nel commit `7d733aa`.
 ## Domanda e intervento
 
 Nel FAM standard di RT-DETR, `post_init()` di Hugging Face sovrascrive
-l'inizializzazione a zero del predittore. Il test misura l'effetto di partire
+l'inizializzazione a zero del predittore. Ho quindi misurato l’effetto di partire
 da offset nulli senza cambiare l'inizializzazione degli altri componenti.
 
 Si costruisce completamente il normale RT-DETR v1 + FAM, inclusi il

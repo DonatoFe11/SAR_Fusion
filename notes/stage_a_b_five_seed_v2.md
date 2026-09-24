@@ -1,8 +1,9 @@
 # Stage A/B a cinque seed, senza screening sul seed 40
 
-## Revisione autorizzata il 10 settembre 2026
+## Cambio di protocollo — 10 settembre 2026
 
-L'autore elimina il filtro prestazionale sul solo seed 40 e include mixed
+Ho deciso di completare il confronto a cinque seed anche dopo i risultati
+negativi dei pilot. Ho quindi tolto il filtro sul seed 40 per mixed
 consistency, box-guided alignment e YOLO26.
 
 **Aggiornamento 13 settembre 2026: Stage A completato.** Sono terminati tutti
@@ -38,8 +39,8 @@ Split comune: 3.123 coppie FHL 0405/0406 + Baker 1 per training;
 | YOLO26 + FAM | 5 | 50 | `parameters/YOLO26/yolo26s_fam_stage_a_five_seed_v2.yaml` |
 
 Il piano iniziale prevedeva 25 nuovi training, inclusi cinque FAM standard.
-Su indicazione dell'autore, questi ultimi sono stati sostituiti dalle cinque
-run Stage A già complete del 14--15 agosto: non serviva ripetere la baseline.
+Ho poi scelto di riutilizzare le cinque run Stage A già complete del
+14--15 agosto, dopo aver controllato la compatibilità della baseline.
 Sono stati verificati la configurazione comune di modello, training e dati,
 lo split e, ricostruendo l'inizializzazione corrente, gli hash iniziali per
 tutti i seed. La baseline riutilizzata non è il matched control del pilot

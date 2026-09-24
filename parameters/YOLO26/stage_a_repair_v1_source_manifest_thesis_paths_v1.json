@@ -95,7 +95,7 @@
     {
       "bytes": 3244,
       "path": "parameters/YOLO26/stage_a_source_manifest_thesis_paths_v1.json",
-      "sha256": "219788914e3bd5fff95dc6fa94209d96d9979f39092ab03734f0f52b4cd6e6c1"
+      "sha256": "1d8d670c8f1673e24e5e755c46b29b4c6d3e0a4c419f5639899cdc4aa2d87b0b"
     },
     {
       "bytes": 2168,
@@ -118,14 +118,14 @@
       "sha256": "fc18b69f4e87fdc56861df62dc5de64d0a30106dc5bceeb850f1ebd596066ef1"
     },
     {
-      "bytes": 5291,
+      "bytes": 5814,
       "path": "notes/yolo26_fam_stage_a.md",
-      "sha256": "f286f0ffcd7e76bfcec9df8a7d3427c3b0759003f5361c5edfca9a7620bbab71"
+      "sha256": "630d435ac0b0d6566b0f91a2f53b0dc01a2f47605b503396e17479ec8e1f5418"
     },
     {
-      "bytes": 2275,
+      "bytes": 2743,
       "path": "notes/yolo26_stage_a_repair_v1.md",
-      "sha256": "bbec84686743cfd3075438f7b78418887be849fc2a1c4be7aee8f4320c32bb20"
+      "sha256": "9cbcc2f90e067ff6473de1577f6ad72624228a9d9d6bc6eb0fdf407d207de517"
     },
     {
       "bytes": 1588,
@@ -134,7 +134,7 @@
     }
   ],
   "parent_source_manifest": "parameters/YOLO26/stage_a_source_manifest_thesis_paths_v1.json",
-  "parent_source_manifest_sha256": "219788914e3bd5fff95dc6fa94209d96d9979f39092ab03734f0f52b4cd6e6c1",
+  "parent_source_manifest_sha256": "1d8d670c8f1673e24e5e755c46b29b4c6d3e0a4c419f5639899cdc4aa2d87b0b",
   "protocol_revision": "warmup_bias_repair_v1",
   "schema": "sarfusion.yolo26.stage_a.repair_source.v1",
   "source_revision": "thesis_paths_v1",

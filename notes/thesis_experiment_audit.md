@@ -1,5 +1,14 @@
 # Audit sperimentale per la tesi
 
+> **Archivio dell’audit al 31 agosto 2026.** Le attività da completare e i
+> divieti di espansione riportati sotto appartengono a quella fase. La tesi è
+> stata completata e le campagne successive sono riassunte nel
+> [catalogo dei risultati](Thesis/results/README.md): Stage A a cinque seed
+> per mixed, box-guided, RT-DETRv2 e YOLO26, ablation zero-offset e recall/FPPI.
+> Nessuna delle quattro candidate Stage A ha superato entrambi i criteri di
+> promozione; anche zero-offset è rimasta chiusa allo Stage B. Le istruzioni
+> storiche di rimandare l’aggiornamento dei `.tex` non descrivono il lavoro residuo.
+
 Ultimo aggiornamento: 31 agosto 2026.
 
 ## Decisione generale
@@ -10,7 +19,7 @@ protocollo sperimentale finale della tesi. Molti risultati in quei report sono
 singole run e alcune conclusioni sono state superate dalla successiva analisi di
 riproducibilità.
 
-La tesi deve separare esplicitamente due fasi:
+Ho organizzato il lavoro in due fasi:
 
 1. **fase esplorativa**, nella quale singole run sono state usate per sviluppare
    Modal Dropout, RT-DETR fusion, FAM, SSJ e le estensioni ad altre
@@ -19,9 +28,8 @@ La tesi deve separare esplicitamente due fasi:
    sono state rivalutate con cinque seed appaiati, processi isolati, epoca
    finale fissata e statistiche aggregate.
 
-Questa distinzione è un risultato metodologico della tesi, non un difetto da
-nascondere. La formulazione consigliata non è "a differenza di lavori
-precedenti", che potrebbe sembrare un confronto con la letteratura, ma:
+La necessità di separare queste fasi è emersa replicando gli esperimenti.
+Ho riassunto così il passaggio al protocollo finale:
 
 > Nelle sperimentazioni preliminari del progetto i modelli erano confrontati
 > mediante singole esecuzioni. La replica delle configurazioni ha evidenziato
@@ -30,11 +38,9 @@ precedenti", che potrebbe sembrare un confronto con la letteratura, ma:
 > protocollo con seed appaiati, orizzonte di training e checkpoint fissati a
 > priori e reporting della distribuzione dei risultati.
 
-I file `.tex` non vanno ancora aggiornati con nuove tabelle definitive. Prima
-si completano le attività obbligatorie elencate sotto; poi `main.tex` viene
-riscritto usando i Markdown come fonte unica. I due report di corso possono
-restare come documenti storici, eventualmente con una breve nota che rimandi
-alla tesi finale.
+In questa fase avevo rimandato l’aggiornamento dei `.tex` fino al completamento
+delle analisi, raccogliendo prima risultati e decisioni nei Markdown. Ho
+mantenuto i due report di corso come documenti della fase precedente.
 
 ## Che cosa ha mostrato l'indagine di riproducibilità
 
@@ -349,8 +355,7 @@ postprocessing. Risultati e limiti sono in
 ### 6. Conferma su acquisizioni WiSARD inutilizzate — completata
 
 Il protocollo `rtdetr_unused_acquisition_confirmation_v1` è stato congelato il
-30 agosto 2026 prima dell'inferenza. L'autore ha attestato di non avere mai
-visionato manualmente Carnation 0025/0026 e FHL 0407/0408; l'audit non ne ha
+30 agosto 2026 prima dell'inferenza. Ho registrato di non avere mai visionato manualmente Carnation 0025/0026 e FHL 0407/0408; l'audit non ne ha
 rilevato l'uso nei parametri versionati o nelle run conservate. Sono state
 incluse 1.313 coppie Carnation e 1.035 coppie FHL con ground truth VIS. L'audit
 del pairing ha escluso quattro ID asimmetrici Carnation che avrebbero prodotto
@@ -396,8 +401,7 @@ una robustezza geometrica universale. CSV, figura, hash e limiti sono in
 
 ### 8. FAM con Modal Dropout misto e consistency training — chiuso
 
-Dopo la chiusura delle valutazioni naturali e sintetiche, l'unico nuovo
-candidato autorizzato è una modifica del training FAM. Il percorso
+Dopo la chiusura delle valutazioni naturali e sintetiche, ho scelto come unico nuovo candidato una modifica del training FAM. Il percorso
 supervisionato conserva esattamente il Modal Dropout storico, inclusi esempi IR
 nativi con ground truth IR; un percorso aggiuntivo abbina mediante Hungarian
 matching un teacher fusion pulito senza gradiente e uno student paired-VIS con
@@ -514,7 +518,7 @@ manifest/trace e ambiente comune delle dieci run, richiede i due risultati seed
 vittorie e meccanismo 5/5. Il `best_map_50` W&B resta la metrica primaria del
 protocollo storico; soltanto la candidata seed 40 dispone già del replay
 validation indipendente. Resta come traccia del protocollo condizionale, ma non
-viene eseguito perché lo screen seed 40 non ha autorizzato l'espansione.
+viene eseguito perché lo screen seed 40 non ha superato il criterio di espansione.
 
 ### 10. Aggiornamento della tesi
 
@@ -545,8 +549,8 @@ Solo dopo le attività precedenti:
 Se si volesse invece sostenere nella tesi che FAM è superiore in modo
 statisticamente dimostrato **su ogni architettura**, allora Deformable DETR e
 YOLO andrebbero entrambi riallenati col medesimo protocollo di checkpoint e
-seed; i dati attuali non supportano una frase così forte. La scelta consigliata
-è una tesi più focalizzata: dimostrazione principale su RT-DETR, trasferibilità
+seed; i dati raccolti non supportano una conclusione così ampia. Ho quindi
+scelto di concentrare la tesi su questa struttura: dimostrazione principale su RT-DETR, trasferibilità
 su YOLO valutata dal confronto essenziale, altre architetture come studi
 esplorativi.
 
@@ -554,7 +558,7 @@ esplorativi.
 
 I punti 1--17 ricostruiscono il piano precedente: il loro vincolo era chiudere
 la campagna allora attiva prima di aprire nuove architetture, ed è stato
-soddisfatto. I punti 18 e successivi costituiscono l'estensione ora autorizzata.
+soddisfatto. I punti 18 e successivi costituiscono l’estensione del piano decisa successivamente.
 
 1. Chiudere la campagna allora attiva prima di avviare nuove architetture.
    **Fatto.**

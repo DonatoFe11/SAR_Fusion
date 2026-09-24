@@ -1,8 +1,35 @@
 # RT-DETRv2 Additive–FAM: Stage A a cinque seed e Stage B condizionale
 
-## Stato e motivazione — 9 settembre 2026
+## Stato aggiornato: campagna completata
 
-**Preparata su richiesta dell'autore; training non avviato.** Sono previsti
+I dieci training a cinque seed sono conclusi e verificati nell’export del
+14 settembre 2026. Le fonti sono il [CSV aggregato](Thesis/results/stage_a_five_seed_comparison.csv)
+e il relativo [JSON](Thesis/results/stage_a_five_seed_comparison.json).
+La run Additive seed 40 interrotta è esclusa; viene conteggiata soltanto la
+replica completa dello stesso seed.
+
+| Seed | Additive best | FAM best | Delta FAM − Additive |
+|---:|---:|---:|---:|
+| 40 | 0.165990 | 0.141904 | -0.024086 |
+| 41 | 0.145209 | 0.199574 | +0.054365 |
+| 42 | 0.151515 | 0.196732 | +0.045217 |
+| 43 | 0.146761 | 0.186326 | +0.039564 |
+| 44 | 0.162412 | 0.157532 | -0.004881 |
+
+Additive ottiene `0.154377 ± 0.009350`, FAM `0.176413 ± 0.025470`
+(media ± DS campionaria). Il delta appaiato è `+0.022036 ± 0.034430`,
+IC t 95% `[-0.020714, +0.064786]`, con **3/5 vittorie**.
+La soglia media `+0.01` è superata, quella di almeno quattro vittorie no:
+**Stage B non attivato**. Il delta medio dei `latest`, `+0.007898`,
+resta diagnostico e non sostituisce il criterio primario.
+
+Le sezioni seguenti conservano il protocollo preparato il 9 settembre;
+i riferimenti al training da avviare descrivono quello stato storico.
+
+
+## Archivio del protocollo — 9 settembre 2026
+
+**9 settembre: configurazioni pronte, training non ancora avviato.** Avevo previsto
 dieci training nuovi: Additive e FAM standard per ciascuno dei seed 40–44.
 Il vecchio screen resta archiviato in
 [`rtdetr_v2_fam_stage_a.md`](rtdetr_v2_fam_stage_a.md).
@@ -10,14 +37,14 @@ Il vecchio screen resta archiviato in
 Il pilot aveva già completato dieci epoche per entrambi i bracci: l'epoca 1
 era il checkpoint scelto dalla validation, non un'interruzione del training.
 Il fallimento del suo gate `best` resta valido come decisione del protocollo
-originario. L'autore ha ora autorizzato una campagna multi-seed indipendentemente
-dall'esito di quel filtro.
+originario. Ho deciso comunque di misurare la variabilità con una nuova campagna
+multi-seed, mantenendo separato il risultato del pilot.
 
 Questa campagna conserva la strategia precedente: **Stage A sui `best`
 selezionati dalla validation**, eventuale **Stage B sui `latest` dopo un nuovo
 training full-data**. La prima bozza dei nuovi YAML proponeva `latest` come
-primario anche in Stage A: è stata corretta prima del lancio, su richiesta
-dell'autore, per mantenere la stessa regola usata nelle campagne precedenti.
+primario anche in Stage A: ho corretto questa scelta prima del lancio per mantenere la stessa regola
+usata nelle campagne precedenti.
 Il confronto diagnostico `latest` sarà riportato anche quando il suo segno
 differisce da quello dei `best`.
 

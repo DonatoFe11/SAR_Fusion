@@ -5,8 +5,8 @@ Protocol: `rtdetr_paired_modality_evaluation_v1`
 
 ## Question and protocol
 
-This evaluation estimates the contribution of each sensor to the existing
-four-channel detector. It is distinct from the previous native-sensor
+I repeated the modality evaluation on a common set of frames to estimate
+the contribution of each sensor to the existing four-channel detector. It is distinct from the previous native-sensor
 benchmarks, which remain useful for estimating performance on all available VIS
 or IR test streams but cannot support a paired claim about sensor fusion.
 
@@ -131,10 +131,10 @@ Machine-readable results are in
 `out/rtdetr_paired_modality_evaluation/rtdetr_paired_modality_evaluation.json`
 and the checkpoint table is in the adjacent CSV file.
 
-## Thesis changes to apply later
+## Consequences for the thesis
 
-No thesis source is changed as part of this correction. During the final thesis
-revision, the following edits are required.
+After correcting the evaluation, I collected the changes needed in the thesis.
+The list below records that stage of the work; it is not a list of pending edits.
 
 1. In `pages/04_background.tex`, qualify the statement that modality conditions
    retain a common dataset and annotation set. That statement is true for this

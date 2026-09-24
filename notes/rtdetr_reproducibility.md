@@ -39,8 +39,8 @@ importante dell'inizializzazione del modello.
 
 È ora disponibile `reuse_pretrained_class_head: true`: la riga COCO `person`
 viene trasferita nelle sei `class_embed`, in `enc_score_head` e nella embedding
-di denoising. Con questa opzione l'intero hash iniziale è identico usando seed
-40, 41 o 42; non restano parametri inizializzati casualmente.
+di denoising. Nel probe Additive senza FAM né moduli aggiuntivi, con questa opzione l’intero hash iniziale è risultato identico usando seed
+40, 41 o 42. Questo esito non si estende alle varianti con FAM o gate nuovi, che contengono parametri senza corrispondenza nel checkpoint pretrained.
 
 ## Probe same-seed
 
@@ -477,19 +477,17 @@ la coerenza del protocollo di evaluation.
   (`+0.0462`, 4/5). Le regolarizzazioni IR Dropout e SSJ non producono un
   vantaggio unimodale coerente rispetto al FAM standard.
 
-## Integrazione nella tesi e lavoro residuo
+## Sintesi e sviluppi successivi
 
 Questa campagna sostituisce nelle conclusioni della tesi le precedenti singole
 run RT-DETR (`0.357` Additive, `0.396` FAM e `0.438` FAM + SSJ). I numeri
 storici possono restare nella ricostruzione dello sviluppo, ma non devono più
 determinare il modello migliore.
 
-La formulazione metodologica consigliata è che le analisi preliminari del
-progetto hanno rivelato una variabilità capace di invertire l'ordinamento dei
-metodi; per questo è stato bloccato un protocollo con seed appaiati, checkpoint
-finale e reporting della distribuzione. Non va scritto genericamente "a
-differenza di lavori precedenti", perché potrebbe essere interpretato come un
-confronto con la letteratura anziché con le fasi precedenti del progetto.
+Le prime repliche hanno mostrato una variabilità sufficiente a invertire
+l’ordinamento dei metodi. Per questo ho fissato seed appaiati e checkpoint
+finale e ho iniziato a riportare la distribuzione dei risultati. Il confronto
+qui riguarda le diverse fasi del progetto.
 
 Il test MtErie era già stato consultato durante lo sviluppo di architetture ed
 iperparametri. Le metriche di questa sezione costituiscono quindi il benchmark

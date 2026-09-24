@@ -1,6 +1,6 @@
-# RT-DETR Fusion with Feature Alignment Module (FAM): detailed explanation.
+# RT-DETR RGB-IR: backbone, FAM e trasferimento dei pesi
 
-> **Versione descritta.** La nota fa riferimento all'implementazione corrente in [`sarfusion/models/rtdetr_fusion.py`](../sarfusion/models/rtdetr_fusion.py). SSJ è già disponibile in questa versione, ma è opzionale (`spatial_jitter_std=0.0` di default): la descrizione del FAM qui sotto riguarda il percorso senza jitter; quando il parametro è maggiore di zero, il rumore viene sommato agli offset solo durante il training. Per la motivazione e i risultati delle varianti SSJ, vedi [fam_lazy_init_behavior.md](fam_lazy_init_behavior.md).
+> **Versione descritta.** Questa nota spiega il percorso RT-DETR v1 standard in [`rtdetr_fusion.py`](../sarfusion/models/rtdetr_fusion.py): P3–P5, `current_dcnv2`, gate disabilitati e dropout/jitter nulli. I frammenti sono estratti didattici semplificati, non una copia integrale delle firme o dei rami correnti. SSJ aggiunge rumore agli offset solo in training quando `spatial_jitter_std > 0`; risultati e motivazione sono in [fam_lazy_init_behavior.md](fam_lazy_init_behavior.md).
 
 > **Risultati aggiornati.** La scelta finale è FAM standard senza SSJ. Le
 > singole run storiche sono state sostituite dal confronto a cinque seed in
@@ -13,7 +13,7 @@ Il modulo FAM è progettato per allineare le feature map IR con quelle RGB prima
 ---
 ### Costruttore `__init__`
 
-Come prima cosa esaminiamo riga per riga la funzione `__init__` e capiamo a cosa servono questi layer `Conv2d` e `DeformConv2d` e "come sono fatti" matematicamente.
+Parto dal costruttore del FAM, che contiene due layer: `Conv2d` per predire offset e mask, `DeformConv2d` per trasformare le feature IR.
 
 ---
 
@@ -32,7 +32,7 @@ Chiama il costruttore della classe padre (`nn.Module`). È standard in PyTorch p
 Questo è un normale layer convoluzionale standard di PyTorch, ma **non serve a estrarre feature visive**. Serve a **"predire come deformare"** la griglia della convoluzione successiva.
 
 Come è fatto internamente:
-- **`in_channels * 2`**: È il numero di canali in input. È `*2` perché (come vedrai nel `forward`) concateneremo la map RGB e la map IR lungo l'asse dei canali (e.g. $256 + 256 = 512$).
+- **`in_channels * 2`**: È il numero di canali in input. È `*2` perché nel `forward` concateno la map RGB e la map IR lungo l'asse dei canali (e.g. $256 + 256 = 512$).
 - **`27`**: È il numero di canali in output. **Perché proprio 27?**
   Questa convoluzione deve produrre i parametri per un kernel $3 \times 3$ deformabile. Un kernel $3 \times 3$ ha 9 celle (o punti).
   - Per ognuno dei 9 punti, la rete deve predire uno spostamento lungo $x$ ($\Delta x$) e uno lungo $y$ ($\Delta y$). Quindi $9 \times 2 = 18$ canali (gli "offsets").
@@ -75,8 +75,11 @@ if freeze:
     for param in self.parameters():
         param.requires_grad = False
 ```
-**Perché l'inizializzazione a zero?** Rende inizialmente nulli gli offset: sono l'output della sola `offset_conv`, quindi non dipendono dai pesi della `DeformConv2d`. La griglia di campionamento non viene deformata e la `DeformConv2d` opera sulle posizioni di una convoluzione $3\times3$ standard. Questo non rende però il FAM un'identità né preserva automaticamente i valori delle feature: la `DeformConv2d` conserva i propri pesi convoluzionali apprendibili, inizializzati separatamente, e la maschera iniziale vale circa $0.5$ (`sigmoid(0)`). L'inizializzazione a zero impedisce soltanto una deformazione geometrica casuale all'avvio; i pesi della `DeformConv2d` devono comunque essere appresi per trasformare utilmente le feature.
-**Perché il comando `freeze`?** Se impostato a `True`, congela sia la convoluzione che predice offset e maschera sia la `DeformConv2d`. Gli offset restano nulli e la maschera circa $0.5$, mentre la convoluzione deformabile rimane una trasformazione $3\times3$ a pesi fissi; non è un passaggio identitario.
+**Nel modulo isolato**, queste istruzioni producono offset nulli e mask 0.5; la DCNv2 mantiene pesi propri e non è un’identità.
+
+**Nel detector completo**, il successivo `post_init()` di Hugging Face reinizializza il predittore del FAM standard. L’inizializzazione effettiva storica non ha quindi offset necessariamente nulli né mask necessariamente 0.5. Le varianti identity ripristinano esplicitamente la propria inizializzazione dopo `post_init`; l’ablation [zero-offset](rtdetr_fam_zero_offset_stage_a.md) azzera soltanto le prime 18 righe dopo il trasferimento pretrained.
+
+`freeze=True` disabilita i gradienti di tutti i parametri FAM; non impedisce l’inizializzazione successiva o il caricamento dei pesi. Congelare il modulo non garantisce dunque offset nulli. Anche con pesi congelati, offset dipendenti dall’input e l’eventuale SSJ possono variare fra forward.
 
 ---
 
@@ -98,7 +101,7 @@ offset = out[:, :18, :, :]  # [B, 18, H, W]
 mask = torch.sigmoid(out[:, 18:, :, :])  # [B, 9, H, W]
 ```
 Qui il tensore viene splittato:
-1. **`offset`**: I primi 18 canali rappresentano gli spostamenti ($\Delta x$ e $\Delta y$) per i 9 punti del kernel 3x3.
+1. **`offset`**: I primi 18 canali rappresentano coppie interlacciate ($\Delta y$, $\Delta x$) per i 9 punti del kernel 3x3.
 2. **`mask` (Modulation Scalars)**: Gli ultimi 9 canali passano in una funzione `sigmoid` in modo che il risultato sia limitato tra 0 e 1. Questi valori fanno da "moltiplicatori di importanza". Se la rete calcola che un certo offset finisce su un pixel rumoroso o non utile temporaneamente, la mask lo spinge verso lo 0, ignorandolo.
 
 ```python
@@ -120,11 +123,11 @@ Dunque, `offset_conv` prende in input la concatenazione delle feature RGB e IR e
 <br><br>
 
 ## Fusion Backbone (`RTDetrFusionBackbone`)
-Questa classe è il vero "motore" dell'estrazione delle feature. Gestisce due estrattori separati (uno per l'RGB e uno per l'IR) e implementa la logica di parallelismo e, infine, di fusione delle feature map (con o senza il FAM).
+Ho raccolto l’estrazione e la fusione delle feature in questa classe. Gestisce due estrattori separati (uno per l'RGB e uno per l'IR) e implementa la logica di parallelismo e, infine, di fusione delle feature map (con o senza il FAM).
 
 ---
 
-### Considerazioni Architetturali:
+### Scelte di implementazione
 1. **La Backbone**: In PyTorch/HuggingFace, l'architettura RT-DETR usa un `RTDetrConvEncoder` (che incapsula reti per l'estrazione visiva, come ResNet50 o PPLCNet) come backbone. Noi stiamo istanziando *due copie identiche* di questo encoder: una per RGB e una per IR.
 2. **Pesi Indipendenti**: Strutturalmente le due backbone sono cloni (stessi strati e canali), ma non sono la stessa rete in memoria (nessun *weight sharing*). All'inizio dell'addestramento i pesi sono quasi uguali, ma proseguendo evolveranno in modo indipendente: la backbone RGB si specializzerà su texture/colori, quella IR sulle firme termiche.
 3. **Pesi Pre-addestrati**: Il modello di base di partenza è `PekingU/rtdetr_r50vd`. È un modello pre-addestrato sul dataset COCO (immagini RGB a 3 canali). Per questo motivo è essenziale l'adattamento da 3 a 1 canale sulla porta infrarossi in fase di inizializzazione.
@@ -210,7 +213,7 @@ def forward(self, pixel_values: torch.FloatTensor, pixel_mask: Optional[torch.Te
     if c == 1:
         return self.ir_backbone(pixel_values, pixel_mask)
 ```
-Se passiamo un tensore a 3 canali usa solo la parte RGB, se ne passiamo 1 usa solo l'IR (molto flessibile per i test).
+Con tre canali viene eseguita solo la backbone RGB; con uno solo la backbone IR. Entrambi i percorsi bypassano FAM e fusione. **Un tensore a quattro canali con una modalità azzerata segue invece il ramo fusion**: esegue entrambe le backbone e l’eventuale FAM. Le condizioni paired masked delle valutazioni non equivalgono quindi a passare direttamente uno o tre canali.
 
 **Modalità 3: Fusione (RGB + IR)**
 ```python
@@ -221,17 +224,17 @@ Se passiamo un tensore a 3 canali usa solo la parte RGB, se ne passiamo 1 usa so
 Se passiamo 4 canali, assume la concatenazione. Smezza il tensore (primi 3 per RGB, ultimo logico per IR) e fa processare le metà in parallelo alle rispettive backbone. Il risultato (`rgb_feats` e `ir_feats`) sono **liste di feature map** a vari livelli di risoluzione.
 
 *Quanti sono i livelli di queste feature map?*
-In RT-DETR, grazie al design della backbone (es. ResNet), vengono estratti esattamente **3 livelli di feature map** per gestire il multi-scala:
+In RT-DETR, grazie al design della backbone (es. ResNet), nel percorso standard vengono estratti **3 livelli di feature map** per gestire il multi-scala:
 - **Livello 1 ($C3$)**: Scala spaziale $H/8$, $W/8$ (di solito 512 canali).
 - **Livello 2 ($C4$)**: Scala spaziale $H/16$, $W/16$ (di solito 1024 canali).
 - **Livello 3 ($C5$)**: Scala spaziale $H/32$, $W/32$ (di solito 2048 canali).
-Quindi `rgb_feats` conterrà 3 tensori e il ciclo che le attraversa girerà esattamente 3 volte, instanziando 3 moduli FAM differenti!
+Quindi `rgb_feats` conterrà 3 tensori e il ciclo le attraversa tre volte, usando i moduli FAM già istanziati nel costruttore. Con `use_p2=true` i livelli diventano quattro (P2–P5), come descritto nella [nota P2](rtdetr_fam_p2_stage_a.md).
 
 #### Ramo con FAM (Allineamento e Fusione)
 ```python
         if self.use_fam:
 ```
-Ecco l'attivazione *eager* all'opera. Nel costruttore, la rete ha già creato una `nn.ModuleList` contenente tre FAM (uno per livello di canale: 512, 1024, 2048). Nel `forward` dobbiamo solo chiamarli ciclando sui 3 livelli in parallelo.
+Qui uso l’inizializzazione *eager*. Nel costruttore, la rete ha già creato una `nn.ModuleList` contenente tre FAM (uno per livello di canale: 512, 1024, 2048). Nel `forward` richiamo i moduli già creati per ciascuno dei 3 livelli.
 
 ```python
             fused_feats = []
@@ -253,7 +256,7 @@ Cicla sui 3 livelli. Tramite il modulo FAM specifico di quel livello, trasforma 
                 fused_feats.append((r_feat + i_feat, r_mask))
             return fused_feats
 ```
-Se `use_fam` è disattivato, esegue comunque la somma additiva per unire le informazioni delle due modalità, ma saltando il passaggio di allineamento deformabile spaziale. Molto utile per eseguire gli Ablation Study.
+Se `use_fam` è disattivato, esegue comunque la somma additiva per unire le informazioni delle due modalità, ma saltando il passaggio di allineamento deformabile spaziale. In entrambi i rami è inoltre applicato `Dropout2d` alla feature IR quando `ir_dropout_rate > 0`; il frammento sopra mostra il caso con dropout disattivato.
 
 <br><br>
 
@@ -285,11 +288,11 @@ Questa è la classe principale a cui l'utente fa riferimento quando carica il mo
 #### Detection Heads
 In architetture moderne come RT-DETR (o i vari YOLO), la rete è divisa concettualmente in due blocchi:
 1. **Il Corpo (Backbone + Encoder/Decoder)**: Il suo scopo è capire "cosa c'è nell'immagine", elaborare le feature e trovare le correlazioni spaziali.
-2. **Le Teste (Heads)**: Sono gli ultimissimi strati neurali (spesso semplici layer lineari `nn.Linear`). Prendono le feature elaborate dal corpo e sputano fuori concretamente i numeri finali che ci servono:
-   - `class_embed`: Un layer che calcola le probabilità. "Questo oggetto al 90% è un cane, al 10% è un gatto".
+2. **Le Teste (Heads)**: Sono gli ultimissimi strati neurali (spesso semplici layer lineari `nn.Linear`). Trasformano le feature del decoder nelle predizioni di classe e box:
+   - `class_embed`: produce logits di classificazione, convertiti in score mediante sigmoid nel postprocessing.
    - `bbox_embed`: Un layer che calcola coordinate. "Le coordinate \((x, y, w, h)\) del box sono queste".
 
-#### Costruttore e Trick delle Teste
+#### Costruttore e collegamento delle teste
 ```python
 def __init__(self, config: RTDetrConfig, use_fam: bool = False,
              freeze_fam: bool = False, ir_dropout_rate: float = 0.0,
@@ -299,7 +302,7 @@ def __init__(self, config: RTDetrConfig, use_fam: bool = False,
     tmp_cfg.num_channels = 3
     super().__init__(tmp_cfg)
 ```
-Poiché il nostro input sarà un tensore a 4 canali (RGB + IR), se passassimo la configurazione `num_channels = 4` al costruttore originale (`super().__init__`), HuggingFace cercherebbe di creare interamente il suo estrattore standard configurato a 4 canali. Per ingannarlo momentaneamente, gli passiamo 3 canali. Questo fa sì che la classe madre (`RTDetrForObjectDetection`) inizializzi correttamente tutti i moduli standard e la sua intera cascata di funzioni, creando un modello standard integro (con tanto di corpo e teste).
+Nel costruttore ho inizializzato la classe base con una configurazione RGB a tre canali, così da creare i moduli standard. Ho poi sostituito il corpo con `RTDetrFusionModel`, che gestisce l’input a quattro canali e le due backbone.
 
 ```python
     # Salviamo le teste originali
@@ -321,97 +324,57 @@ Poiché il nostro input sarà un tensore a 4 canali (RGB + IR), se passassimo la
     self.ir_dropout_rate = ir_dropout_rate
     self.spatial_jitter_std = spatial_jitter_std
 ```
-Ecco cosa succede riga per riga in questo passaggio:
-1. Poco fa, istanziando il `super().__init__`, la libreria ha creato automaticamente le Teste (gli strati finali `self.class_embed` e `self.bbox_embed`). Prima di toccare qualsiasi cosa, **ne salviamo una copia** in due variabili temporanee (`saved_...`).
-2. Poi prendiamo `self.model` (il Corpo originale) e lo spazziamo via, sovrascrivendolo con il nostro `RTDetrFusionModel` (quello che sa gestire i 4 canali e che al suo interno ha la biforcazione in due backbone diverse).
-3. Infine, prendiamo le Teste che avevamo messo da parte e **le incolliamo all'interno del decoder del nuovo Corpo** appena creato (`self.model.decoder... = saved...`). 
+Il passaggio avviene in tre fasi:
 
-**Perché le attacchiamo specificamente a `self.model.decoder` e non di nuovo a `self`?**
-Perché nell'architettura dei Transformers implementata da HuggingFace, il "flusso logico" dei dati durante l'addestramento va dal `model` (che contiene l'encoder) verso il `model.decoder`. Il decoder è il modulo responsabile di generare le feature finali, e le Teste di predizione sono pensate per essere fisicamente connesse ai layer di uscita del decoder. L'`RTDetrForObjectDetection` base le espone anche fuori su `self.class_embed` come "scorciatoia" per leggerle comodamente, ma il reale blocco neurale che fa la moltiplicazione di matrici sta alla fine del decoder. Andando a ricucire i riferimenti puntando a `self.model.decoder`, ci assicuriamo che quando i tensori viaggiano nel nostro nuovo motore custom, trovino le teste esatte di classificazione al posto giusto senza lanciare eccezioni!
+1. conservo i riferimenti alle teste create dalla classe base;
+2. sostituisco `self.model` con `RTDetrFusionModel`;
+3. collego gli stessi moduli al decoder del nuovo corpo.
 
-Questo "ponteggio" ci permette di sostituire in tronco l'intero motore di estrazione feature (il Corpo) a metà della rete, ma mantenere esattamente gli stessi strati neurali logici in uscita che l'API di PyTorch si aspetta per il suo calcolo.
+Le assegnazioni non copiano i pesi: `self.class_embed` e i riferimenti nel
+decoder puntano agli stessi moduli. In questo modo mantengo il collegamento
+tra il wrapper di detection e le teste usate dal decoder.
 
 ---
 
-### Il Cuore del Transfer Learning: `from_pretrained`
-La vera "magia" della gestione dei pesi avviene in questo costruttore alternativo (`@classmethod`), che viene invocato quando vogliamo usare pesi preesistenti, come `PekingU/rtdetr_r50vd`.
+### Trasferimento dei pesi: `from_pretrained`
 
-```python
-@classmethod
-def from_pretrained(cls, pretrained_model_name, id2label, label2id,
-                    ignore_mismatched_sizes=True, use_fam=False,
-                    freeze_fam=False, ir_dropout_rate=0.0,
-                    spatial_jitter_std=0.0):
-    # Diciamo alla libreria base di scaricare i pesi RGB normali
-    base = RTDetrForObjectDetection.from_pretrained(
-        pretrained_model_name, ...
-    )
-```
-Qui diciamo a HuggingFace di scaricare ed inizializzare un modello RT-DETR *puramente visivo* dai server (o in locale).
+Il metodo carica `PekingU/rtdetr_r50vd`, costruisce il detector fusion e trasferisce i tensori compatibili di encoder, decoder e teste. Le due backbone ricevono separatamente i pesi della backbone RGB pretrained. Per l’IR, i kernel con tre canali di ingresso vengono mediati su quell’asse (`mean(dim=1, keepdim=True)`). Il FAM non ha pesi COCO corrispondenti.
 
-```python
-    # Istanziamo il nostro modello a 4 canali "vuoto"
-    config = base.config
-    config.num_channels = 4
-    instance = cls(config, use_fam=use_fam, freeze_fam=freeze_fam,
-                   ir_dropout_rate=ir_dropout_rate,
-                   spatial_jitter_std=spatial_jitter_std)
-    
-    # Carichiamo tutti i pesi comuni (Encoder, Decoder, Teste d'uscita)
-    instance.load_state_dict(base.state_dict())
-```
-Questo passaggio `load_state_dict` carica tutto tranne le backbone all'interno della nostra istanza, permettendo al Transformer Encoder/Decoder di avere già tutta l'intelligenza di visione spaziale ereditata.
+La gestione della testa dipende da `reuse_pretrained_class_head`:
 
-Ora viene la gestione delle *due* backbone (finora `base` ne ha solo una RGB da 3 canali):
+- `false` (default API): il modello sorgente è già costruito con le label richieste; le dimensioni incompatibili sono gestite da `ignore_mismatched_sizes`, quindi una testa ridimensionata non conserva automaticamente i pesi COCO;
+- `true` (protocollo RT-DETR finale): viene caricata la testa COCO originale e `copy_matching_pretrained_label_heads` trasferisce semanticamente le righe corrispondenti alle label richieste, inclusa `person`.
 
-**1. Backbone RGB:**
-```python
-    sd = base.state_dict()
-    rgb_w = {
-        k.replace("model.backbone.", ""): v
-        for k, v in sd.items() if "model.backbone" in k
-    }
-    instance.model.backbone.rgb_backbone.load_state_dict(rgb_w, strict=False)
-```
-Filtra tutti i pesi di `base` che appartengono alla sua singola backbone. Li inietta in blocco dentro la nostra copia `self.rgb_backbone`. Questa operazione non richiede modifiche.
+Con `use_p2=true`, il trasferimento rimappa esplicitamente i livelli pretrained P3–P5; non basta un caricamento basato sulla forma dei tensori. Vedi [P2](rtdetr_fam_p2_stage_a.md).
 
-**2. Backbone IR (L'Adattamento dei Canali di Input):**
-```python
-    ir_w = copy.deepcopy(rgb_w)
-    for k in list(ir_w.keys()):
-        if ir_w[k].dim() == 4 and ir_w[k].shape[1] == 3:
-            ir_w[k] = ir_w[k].mean(dim=1, keepdim=True)
+### Varianti opzionali del percorso corrente
 
-    instance.model.backbone.ir_backbone.load_state_dict(ir_w, strict=False)
+`fam_variant` seleziona il FAM standard, bounded, identity, grid-sample o box-guided. La variante box-guided aggiunge una guida supervisionata al solo P3; non vale quindi per essa la descrizione del FAM standard come privo di supervisione diretta degli offset.
 
-    return instance
-```
-Questo è il culmine logico del _warm start_ preannunciato. Creiamo un nuovo dizionario virtuale (`ir_w`) per la porta IR, identico a quello visivo. Poi passiamo al setaccio ogni tensore che lo compone: se troviamo un tensore convoluzionale a 4 dimensioni `[out, in, H, W]` in cui i canali `in=3`, applichiamo la **media** sul canale 1. 
+I tre meccanismi opzionali di gate richiedono FAM e sono mutuamente esclusivi:
 
-Questo trasforma fisicamente e matematicamente il tensore da _"conoscitivo di 3 colori"_ a _"conoscitivo dell'intensità complessiva"_. Infine, questo nuovo set di pesi compressi viene iniettato nel nostro `self.ir_backbone`.
+- [reliability gating](rtdetr_fam_reliability_gate_stage_a.md): pesa separatamente RGB e IR allineata prima della somma;
+- [RCRA](rtdetr_fam_residual_alignment_stage_a.md): seleziona localmente il residuo fra IR allineata e IR grezza;
+- [controllo scalare](rtdetr_fam_scalar_alignment_control_stage_a.md): usa un unico coefficiente apprendibile per livello.
 
-L'oggetto testuale finito restituito da questa funzione è un modello intero RT-DETR che:
-- Riceve un sensore a 4 canali in ingresso.
-- Processa 3 canali di ottico e 1 canale di termico in vie parallele ma con un livello di intelligenza visiva iniziale altissimo su entrambi i percorsi.
-- Li fonde progressivamente ai vari livelli spaziali tramite una deformazione dei tensori.
-- Esce con le stesse teste di detection che aveva RT-DETR in origine.
+Le formule e gli esperimenti specifici sono nelle rispettive note. Il flusso seguente assume che queste opzioni siano disabilitate.
 
 <br><br>
 
-## 🌊 Esempio di Flusso Dati (Data Flow)
+## Esempio del flusso dei tensori
 
-Immaginiamo di trovarci in fase di *forward pass* (durante l'addestramento). Vogliamo predire dove si trovano determinati oggetti passando alla rete l'immagine di una telecamera visiva (RGB) e l'immagine della telecamera termica (IR).
+Per seguire il forward considero il caso standard con FAM attivo e input RGB-IR a 640 pixel.
 
 ### 1. Input del Wrapper
 Passiamo l'input al nostro wrapper `RTDetrFusionForObjectDetection`:
 - **Dimensione iniziale**: Entra un tensore `pixel_values` di dimensione `[Batch, 4, 640, 640]`. I primi 3 canali sono i pixel RGB, l'ultimo canale è quello IR.
 
-Il Wrapper non "tocca" i pixel in modo intelligente, ma si limita a riversarli dentro al suo `self.model` (il Corpo). Il flusso arriva così alla base del modello, cioè alla `self.backbone` (che nel nostro caso truccato è `RTDetrFusionBackbone`).
+Il wrapper passa il tensore a `self.model`, che richiama la `RTDetrFusionBackbone`.
 
 ### 2. Esecuzione della `RTDetrFusionBackbone`
 Siamo entrati nel metodo `forward` della nostra backbone personalizzata. Siccome la dimensione del canale di input è 4, la condizione `if c == 4:` si attiva.
 
-- **Splitting**: Il tensore a 4 canali viene smezzato logitamente in due:
+- **Splitting**: Il tensore a 4 canali viene diviso lungo i canali in due:
   - `rgb_input` = `[Batch, 3, 640, 640]`
   - `ir_input` = `[Batch, 1, 640, 640]`
 
@@ -430,16 +393,16 @@ Si avvia un ciclo `for` che scorre "a coppie" i 3 livelli appena estratti.
 
 Prendiamo ad esempio il livello $C4$ (1024 canali, risoluzione 40x40):
 - **Allineamento**: Il tensore RGB e quello IR del livello $C4$ vengono concatenati e passati in input al modulo FAM corrispondente a quel livello. La convoluzione stima gli "offset". Il modulo `DeformConv2d` usa questi offset per trasformare solo le feature IR, creando la feature map `ir_aligned`. Questa feature map mantiene le dimensioni `[Batch, 1024, 40, 40]`; l'addestramento determina in quale misura risulti meglio registrata rispetto alla geometria RGB.
-- **Fusione Additiva**: Viene eseguita la fusione tra i due mondi tramite una banale ma efficacissima sommma algebrica per elemento: `fused_C4 = r_feat + ir_aligned`. La nuova mappa, densa delle informazioni fiorite da entrambe le bande elettro-magnetiche originarie, resta di dimensioni `[Batch, 1024, 40, 40]`.
+- **Fusione additiva**: sommo le feature elemento per elemento, `fused_C4 = r_feat + ir_aligned`. La forma rimane `[Batch, 1024, 40, 40]`.
 
 Questa operazione di *FAM + Fusione additiva* viene eseguita su tutti i livelli ($C3$, $C4$, $C5$). Alla fine del ciclo, la `RTDetrFusionBackbone` raggruppa le tre mappe fuse in una singola *lista finale* pronta da servire e le restituisce in output.
 
 ### 4. Dal Transformer alle Teste Finali (Heads)
-Le tre mappe fuse entrano a questo punto nel vero e proprio modulo Transformer di RT-DETR (Encoder e poi Decoder). Il transformer "non si è accorto di nulla", lui vede scorrere normalissime feature map di quelle esatte grandezze previste!
+Le tre mappe fuse entrano a questo punto nel vero e proprio modulo Transformer di RT-DETR (Encoder e poi Decoder). Le forme delle feature restano quelle previste dall’encoder.
 Il meccanismo di `self-attention` calcola le relazioni a lungo e corto raggio in tutta l'immagine e condensa le risposte in un piccolo gruppo di `queries` (i potenziali bounding boxes/oggetti predetti).
 
 Questi vettori passano in ultimo per lo snodo di uscita, le **Teste (Heads)**:
-- Per ogni query, lo strato `self.model.decoder.class_embed` analizza i vettori e stima lo score di appartenenza alle classi a disposizione (es: "Probabilità: Persona al 98%").
-- Lo strato complementare `self.model.decoder.bbox_embed` restituisce numericamente le coordinate in pixel finali `[centro_x, centro_y, larghezza, altezza]`.
+- Per ogni query, `self.model.decoder.class_embed` produce logits; il postprocessing li trasforma in score di classe tramite sigmoid.
+- Le teste `bbox_embed` producono i delta di raffinamento; il modello restituisce `pred_boxes` in formato `[centro_x, centro_y, larghezza, altezza]` **normalizzato in [0, 1]**, dopo la trasformazione sigmoid. La conversione in coordinate pixel appartiene al postprocessing, non all’uscita grezza del detector.
 
-L'intero flusso end-to-end è così concluso! Le coordinate prodotte sono adesso a disposizione del train-loop PyTorch per sfidare la *Ground Truth*, calcolare la loss e retro-propagare l'errore calcolando i gradienti di tutte e due le backbone.
+Durante il training le predizioni vengono confrontate con la ground truth per calcolare la loss. La retropropagazione attraversa decoder, fusione e le due backbone.

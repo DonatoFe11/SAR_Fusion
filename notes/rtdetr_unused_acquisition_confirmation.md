@@ -3,7 +3,7 @@
 ## Stato
 
 **Campagna completata: protocollo, inventari e checkpoint sono stati congelati
-prima dell'inferenza, l'attestazione dell'autore è stata registrata il 30 agosto
+prima dell’inferenza, ho registrato la dichiarazione di mancato uso precedente il 30 agosto
 2026 e tutte le 50 unità previste sono state calcolate. FAM storico supera
 Additive in tutti i dieci confronti acquisizione/seed; l'apporto della modalità
 IR nei checkpoint Stage B non è invece uniforme e RCRA resta instabile.**
@@ -55,10 +55,9 @@ registrati in `MISSING_ANNOTATIONS`. Potrà essere oggetto di un audit separato,
 ma non verrà aggiunta dopo avere osservato i risultati delle due acquisizioni
 primarie.
 
-## Attestazione necessaria prima dell'esecuzione
+## Verifica prima dell’esecuzione
 
-Attestazione registrata il 30 agosto 2026: l'autore ha dichiarato di non avere
-mai visionato manualmente Carnation 0025/0026 e FHL 0407/0408 prima del
+Il 30 agosto 2026 ho registrato di non avere mai visionato manualmente Carnation 0025/0026 e FHL 0407/0408 prima del
 congelamento. L'audit del repository e degli archivi locali non ha rilevato un
 loro uso nelle configurazioni versionate o nelle run conservate. È stata quindi
 registrata la condizione
@@ -66,16 +65,17 @@ registrata la condizione
 scientifico già congelato.
 
 Il repository e gli archivi locali possono escludere soltanto usi registrati.
-Prima dell'inferenza l'autore deve indicare una delle due condizioni:
+Prima dell’inferenza avevo previsto di distinguere queste due condizioni:
 
-1. non ha consultato queste sequenze in prove manuali o esperimenti non
+1. nessuna consultazione di queste sequenze in prove manuali o esperimenti non
    archiviati che abbiano influenzato modello, checkpoint, soglia o protocollo;
 2. esiste un uso precedente oppure non è possibile escluderlo con sicurezza.
 
-Nel primo caso la tesi userà l'espressione *previously unused internal
-acquisition-level confirmation sets*. Nel secondo verranno descritte soltanto
-come *additional internal acquisitions*. In nessun caso saranno chiamate
-holdout esterno o campione rappresentativo della popolazione SAR.
+Per il primo caso ho scelto l’espressione *previously unused internal
+acquisition-level confirmation sets*. In presenza di un uso precedente avrei
+usato *additional internal acquisitions*. In entrambi i casi si tratta di
+acquisizioni interne, non di un holdout esterno o di un campione
+rappresentativo della popolazione SAR.
 
 L'attestazione è conservata fuori dal blocco scientifico `protocol` del file
 YAML, così la registrazione successiva non modifica le scelte sperimentali già
@@ -142,7 +142,7 @@ selezione retroattiva. Risultati negativi devono essere riportati integralmente.
 
 1. costruire gli inventari e congelarne gli hash senza caricare modelli;
 2. risolvere e congelare i venti checkpoint senza inferenza;
-3. registrare l'attestazione dell'autore;
+3. registrare la dichiarazione sul precedente uso delle acquisizioni;
 4. eseguire una sola campagna completa e resumable;
 5. verificare 50 unità acquisizione/configurazione/seed/condizione;
 6. versionare la tabella compatta e aggiornare la tesi;

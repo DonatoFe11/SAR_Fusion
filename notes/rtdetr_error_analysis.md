@@ -2,7 +2,8 @@
 
 ## Stato
 
-Il protocollo è stato bloccato il 12 agosto 2026 prima dell'inferenza completa.
+Il 12 agosto 2026 ho fissato il protocollo per capire quali errori cambiassero
+tra Additive e FAM, prima di eseguire l’inferenza completa.
 La campagna è terminata regolarmente: dieci checkpoint, 35.400 righe
 frame/soglia, 50 riepiloghi checkpoint e dodici figure qualitative. L'output
 aggregato è marcato `protocol_complete: true`. Il manifest qualitativo è stato

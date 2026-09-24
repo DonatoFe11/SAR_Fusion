@@ -17,7 +17,7 @@ L'hash SHA-256 canonico del blocco scientifico è
 
 La conferma sulle acquisizioni WiSARD precedentemente inutilizzate ha mostrato
 che FAM storico supera Additive in tutti i seed, ma anche che la modalità IR
-non migliora uniformemente lo stesso FAM Stage B. Lo stress controllato chiede:
+non migliora uniformemente lo stesso FAM Stage B. Ho quindi aggiunto uno stress controllato per rispondere a questa domanda:
 
 > quanto decade la mAP@50 di ciascun checkpoint quando soltanto la modalità IR
 > viene traslata o riscalata con intensità fissate a priori?

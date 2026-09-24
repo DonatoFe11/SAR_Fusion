@@ -6,7 +6,7 @@
 > nettamente sotto Deformable DETR e RT-DETR. Questa famiglia resta una linea
 > esplorativa e non va confrontata come se usasse il protocollo finale RT-DETR.
 
-Questa nota documenta l'implementazione **DINO completa** in [dino_fusion.py](../sarfusion/models/dino_fusion.py). Essa mantiene backbone, FAM opzionale e channel fusion di [Deformable DETR Fusion](deformable_detr_fusion.md), ma sostituisce l'inizializzazione delle query e il decoder con le tre componenti proprie di DINO:
+Dopo le prime prove con il solo denoising, ho completato l’implementazione DINO in [dino_fusion.py](../sarfusion/models/dino_fusion.py). Essa mantiene backbone, FAM opzionale e channel fusion di [Deformable DETR Fusion](deformable_detr_fusion.md), ma sostituisce l'inizializzazione delle query e il decoder con le tre componenti proprie di DINO:
 
 - **Contrastive DeNoising (CDN)** durante il training;
 - **Mixed Query Selection (MQS)**;
@@ -92,11 +92,13 @@ Gli slot CDN sono rimossi prima delle predizioni e della valutazione standard. I
 
 ## Inizializzazione e configurazione
 
-Il file da lanciare è [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml), rinominato in modo da non confondere le nuove run con quelle storiche:
+La configurazione corrente [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml) seleziona il DINO completo **base**, senza FAM né SSJ. Il file attuale configura una singola run seed 43; non è una griglia che rilancia automaticamente i cinque seed della tabella storica:
 
 | Parametro | Valore |
 | --- | --- |
-| esperimento | `DINO_Full_StableInit_Fusion_DefDETR_FAM_SSJ_vis_ir` |
+| esperimento | `DINO_Base_WarmStart_Fixed_Fusion_DefDETR_vis_ir` |
+| `seed` / `max_epochs` | 43 / 10 |
+| `use_fam` / `spatial_jitter_std` | `false` / 0.0 |
 | `num_feature_levels` | 4 |
 | query di matching | 300 (`config.num_queries`) |
 | `num_dn_groups` | 5 |
@@ -106,15 +108,18 @@ Il file da lanciare è [fusion_dino.yaml](../parameters/DINO/fusion_dino.yaml), 
 | `two_stage` | `true`, impostato dal codice DINO |
 | `with_box_refine` | `true`, impostato dal codice DINO |
 | learning rate pretrained/fusion | 0.00002 |
-| learning rate nuovi moduli DINO | 0.0001 |
-| `batch_size` | 1 |
+| learning rate teste detection e moduli DINO dedicati | 0.0001 |
+| `batch_size` / `gradient_accumulation_steps` | 1 / 4 |
 | modal dropout (IR / RGB / fusion) | 0.2 / 0.2 / 0.6 |
 
 Il checkpoint COCO inizializza backbone RGB, backbone IR adattata mediando i tre
 canali della prima convoluzione, encoder, decoder e i layer interni delle teste
-box. I blocchi di channel fusion, FAM, embedding CDN, contenuto MQS, trasformazioni
-two-stage e gli output layer di raffinamento sono appresi nei nuovi training con
-il learning rate dedicato.
+box. In `partition_optimizer_parameters` di `sarfusion/experiment/run.py`,
+`mixed_query_content`, `dn_label_embeddings`, `enc_output`, `pos_trans`,
+`bbox_embed` e `class_embed` ricevono `dino_lr=1e-4`. Backbone IR e channel
+fusion ricevono `initial_lr=2e-5`; gli altri parametri, inclusi eventuali FAM,
+ricevono `backbone_lr`, che qui ricade su `initial_lr=2e-5`. Il learning rate
+dedicato non si applica quindi indistintamente a tutti i moduli nuovi.
 
 ## Risultati storici: non DINO completo
 

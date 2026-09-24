@@ -2,8 +2,8 @@
 
 ## Stato e obiettivo
 
-Analisi completata: 30/30 unità. Protocollo `rtdetr_historical_recall_fppi_v1`.
-Si confrontano Additive e FAM storici in fusion VIS+IR sui checkpoint
+Ho completato le 30/30 unità dell’analisi. Protocollo `rtdetr_historical_recall_fppi_v1`.
+Ho confrontato Additive e FAM storici in fusion VIS+IR sui checkpoint
 `latest` dei cinque seed 40–44, senza nuovo training. Non sono inclusi
 i checkpoint FAM current-code Stage B, RCRA o altre varianti.
 

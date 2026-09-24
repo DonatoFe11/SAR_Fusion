@@ -27,7 +27,7 @@ adapts IR to the VIS canvas, masks the three RGB channels and retains VIS
 annotations. The old augmentation therefore never trained the exact missing-RGB
 condition measured by the paired evaluator.
 
-This experiment tests whether removing that mismatch improves paired
+I therefore tested whether removing that mismatch would improve paired
 missing-RGB robustness without materially damaging fusion or native-IR use. It
 does **not** reinterpret `0.0215` as a detector bug and does not invalidate the
 historical training recipe: native-coordinate dropout remains a coherent
@@ -119,7 +119,7 @@ Expansion to seeds 41--44 requires **all** of these engineering conditions:
 
 VIS-only is reported as a diagnostic but is not a fourth gate. These are
 single-seed screening tolerances, not confidence bounds or evidence of
-superiority. Passing only authorizes the unchanged five-seed experiment;
+superiority. Passing would have led to the unchanged five-seed experiment;
 failing closes this pure replacement and may motivate a separately declared
 mixed native/paired dropout design. No threshold may be changed after seeing
 the seed-40 results.
@@ -198,9 +198,10 @@ The complete aggregate remains under
 `out/rtdetr_fam_paired_vis_modal_dropout_probe_evaluation/` and is marked
 `protocol_complete: true`.
 
-The thesis source is intentionally unchanged. This experiment can be reported
-as a coordinate-contract ablation and a paired robustness/native-IR trade-off,
-but seed 40 alone is not a final performance comparison.
+I used this experiment to isolate the coordinate-contract change and its
+trade-off between paired robustness and native-IR performance. The seed-40
+result closed the candidate under the screening rule; it does not estimate
+the variability of that trade-off across seeds.
 
 ## Training command used
 

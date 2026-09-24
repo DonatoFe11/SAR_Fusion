@@ -28,7 +28,7 @@ control ottiene `0,147389` mAP@50 e la candidata `0,155485`: il delta
 `+0,008097` è positivo ma inferiore al gate preregistrato `+0,01`. Il ramo
 supera tutti i gate meccanicistici, mentre il controfattuale active-vs-zero
 misura soltanto `+0,00000682` mAP@50, cioè un effetto diretto trascurabile.
-Seed 41--44 e Stage B non sono autorizzati. La regressione del repository passa
+Nel pilot mi sono fermato prima dei seed 41--44 e dello Stage B. A quel punto la regressione del repository passava
 **269/269 test**; `py_compile` e `git diff --check` sono puliti.
 
 File principali:
@@ -421,9 +421,9 @@ validation resta il controllo prestazionale fuori dal train.
 
 ### Stage A a cinque seed
 
-**Non eseguito e non autorizzato:** il gate primario seed 40 è fallito. Quanto
-segue conserva il protocollo preregistrato per tracciabilità, non costituisce
-un piano di lancio corrente.
+**Espansione v1 non eseguita:** il gate primario seed 40 è fallito.
+Conservo qui il protocollo che avevo preparato prima del risultato. La
+successiva campagna v2 è descritta all’inizio della nota.
 
 La promozione allo Stage B richiede, contro i FAM appaiati seed 40--44:
 
@@ -626,7 +626,7 @@ conda run --no-capture-output -n sarfusion python main.py experiment \
 ```
 
 Il seguente audit aggregato sarebbe stato eseguito soltanto dopo dieci run
-autorizzate; nella campagna corrente non è applicabile:
+previste dal protocollo v1; dopo la chiusura del pilot non l’ho eseguito:
 
 ```bash
 HF_HUB_OFFLINE=1 \

@@ -83,9 +83,9 @@
       "sha256": "4af29228ea24c4f1f7f3008f9d08a87b351bab47e8c108a9024ec84a57cb45b7"
     },
     {
-      "bytes": 5291,
+      "bytes": 5814,
       "path": "notes/yolo26_fam_stage_a.md",
-      "sha256": "f286f0ffcd7e76bfcec9df8a7d3427c3b0759003f5361c5edfca9a7620bbab71"
+      "sha256": "630d435ac0b0d6566b0f91a2f53b0dc01a2f47605b503396e17479ec8e1f5418"
     }
   ],
   "schema": "sarfusion.yolo26.stage_a.source.v1",

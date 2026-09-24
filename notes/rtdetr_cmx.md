@@ -7,7 +7,7 @@
 > finale; il riferimento aggiornato è in
 > [`rtdetr_reproducibility.md`](rtdetr_reproducibility.md).
 
-Questa nota documenta le due implementazioni CMX sperimentate con RT-DETR:
+Ho provato due integrazioni CMX in RT-DETR: prima la fusione con rettifica e cross-attention, poi una versione con FAM e coordinate esplicite.
 
 - **CMX puro**: [`sarfusion/models/rtdetr_cmx.py`](../sarfusion/models/rtdetr_cmx.py);
 - **CMX ibrido**: [`sarfusion/models/rtdetr_cmx_hybrid.py`](../sarfusion/models/rtdetr_cmx_hybrid.py), che antepone FAM e aggiunge positional encoding 2D.
@@ -22,7 +22,7 @@ Il modello puro applica a ogni livello della piramide due moduli del framework C
 
 Il *Cross-Modal Feature Rectification Module* calibra RGB e IR lungo due assi:
 
-1. **Canali.** Average pooling e max pooling globali delle due modalità producono quattro vettori di statistiche. Un MLP con sigmoide genera due insiemi di pesi: quelli derivati dalle statistiche IR modulano RGB e viceversa.
+1. **Canali.** Average pooling e max pooling globali delle due modalità producono quattro vettori di statistiche. Un MLP con sigmoide genera due insiemi di pesi: i pesi `w_rgb` e `w_ir` dipendono entrambi dalle statistiche concatenate delle due modalità; `w_ir` modula RGB e `w_rgb` modula IR.
 2. **Spazio.** Una piccola rete `Conv1×1 → ReLU → Conv1×1 → Sigmoid` riceve la concatenazione RGB–IR e produce due mappe di pesi spaziali, una per modalità.
 
 L'uscita conserva un residuale della feature originale:
@@ -69,9 +69,9 @@ $$
 
 Il *Feature Alignment Module* concatena le due feature e predice, con una convoluzione `3×3`, 18 offset e 9 maschere di modulazione per una `DeformConv2d` $3\times3$. La deformable convolution trasforma la sola feature IR rispetto al riferimento RGB. Gli offset sono limitati da `4·tanh(·)` e la maschera è una sigmoide clampata, scelte che limitano instabilità numeriche in AMP; gli input e gli output passano inoltre da `nan_to_num`.
 
-> **Differenza rispetto agli altri FAM del progetto.** Questo bound è specifico del FAM del CMX ibrido. Nei FAM di RT-DETR e Deformable DETR, l'offset passato alla deformable convolution è l'output grezzo della convoluzione (`offset = out[:, :18]`): non passa da `4·tanh(·)`. Anche la maschera usa `sigmoid`, ma senza il `clamp(1e-4, 1-1e-4)`. Di conseguenza, soltanto qui ogni componente dell'offset è ristretta a circa $(-4,4)$ celle della feature map, negli altri due modelli non esiste un limite esplicito nel codice.
+> **Differenza rispetto agli altri FAM del progetto.** Il CMX ibrido usa `4*tanh(raw)` e `sigmoid(...).clamp(1e-4, 1-1e-4)`. Il FAM RT-DETR standard (`current_dcnv2`) e quello Deformable DETR usano offset grezzi e sigmoid senza clamp. RT-DETR offre però anche `bounded_dcnv2_4`, con `4*tanh(raw/4)`: stesso limite di quattro celle, ma diversa pendenza vicino a zero. Nel FAM box-guided è limitata la sola guida comune; il residuo DCNv2 resta libero. Non tutti i FAM del progetto sono quindi privi di bound.
 
-L'inizializzazione a zero della convoluzione che predice offset e maschera produce offset iniziali nulli e maschera circa 0.5. Non rende però il FAM un'identità: i pesi della `DeformConv2d` rimangono convoluzionali e apprendibili. Il suo scopo è rendere più probabile una corrispondenza spaziale utile prima della rettifica CMX, non garantire un allineamento pixel-perfect.
+Nel costruttore del FAM isolato, l'inizializzazione a zero del predittore produce offset nulli e maschera 0.5. Il wrapper completo chiama però `post_init()` di Hugging Face: questi valori non sono garantiti dopo l'inizializzazione del detector o il caricamento di un checkpoint. Non rende però il FAM un'identità: i pesi della `DeformConv2d` rimangono convoluzionali e apprendibili. Il suo scopo è rendere più probabile una corrispondenza spaziale utile prima della rettifica CMX, non garantire un allineamento pixel-perfect.
 
 ### FFM con coordinate 2D
 

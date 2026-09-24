@@ -7,8 +7,8 @@ Defined: 2026-08-20
 
 ## Question under test
 
-This ablation asks whether explicitly estimating local modality reliability
-improves the existing RT-DETR + FAM detector. The P3--P5 pyramid, FAM alignment,
+After the P2 experiment, I tested a local modality-reliability gate on the
+existing RT-DETR + FAM detector. The P3--P5 pyramid, FAM alignment,
 input resolution, optimizer, data split and direct training batch of four remain
 unchanged. P2 is disabled. No new alignment mechanism is introduced, so the
 only architectural variable is the reliability gate applied after FAM.
@@ -233,8 +233,7 @@ Do not run MtErie until all five validation results have been aggregated.
   `parameters/RTDETR/rtdetr_fam_reliability_gate_runtime_probe.yaml`
 - Regression tests: `tests/test_rtdetr_reliability_gating.py`
 
-The thesis source is intentionally unchanged. The methodology should report the
-gate descriptors, neutral initialization and controlled P3--P5 comparison. The
-evaluation should report the inconclusive five-seed detection delta together
-with the mechanistic audit, explicitly stating that this version remained near
-identity and did not provide evidence of reliability-aware behavior.
+I checked the learned weights after the inconclusive five-seed comparison.
+The gate stayed close to its neutral initialization at all three levels, so
+these results do not show that it learned useful reliability weighting. This
+observation motivated the separate learning-rate experiment.

@@ -7,8 +7,8 @@ Defined: 2026-08-15
 
 ## Question under test
 
-This ablation asks whether exposing a stride-4 feature level improves detection
-of tiny people without changing input resolution or the RGB--IR fusion rule.
+I added a stride-4 feature level to check whether it would help with tiny
+people while keeping input resolution and the RGB--IR fusion rule fixed.
 The intended control is the completed RT-DETR + FAM whole-sequence baseline.
 Reliability gating, a new alignment module and higher input resolution are
 intentionally excluded.
@@ -207,8 +207,8 @@ Matched FAM exceeds P2 by `+0.0579`, while differing from the original FAM
 baseline by only `+0.0072`. This passes the predeclared closure condition:
 smaller micro-batches do not explain the seed-40 P2 deficit. No additional
 matched-control seed is required. One seed cannot estimate every possible
-batch-by-architecture interaction, so the thesis should phrase this as a
-targeted confounder check rather than a five-seed batch-size study.
+batch-by-architecture interaction. I therefore treat this as a targeted
+confounder check, with a narrower scope than a five-seed batch-size study.
 
 ## Stage-A decision
 
@@ -273,8 +273,7 @@ are `lbrr41te`, `61wyomy4`, `aflizsb0` and `y4q7b3sz`; seed 40 is `k0uugy3n`.
   `sarfusion/models/detr.py` and `sarfusion/models/__init__.py`
 - Regression tests: `tests/test_rtdetr_p2.py`
 
-The thesis source is intentionally unchanged. Its later revision should report
-P2 as a negative Stage-A ablation, including the five paired validation deltas
-and the matched-batch control outcome. It must not report the aborted run or the
-runtime probe as performance evidence, and must keep any later full-data Stage-B
-comparison separate.
+I closed P2 after the five negative validation deltas and the matched-batch
+control. The interrupted run and runtime probes remain in the execution
+history, but I excluded them from the performance comparison. No full-data
+Stage B was needed for this candidate.

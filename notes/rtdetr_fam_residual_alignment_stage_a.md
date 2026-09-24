@@ -7,8 +7,8 @@ Defined: 2026-08-22
 
 ## Motivation
 
-The completed experiments rule out several simple explanations for the current
-FAM baseline:
+Before trying residual alignment, I reviewed what I had learned from the
+previous FAM experiments:
 
 - adding P2 reduced validation performance in 5/5 seeds;
 - increasing the input from 640 to 800 reduced the mean score and won only 1/5
@@ -85,7 +85,7 @@ parameters in total. The descriptor cost scales linearly with spatial area and
 does not contain a full-channel concatenation convolution.
 
 RCRA is applied immediately after FAM and before the existing optional IR
-dropout; dropout is zero in this campaign. The previous post-fusion reliability
+dropout; dropout is zero in this campaign. The previous post-FAM modality-reliability
 gate is explicitly disabled, and the implementation rejects enabling both
 gates together so that the ablation remains identifiable.
 
@@ -295,19 +295,17 @@ that RCRA's positive average is unstable, not that the architecture is always
 worse. Historical FAM remains a secondary implementation-era reference, and
 no post-hoc RCRA rescue is performed.
 
-## Thesis treatment after results
+## Position in the experiment sequence
 
-The thesis source remains unchanged for now. If reported, this experiment
-belongs after the negative P2, resolution and post-fusion-gate ablations. The
-method section should distinguish:
+I tried RCRA after the negative P2, resolution and post-FAM gating ablations.
+The implementation uses an exactly neutral initialization and a spatial
+selector between raw IR and the current FAM correction inside RT-DETR.
+Adaptive alignment, confidence-aware fusion and residual modulation already
+exist in related work; the contribution here is this specific integration.
 
-- established ideas: adaptive alignment, confidence-aware fusion and residual
-  modulation;
-- this implementation's contribution: exact-neutral, spatial selection between
-  raw IR and the current FAM correction inside RT-DETR;
-- experimental evidence: five paired seeds under the fixed Stage-A protocol;
-- limitations: only one dataset, one held-out acquisition, ten epochs, and no
-  claim of global novelty without a fuller literature review.
+The five paired seeds support the Stage-A decision within one dataset, one
+held-out acquisition and a ten-epoch budget. They do not establish broader
+novelty or generalization beyond that setting.
 
 ## Versioned artifacts
 

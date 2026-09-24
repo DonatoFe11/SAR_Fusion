@@ -5,7 +5,7 @@
 > riportati in questa nota; i dettagli completi sono in
 > [`rtdetr_reproducibility.md`](rtdetr_reproducibility.md).
 
-Questa nota descrive le due varianti aggiunte a RT-DETR per separare l'effetto
+Ho aggiunto due varianti a RT-DETR per separare l’effetto
 dell'allineamento geometrico da quello della convoluzione aggiuntiva del FAM.
 Il comportamento storico resta disponibile come `fam_variant:
 current_dcnv2` ed è ancora il valore predefinito, così i checkpoint del Modello
@@ -108,7 +108,7 @@ variante alla volta come indicato nei commenti del file.
 
 ## Risultati finali
 
-### VIS+IR per seed
+### VIS+IR per seed: valutazione automatica a fine training
 
 | Seed | FAM corrente | Identity DCNv2 | Grid Sample |
 |---:|---:|---:|---:|
@@ -124,7 +124,15 @@ variante alla volta come indicato nei commenti del file.
 | Identity DCNv2 | 0.3280 | 0.2926 | 0.0943 | 0.2113–0.4336 | 0.2109–0.4451 |
 | Grid Sample | 0.3701 | 0.3564 | 0.0345 | 0.3326–0.4083 | 0.3273–0.4129 |
 
-### Medie per modalità
+### Medie per modalità: valutazione standalone successiva
+
+Questa tabella usa le successive valutazioni native VIS/IR/VIS+IR di
+[rtdetr_reproducibility.md](rtdetr_reproducibility.md), non gli stessi forward
+della tabella precedente: per Identity, ad esempio, la media VIS+IR passa da
+0.3280 a 0.3281. I piccoli scarti fra valutazioni non vanno cancellati o
+interpretati come nuovi training. VIS, IR e VIS+IR usano popolazioni native
+diverse; il confronto sugli stessi frame è nella
+[valutazione paired](rtdetr_paired_modality_evaluation.md).
 
 | Variante | VIS | IR | VIS+IR |
 |---|---:|---:|---:|
@@ -132,7 +140,7 @@ variante alla volta come indicato nei commenti del file.
 | Identity DCNv2 | 0.2150 | 0.1768 | 0.3281 |
 | Grid Sample | **0.2614** | 0.1895 | 0.3701 |
 
-Nel confronto appaiato per seed:
+Nei confronti appaiati per seed (prime due voci dalla valutazione automatica; ultima voce dalla valutazione standalone):
 
 - Identity DCNv2 − FAM ha un delta medio VIS+IR di `−0.0501`, vince in 2/5
   seed e presenta la dispersione più alta;

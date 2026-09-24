@@ -1,6 +1,13 @@
 # YOLO26 Stage A — repair v1 del warmup AdamW
 
-## Perché esiste questo amendment
+> **Amendment storico concluso.** Il repair seed 40 ha fallito il gate di
+> vitalità; l’[esito del pilot](yolo26_stage_a_outcome.md) resta archiviato.
+> La successiva campagna [v2 a cinque seed](stage_a_five_seed_v2_results.md)
+> è partita dopo la mia decisione di rimuovere il filtro sul seed 40 e ha
+> completato Additive e FAM, senza promozione a Stage B. Gli hash originali
+> restano distinti dalle [revisioni operative](yolo26_source_manifest_migration.md).
+
+## Cosa ho osservato dopo il pilot
 
 Il controllo Additive originario ha completato 50/50 epoche e ha superato
 tutti i controlli di integrità. Il best è però un picco all'epoca 2

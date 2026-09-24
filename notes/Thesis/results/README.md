@@ -339,8 +339,8 @@ cb942c8876f763d17b14bfc40a0e3371efd10c907266ab8cd9b2c41ca5902cbb
 Il file
 [`rtdetr_unused_acquisition_confirmation.csv`](rtdetr_unused_acquisition_confirmation.csv)
 contiene le 50 valutazioni congelate su Carnation 0025/0026 e FHL 0407/0408.
-Le acquisizioni non erano state usate nelle campagne conservate e l'autore ha
-attestato di non averle visionate manualmente prima del protocollo. FAM storico
+Le acquisizioni non erano state usate nelle campagne conservate; ho inoltre
+registrato di non averle visionate manualmente prima del protocollo. FAM storico
 supera Additive in 5/5 seed su entrambe: delta mAP@50 medio `+0.0960` su
 Carnation e `+0.1554` su FHL. Le diagnostiche fusion--VIS e RCRA--FAM non sono
 uniformi e non riaprono la selezione.
@@ -388,7 +388,7 @@ IR nativa con ground truth IR, sempre sugli stessi 896 frame FHL.
 
 Il candidato fallisce tutti i gate congelati: delta mAP@50 fusion `-0,026884`,
 paired masked-IR `+0,001829` e IR nativa `-0,050581`. È chiuso dopo un seed;
-non sono autorizzati seed 41--44, Stage B o valutazioni MtErie. Tempi di
+nel pilot v1 non ho eseguito seed 41--44, Stage B o valutazioni MtErie. Tempi di
 training, checkpoint e interpretazione sono in
 [`../../rtdetr_fam_mixed_consistency_stage_a.md`](../../rtdetr_fam_mixed_consistency_stage_a.md).
 
@@ -440,8 +440,8 @@ rispettivamente, `47e2f348ebdc202cb749b1bbf2741fc868d8681eb24ffa4356cf4f584dfa4e
 Lo screen scientifico seed 40 è completato. Il matched control `2fx2ozwm`
 ottiene `0,147388741` mAP@50 al best epoch 3; la candidata `2jvqs9mr` ottiene
 `0,155485332` al best epoch 1. Il delta `+0,008096591` è positivo ma inferiore
-al gate preregistrato `+0,01`, quindi la candidata è chiusa e seed 41--44 e
-Stage B non sono autorizzati.
+al gate preregistrato `+0,01`: ho quindi chiuso il pilot prima dei seed
+41--44 e dello Stage B.
 
 L'[`audit meccanicistico`](rtdetr_fam_box_guided_mechanism_audit_v1.json)
 passa tutti i controlli: la Smooth L1 è `0,437972` contro `1,006123` di zero e
@@ -484,7 +484,7 @@ collassando a `0,00001` all'epoca 50. L'audit ha individuato una recipe
 correggibile: con AdamW esplicito il learning rate di warmup dei bias era
 rimasto a `0,1`.
 
-È stato autorizzato un solo repair post-pilot, cambiando esclusivamente
+Dopo il pilot ho provato un solo repair, cambiando esclusivamente
 `warmup_bias_lr` a zero. Il repair completa 50/50 epoche e passa integrità,
 optimizer e replay checkpoint, ma ottiene un best complessivo di `0,04353`
 all'epoca 1. Nel tratto preregistrato 4--50 il massimo è `0,01535`, contro la

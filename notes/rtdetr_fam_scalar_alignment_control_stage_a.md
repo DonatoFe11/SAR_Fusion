@@ -17,8 +17,7 @@ uniformly spatial:
 - P4 behaves mainly as a level-wise suppression of the FAM residual;
 - P5 remains close to the original FAM.
 
-This creates an attribution question that must be answered before final
-full-data training: **does the improvement require RCRA's local reliability
+Before moving to full-data training, I wanted to check one remaining point: **does the improvement require RCRA's local reliability
 descriptors, or is a much simpler learned scale for each FAM level sufficient?**
 
 The present model is a negative/positive control for that question. It is not a
@@ -48,8 +47,8 @@ same residual definition, but cannot inspect RGB, raw IR, aligned IR, agreement,
 modality presence or spatial position.
 
 RCRA's 5,283 parameters are replaced by these three scalars. P2 and the old
-post-fusion reliability gate remain disabled. The implementation rejects any
-attempt to enable more than one of RCRA, scalar alignment and post-fusion
+post-FAM modality-reliability gate remain disabled. The implementation rejects any
+attempt to enable more than one of RCRA, scalar alignment and post-FAM modality
 gating together.
 
 ## Frozen optimization and Stage-A protocol
@@ -227,18 +226,16 @@ not establish statistical superiority or prove that every RCRA descriptor is
 necessary. They justify selecting RCRA under the frozen engineering rule and
 reporting the scalar experiment as an attribution ablation.
 
-## Thesis treatment
+## What I concluded
 
-This is an architectural attribution ablation, not the main proposed method.
-The result should be reported as evidence that input-independent per-level
-calibration is insufficient under the fixed Stage-A protocol. It supports
-carrying RCRA forward, while the uncertain direct comparison prevents a claim
-that local conditioning has been statistically proven superior.
+I added the scalar model to check whether RCRA's gain could be explained by
+three learned level-wise coefficients. That simpler control did not pass the
+FAM threshold, so I carried RCRA into Stage B. The uncertain direct comparison
+still prevents a claim that local conditioning is statistically superior.
 
-Stage B is now complete and retains matched FAM because RCRA's positive mean
-gain was observed in only 3/5 seeds. The thesis source remains intentionally
-unchanged in this result commit so the method and evaluation can be rewritten
-once using the complete frozen result chain.
+Stage B subsequently retained matched FAM: RCRA's positive mean gain occurred
+in only 3/5 seeds. I keep both results here because the Stage-A selection and
+the full-data confirmation answered different questions.
 
 ## Versioned artifacts
 

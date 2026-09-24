@@ -2,8 +2,8 @@
 
 ## Stato
 
-**Aggiornamento 9 settembre 2026:** l'autore ha autorizzato una nuova campagna
-a cinque seed, indipendentemente dal gate del pilot. Configurazioni e stato
+**9 settembre 2026:** ho deciso di avviare una nuova campagna a cinque seed,
+indipendentemente dal gate del pilot. Configurazioni e stato
 sono in [`rtdetr_v2_fam_five_seed_v2.md`](rtdetr_v2_fam_five_seed_v2.md).
 La chiusura e i divieti descritti sotto si riferiscono al protocollo originario;
 le nuove run hanno progetti distinti e non riscrivono l'esito qui riportato.
@@ -12,7 +12,7 @@ le nuove run hanno progetti distinti e non riscrivono l'esito qui riportato.
 controllo RT-DETRv2 dual-backbone con fusione additiva ottiene `0,181978`
 best validation mAP@50, mentre lo stesso detector con FAM standard
 `current_dcnv2` ottiene `0,158466`. Il delta preregistrato è `-0,023512`, a
-fronte della soglia `+0,010000`; seed 41--44 e Stage B non sono autorizzati.
+fronte della soglia `+0,010000`; nel protocollo del pilot mi sono quindi fermato prima dei seed 41--44 e dello Stage B.
 Tutti i controlli d'integrità, incluso il replay indipendente esatto dei due
 checkpoint `best`, sono superati. La baseline RGB standard resta soltanto una
 verifica della parità del port e non è il controllo scientifico della FAM.
@@ -104,7 +104,7 @@ Prima delle run scientifiche devono passare tutti i punti seguenti:
 7. completamento dei due probe da 20 step e della validation intera senza
    OOM/NaN. Le metriche dei probe non entrano in alcuna tabella.
 
-La modalità `deterministic=true` non è autorizzata: la patch deterministica
+Non ho usato `deterministic=true`: la patch deterministica
 storica copre soltanto RT-DETR v1 e il backward CUDA di `DeformConv2d` non
 offre il medesimo contratto. Le run restano appaiate tramite seed e trace, senza
 definirle bit-deterministiche.

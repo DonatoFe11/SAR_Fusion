@@ -26,8 +26,8 @@ eseguire altri seed è stato superato dalla revisione v2 del 10 settembre;
 risultati, configurazioni e decisioni del pilot restano conservati come tali.
 
 **Screen Stage A seed 40 completato e candidato chiuso il 31 agosto 2026. I
-tre gate congelati sono falliti; i seed 41--44 e lo Stage B non devono essere
-eseguiti.**
+tre gate congelati sono falliti; nel protocollo v1 mi sono fermato prima dei
+seed 41--44 e dello Stage B.**
 
 Protocollo: `rtdetr_fam_mixed_consistency_stage_a_v1`.
 
@@ -40,8 +40,8 @@ Configurazioni:
 - [valutazione e gate seed 40](../parameters/RTDETR/rtdetr_fam_mixed_consistency_probe_evaluation.yaml),
   SHA-256 `3d691b0c3202bf830a16228653aee96256d9896a61b312b8a58fa0170e7d92f0`.
 
-L'espansione a cinque seed resta archiviata per riproducibilità ma non è più
-autorizzata, perché il prerequisito seed 40 è fallito.
+Ho conservato la configurazione di espansione v1, ma non l’ho eseguita:
+il prerequisito seed 40 era fallito.
 
 ## Esito dello screen seed 40
 
@@ -319,4 +319,5 @@ conda run --no-capture-output -n sarfusion python main.py experiment \
   --start-from-run 1
 ```
 
-Quest'ultimo comando **non deve essere eseguito**, perché lo screen è fallito.
+Non ho eseguito quest’ultimo comando: lo screen v1 era fallito. Per il
+follow-up ho usato i nuovi YAML v2 indicati all’inizio della nota.

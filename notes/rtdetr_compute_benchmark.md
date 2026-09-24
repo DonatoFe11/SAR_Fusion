@@ -2,8 +2,9 @@
 
 ## Stato
 
-Il protocollo `rtdetr_additive_fam_compute_benchmark_v1` è stato congelato il
-12 agosto 2026 prima delle misure GPU ed è ora **completo**. Il benchmark
+Dopo il confronto di accuratezza, ho misurato anche il costo del FAM. Ho
+fissato il protocollo `rtdetr_additive_fam_compute_benchmark_v1` il
+12 agosto 2026, prima delle misure GPU, e ho completato tutti i trial. Il benchmark
 confronta soltanto le due configurazioni finali RT-DETR Additive e FAM
 `current_dcnv2`; non introduce training, tuning o selezione di checkpoint.
 
@@ -136,7 +137,6 @@ cb942c8876f763d17b14bfc40a0e3371efd10c907266ab8cd9b2c41ca5902cbb
 ```
 
 Il risultato mostra un trade-off netto: nel benchmark interno FAM migliora la
-detection rispetto ad Additive, ma non è un miglioramento gratuito. La tesi
-deve quindi riportare insieme beneficio di accuratezza, crescita del modello e
+detection rispetto ad Additive, ma non è un miglioramento gratuito. Ho quindi affiancato al beneficio di accuratezza la crescita del modello e il
 costo di inferenza; il termine *real-time* può essere usato solo riferendosi
 alla macchina e allo scope qui dichiarati, non a una pipeline SAR end-to-end.

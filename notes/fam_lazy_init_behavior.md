@@ -1,4 +1,4 @@
-# Evoluzione del Feature Alignment Module (FAM): Da Bug Architetturale a Regolarizzazione Stocastica
+# Evoluzione del FAM: lazy initialization, congelamento e SSJ
 
 > **Stato storico.** I Modelli A–E riportati qui sono singole run della fase di
 > sviluppo. Servono a ricostruire l'origine delle ipotesi, ma non stabiliscono
@@ -7,9 +7,9 @@
 > [`rtdetr_reproducibility.md`](rtdetr_reproducibility.md).
 
 ## Introduzione
-Durante gli esperimenti con l'architettura RT-DETR per la fusione RGB-IR (dataset `vis_ir`), è emerso un comportamento anomalo. Un'implementazione del Feature Alignment Module (FAM) contenente un "bug" architetturale ha superato ampiamente le prestazioni della sua controparte formalmente corretta, raggiungendo un eccezionale `0.4286` di mAP@50. 
+Durante gli esperimenti con l'architettura RT-DETR per la fusione RGB-IR (dataset `vis_ir`), ho osservato un comportamento anomalo. Un'implementazione del Feature Alignment Module (FAM) contenente un "bug" architetturale ha superato ampiamente le prestazioni della sua controparte formalmente corretta, raggiungendo `0.4286` di mAP@50.
 
-Per indagare questa anomalia e trasformarla in un'ipotesi metodologica verificabile, è stato condotto uno studio su più architetture. Di seguito vengono spiegati i test effettuati, dal rilevamento del bug formale fino all'introduzione di un regolarizzatore geometrico. Tutti i valori riportati fanno riferimento alla threshold `0.01`.
+Per capire da dove venisse la differenza, ho provato prima il FAM eager, poi il congelamento, il dropout sul ramo IR e infine il jitter degli offset. Riporto i passaggi nell’ordine in cui li ho affrontati. Tutti i valori riportati fanno riferimento alla threshold `0.01`.
 
 | Modalità In Input | Modello A "Lazy Bug" (`fusion_rtdetr_fam`) | Modello B "Corretto" (`use_fam=True, freeze=False`) | Modello C "Eager Freeze" (`use_fam=True, freeze=True`) | Modello D "Eager + 40% Dropout" | Modello E "Eager + SSJ" |
 |-------------------|--------------------------------------------|------------------------------------------------------|--------------------------------------------------------|---------------------------------|-------------------------|
@@ -50,11 +50,11 @@ La mAP di fusione è scesa a `0.3960`, mentre VIS-only è `0.2620`. Una possibil
 ---
 
 ## Fase 3: La Verifica del Rumore Fisso (Modello C)
-Cercare di riprodurre i risultati del "Bug" quantificando l'impatto di un FAM disattivato ho prodotto il **Modello C** (`use_fam=True, freeze=True`, ovvero `requires_grad=False`).
+Ho poi cercato di isolare l’effetto dei pesi FAM non aggiornati costruendo il **Modello C** (`use_fam=True, freeze=True`, ovvero `requires_grad=False`).
 A differenza del Modello A (dove l'ottimizzatore ignorava l'esistenza del layer a causa del bug *lazy*), qui l'istanza è dichiarata correttamente nell'inizializzazione Eager. 
 
 Proiettando questa meccanica sul processo a 4 step del FAM:
-- Durante la **Trasformazione (Step 3)**, la `deform_conv` congelata applica una trasformazione convoluzionale costante e deterministica rispetto al suo stato iniziale. Con `offset_conv` inizializzata a zero non introduce inizialmente uno spostamento geometrico, ma non è comunque un'identità perché conserva pesi convoluzionali propri.
+- Durante la **Trasformazione (Step 3)**, la `deform_conv` congelata applica una trasformazione convoluzionale costante e deterministica rispetto al suo stato iniziale. L’assenza di spostamento richiederebbe che `offset_conv` rimanesse a zero dopo l’intera costruzione. Nel detector eager, `post_init()` di Hugging Face può reinizializzarla anche con `requires_grad=False`: congelare i pesi non basta quindi a equiparare questo caso al FAM lazy creato dopo `post_init`. La trasformazione può dipendere dall’input anche con parametri fissi e non è un’identità.
 - Poiché la rete è istanziata e collegata correttamente, la funzione `autograd` di PyTorch riesce a fluire passivamente *attraverso* il FAM congelato, propagando i gradienti a ritroso fino all'IR backbone sottostante. 
 
 L'IR backbone resta invece nell'ottimizzatore e riceve gradienti attraverso il FAM congelato. La risalita della mAP IR-only a `0.2250` è compatibile con un adattamento delle feature IR alla trasformazione fissa, ma non ne costituisce una dimostrazione diretta.
@@ -93,7 +93,7 @@ L'approccio implementato in `rtdetr_fusion.py` inserisce in questo processo il n
 
 ### Perché perturbare un offset che il FAM ha appena appreso?
 
-SSJ non equivale a rinunciare al FAM o a tornare al disallineamento originario dei sensori. Senza FAM l'errore RGB--IR è sistematico e può essere ampio. Con FAM, l'offset appreso lo corregge in media; durante il training SSJ aggiunge soltanto una perturbazione locale, a media zero:
+SSJ non equivale a rinunciare al FAM o a tornare al disallineamento originario dei sensori. Senza FAM l'errore RGB--IR è sistematico e può essere ampio. Il FAM può apprendere una correzione utile al detector, senza una garanzia di registrazione fisica; durante il training SSJ aggiunge soltanto una perturbazione locale, a media zero:
 
 $$
 \Delta_{\mathrm{train}} = \Delta_{\mathrm{FAM}} + \varepsilon,

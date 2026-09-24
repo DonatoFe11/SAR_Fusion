@@ -113,8 +113,8 @@ will be reported regardless. The interval communicates uncertainty but cannot
 override the engineering rule. No seed, threshold or checkpoint may be chosen
 from MtErie, and Stage B will not be followed by another architecture rescue.
 
-MtErie has already been consulted repeatedly in this project. The thesis must
-therefore call it an internal development benchmark, not a fresh blind test.
+I had already consulted MtErie repeatedly during development. I therefore
+treat it as an internal development benchmark throughout this comparison.
 
 ## Completed preflight
 
@@ -273,10 +273,9 @@ The versioned compact five-row paired CSV has SHA-256
 `401a0af273818bbd8ce6e3f966f39e24b6567a68a92d7674b7dedb7de0867dd6`.
 
 
-## Thesis treatment
+## Summary of the experiment sequence
 
-The thesis source remains intentionally unchanged in this commit. Its final
-revision should present:
+I kept the following steps separate when interpreting the result:
 
 - Stage A as architecture development on a complete held-out FHL video;
 - the scalar model as an attribution control that did not pass the FAM rule;

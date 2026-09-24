@@ -6,9 +6,9 @@ Defined: 2026-08-22, before any 800x800 scientific run
 
 ## Question and motivation
 
-This experiment tests whether increasing input resolution improves detection
-of the very small people in FHL without adding P2 or another fusion module. It
-retains the `current_dcnv2` FAM baseline and changes the RT-DETR processor from
+After P2, I tested whether increasing input resolution would help detect
+the very small people in FHL. I kept the `current_dcnv2` FAM baseline and
+changed the RT-DETR processor from
 `640x640` to `800x800`. P2 and reliability gating remain disabled.
 
 The P2 experiment tested a stride-4 feature level and failed over five seeds;
@@ -110,14 +110,13 @@ on all five seeds.
 No further resolution value is selected post hoc on this same validation
 sequence. A new direction must pose a different, predeclared hypothesis.
 
-## Thesis treatment
+## What I concluded
 
-The thesis source is intentionally unchanged. This experiment should be
-reported as a resolution ablation motivated by tiny targets, not as a new
-architecture. Its value is to distinguish lack of spatial input detail from
-limitations of P2 and reliability gating. The conclusion is that naive global
-upsampling does not solve the tiny-target problem for this detector; it is not
-that higher resolution can never help under another training recipe.
+I tested the higher resolution after the negative P2 result to check whether
+more input detail would help with tiny targets. Under this recipe, global
+upsampling did not improve the detector. The experiment keeps the architecture
+fixed and changes the resolution and the batching needed to fit memory; it
+does not establish that higher resolution would fail with every other recipe.
 
 ## Artifacts
 

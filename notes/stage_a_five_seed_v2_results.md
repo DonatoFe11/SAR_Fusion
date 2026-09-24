@@ -2,7 +2,7 @@
 
 ## Stato al 13 settembre 2026
 
-**Completati tutti i 20 nuovi training** autorizzati, senza filtro
+Ho completato **tutti i 20 nuovi training** previsti, senza filtro
 prestazionale sul seed 40: cinque box-guided, cinque mixed consistency,
 cinque YOLO26 Additive e cinque YOLO26 FAM. La campagna avviata il 10 settembre
 è terminata il **13 settembre 2026 alle 03:55 CEST**. Il log principale è
@@ -10,7 +10,7 @@ cinque YOLO26 Additive e cinque YOLO26 FAM. La campagna avviata il 10 settembre
 Non risultano training ancora in corso alla verifica finale.
 
 Il controllo RT-DETR v1 + FAM standard è costituito dalle **cinque run Stage A
-già complete**, riutilizzate su indicazione dell'autore: 25 run analizzate,
+già complete**, che ho scelto di riutilizzare: 25 run analizzate,
 ma solo 20 nuovi training. Non è RT-DETRv2 e non è una baseline RGB-only.
 
 **Nessuna candidata supera il criterio prestazionale aggregato Stage A;

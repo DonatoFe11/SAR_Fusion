@@ -9,12 +9,12 @@ Defined: 2026-08-21, before observing the complete seed-40 result
 
 The first reliability-gate ablation did not improve FAM reproducibly over five
 seeds (`+0.0016 +/- 0.0208` paired validation mAP@50, 3/5 wins, IC95%
-`[-0.0242, +0.0274]`). More importantly, its validation-only audit found every
+`[-0.0242, +0.0274]`). The validation-only audit also found every
 learned weight within `[0.99794, 1.00200]`: the gate remained almost exactly the
 neutral additive fusion with which it was initialized.
 
-This follow-up asks a narrower question: was the shared detector learning rate
-too small for the 3,174 newly initialized gate parameters? The architecture,
+I then checked whether the shared detector learning rate was too small for
+the 3,174 newly initialized gate parameters. The architecture,
 initialization, P3--P5 features, FAM, data, modal dropout, optimizer, batch size,
 ten-epoch budget and checkpoint selector are unchanged. The only scientific
 variable is:
@@ -117,8 +117,8 @@ The raw audit JSON has SHA-256
 the 18-row CSV has SHA-256
 `34daa976b90e4f0c3542be23ccaac92d02f71c56349bb51bbcb10c33f0c3b023`.
 
-Both predeclared checks pass, so seeds 41--44 are authorized under the identical
-protocol. MtErie remains unconsulted.
+Both predeclared checks passed, so I continued with seeds 41--44 under the
+same protocol. I did not consult MtErie for this decision.
 
 ## Completed five-seed result
 
@@ -167,12 +167,10 @@ favourable secondary explanation.
 This is an informative negative result: insufficient gate optimization
 explains the neutral weights of the first version, but not its lack of a robust
 accuracy gain. Further tuning of this gate's LR on the same validation sequence
-would increase selection bias. Before another architectural experiment, its
-hypothesis must be frozen separately. The remaining defensible directions are
-a higher-resolution FAM control for the tiny-object hypothesis, or a
-reliability-conditioned alignment mechanism that is distinct from the already
-completed DCNv2, identity, grid-sample and bounded-offset FAM variants. Another
-post-hoc gate-LR value is excluded.
+would increase selection bias. At this point I kept two directions for the next experiments: a
+higher-resolution FAM control for tiny objects, and a reliability-conditioned
+alignment mechanism. I decided to define each hypothesis separately and
+leave the gate learning rate unchanged after this experiment.
 
 ## Launch and post-run audit
 
@@ -224,10 +222,7 @@ remains to be run.
 - regression tests: `tests/test_rtdetr_reliability_gating.py` and
   `tests/test_rtdetr_reliability_gate_weight_audit.py`.
 
-The thesis source is intentionally unchanged. This belongs after the
-neutral-gate result as an optimization ablation and must not be presented as a
-new architecture, because only a parameter-group learning rate changes. Its
-main value is the contrast between a successful mechanistic intervention and
-an unsupported detection benefit: stronger non-neutral gating is not by itself
-evidence of a better detector. The five-seed result, not seed 40, controls the
-conclusion.
+I increased only the gate learning rate after finding that the original gate
+was nearly neutral. The change made the weights move, but the five-seed
+comparison did not show a detection benefit. The positive seed-40 screen was
+therefore insufficient to retain this variant.

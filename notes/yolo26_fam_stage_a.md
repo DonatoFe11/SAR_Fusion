@@ -1,8 +1,15 @@
 # YOLO26 + FAM — protocollo Stage A
 
+> **Protocollo storico del pilot seed 40.** Il pilot e il repair sono conclusi;
+> il successivo [Stage A/B v2](stage_a_b_five_seed_v2.md) ha eseguito entrambi i
+> bracci su cinque seed senza il filtro del pilot. L’[esito v2](stage_a_five_seed_v2_results.md)
+> è negativo e non attiva Stage B. Le regole di espansione sotto appartengono
+> al pilot. Per gli hash storici e le revisioni dei sorgenti correnti, vedi
+> [migrazione dei manifest](yolo26_source_manifest_migration.md).
+
 ## Scopo e interpretazione
 
-La domanda primaria è: **sullo stesso YOLO26s dual-backbone, il FAM standard
+Ho impostato il primo confronto per rispondere a questa domanda: **sullo stesso YOLO26s dual-backbone, il FAM standard
 migliora la fusione Additive?**  Questo non è ancora un confronto quantitativo
 YOLO26-vs-YOLOv10: il vecchio protocollo YOLOv10 usava dati, orizzonte e regola
 di checkpoint differenti.

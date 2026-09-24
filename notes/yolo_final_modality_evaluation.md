@@ -10,8 +10,8 @@ training e non sono state selezionate epoche o checkpoint sul test.
 ## Domanda sperimentale
 
 Il confronto VIS+IR sui `last.pt` aveva mostrato che, dopo 200 epoche, FAM non
-migliora in media la baseline YOLO Additive. Questa valutazione completa il
-confronto quando manca RGB oppure IR.
+migliora in media la baseline YOLO Additive. Ho quindi completato il
+confronto valutando gli stessi checkpoint anche senza RGB o senza IR.
 
 Sono valutate due configurazioni:
 

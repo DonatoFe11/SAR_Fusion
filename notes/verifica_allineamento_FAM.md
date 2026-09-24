@@ -8,13 +8,13 @@
 
 ## Obiettivo
 
-L'obiettivo della validazione era stabilire se il **Feature Alignment Module** (FAM) apprenda effettivamente una correzione geometrica tra le feature RGB e IR. I risultati in mAP, pur utili, costituiscono infatti un'evidenza solo indiretta: un miglioramento della metrica non dimostra da solo che il meccanismo responsabile sia l'allineamento spaziale.
+Dopo aver misurato il vantaggio in detection, ho cercato di capire se il **Feature Alignment Module** (FAM) apprenda effettivamente una correzione geometrica tra le feature RGB e IR. I risultati in mAP, pur utili, costituiscono infatti un'evidenza solo indiretta: un miglioramento della metrica non dimostra da solo che il meccanismo responsabile sia l'allineamento spaziale.
 
 L'analisi è stata svolta sui modelli RT-DETR già addestrati. Si è considerato sia il modello con solo FAM sia quello addestrato con FAM e Spatial Jitter (SSJ), così da distinguere il comportamento del modulo da quello indotto dal regime di training.
 
 ## Metodo di verifica
 
-È stato sviluppato lo script `fam_alignment_check.py`, una diagnostica riutilizzabile per modelli fusion che contengono la classe `FeatureAlignmentModule`.
+Ho preparato lo script `fam_alignment_check.py`, una diagnostica riutilizzabile per modelli fusion che contengono la classe `FeatureAlignmentModule`.
 
 ### Caricamento coerente con gli esperimenti
 
@@ -29,9 +29,9 @@ Per ciascun livello della piramide, durante l'inferenza lo script registra due f
 - un hook sul `FeatureAlignmentModule` completo, che salva le feature RGB e IR in ingresso e la feature IR in uscita dal FAM (`FAM(IR)`);
 - un hook su `offset_conv`, layer interno del FAM, che salva offset e mask usati dalla deformable convolution.
 
-Il primo hook permette quindi di confrontare `RGB`, `IR pre-FAM` e `IR post-FAM`; il secondo permette di osservare *come* il FAM effettua la correzione. L'output di `offset_conv` contiene 18 canali di offset e 9 canali di mask: i primi corrispondono alle coordinate `(dx, dy)` dei nove punti di un kernel deformabile 3×3, mentre le mask, applicate dopo sigmoid, ne modulano il peso.
+Il primo hook permette quindi di confrontare `RGB`, `IR pre-FAM` e `IR post-FAM`; il secondo permette di osservare *come* il FAM effettua la correzione. L'output di `offset_conv` contiene 18 canali di offset e 9 canali di mask: i primi corrispondono alle coppie interlacciate `(dy, dx)` dei nove punti di un kernel deformabile 3×3, mentre le mask, applicate dopo sigmoid, ne modulano il peso.
 
-Gli hook sono registrati cercando il nome della classe `FeatureAlignmentModule`, anziché un percorso fisso nell'albero dei moduli. A ogni FAM trovato viene assegnato un indice nell'ordine di registrazione (`level 0`, `level 1`, ...). Nell'implementazione RT-DETR questo ordine corrisponde ai livelli a stride 8, 16 e 32.
+Gli hook sono registrati per nome di classe, usando `SUPPORTED_CLASS_NAMES`: FAM standard, bounded, box-guided, identity e grid-sample. Per bounded l’hook ricostruisce gli offset effettivi tramite `transform_offset`; per box-guided aggiunge la guida comune al residuo. Grid-sample produce due canali di spostamento, senza nove maschere. La descrizione dei 27 canali vale per le varianti DCNv2. A ogni FAM trovato viene assegnato un indice nell'ordine di registrazione (`level 0`, `level 1`, ...). Nell'implementazione RT-DETR questo ordine corrisponde ai livelli a stride 8, 16 e 32.
 
 Lo script riusa le funzioni del progetto per ricostruire la configurazione di grid search, costruire il modello e caricare i dati. In questo modo checkpoint, configurazione e preprocessing corrispondono a quelli degli esperimenti originali.
 
@@ -45,11 +45,13 @@ Le figure risultanti non mostrano immagini RGB o IR originali: mostrano pseudo-c
 
 ### Misura quantitativa degli offset
 
-L'ampiezza degli offset viene riportata in pixel dell'immagine originale, non soltanto in pixel della feature map. La conversione usa la stride effettiva di ciascun livello (8, 16 e 32): è necessaria perché lo stesso offset nella feature map rappresenta uno spostamento fisico diverso a risoluzioni diverse.
+L’ampiezza degli offset viene riportata sia in celle della feature map sia in **pixel del tensore di input dopo il preprocessing**. Il fattore deriva da `input_hw / feature_hw` (8, 16 e 32 nel caso RT-DETR standard a 640). Non viene invertito il resize per tornare alla risoluzione originale del sensore. Le tabelle storiche chiamavano questi valori “pixel immagine originale”: qui tale etichetta va intesa come pixel dell’input al modello.
 
 Su più campioni, lo script aggrega tutti i valori assoluti degli offset e calcola media, mediana, 90° percentile e massimo. Visualizza inoltre un quiver plot dello spostamento medio, pesato con la mask, sui nove punti campionati dalla deformable convolution.
 
-Il quiver plot è un grafico a frecce: ogni freccia sintetizza, in una posizione della feature map, direzione e ampiezza della correzione locale. Non mostra tutti i nove offset individuali; visualizza la loro media pesata dalle rispettive mask. Le frecce sono espresse nelle coordinate della feature map e possono apparire corte anche quando lo spostamento convertito nei pixel dell'immagine originale è significativo.
+Il quiver plot sintetizza i nove offset tramite la media pesata dalle mask; per grid-sample usa direttamente lo spostamento a due canali.
+
+**Limite della visualizzazione corrente:** `plot_offset_field` interpreta sempre `net[0]` come dx e `net[1]` come dy, mentre DCNv2 usa `(dy, dx)`; inoltre nega la seconda componente su un asse y già invertito. Le frecce attuali non attestano quindi la direzione fisica della correzione. `offset_statistics` applica inoltre i fattori `[scala_x, scala_y]` nell’ordine dei canali: con DCNv2 e scale diverse sui due assi, anche la conversione quantitativa va corretta. Nei protocolli RT-DETR a stride uguale sui due assi, medie assolute e norme riportate restano invarianti allo scambio delle componenti. Ho annotato il problema per correggerlo nel refactoring; le figure storiche sono ancora quelle originali.
 
 ### Come leggere le statistiche stampate dallo script
 
@@ -96,7 +98,7 @@ Passando, ad esempio, `--sample-idx 0 1 2`, lo script analizza individualmente i
 
 ## Risultati quantitativi storici
 
-Offset del FAM in pixel dell'immagine originale, aggregati sui dieci campioni test.
+Offset del FAM in pixel dell’input preprocessato, aggregati sui dieci campioni test.
 
 | Livello | Stride | Modello B: mean / median / p90 / max | Modello E: mean / median / p90 / max | max/mean B | max/mean E |
 |---|---:|---|---|---:|---:|

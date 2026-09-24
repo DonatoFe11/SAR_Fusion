@@ -5,7 +5,7 @@
 > finale e validation disaccoppiata. Sono evidenza esplorativa utile, non una
 > classifica quantitativa direttamente omogenea con la campagna RT-DETR 2026.
 
-Questa nota documenta l'implementazione finale di Deformable DETR per la rilevazione RGB-IR su WiSARD. L'architettura usa due backbone indipendenti, una fusione per concatenazione dei canali non lineare e, nelle varianti dedicate, il Feature Alignment Module (FAM) e lo Stochastic Spatial Jitter (SSJ).
+Ho adattato Deformable DETR alla rilevazione RGB-IR su WiSARD. Riporto qui la struttura a cui sono arrivato dopo aver scartato la concatenazione spaziale. L'architettura usa due backbone indipendenti, una fusione per concatenazione dei canali non lineare e, nelle varianti dedicate, il Feature Alignment Module (FAM) e lo Stochastic Spatial Jitter (SSJ).
 
 I risultati della famiglia Deformable DETR vanno interpretati come **mediana e intervallo su cinque run**, non come il risultato di una singola esecuzione perchè l'attenzione deformabile multi-scala introduce non determinismo run-to-run anche a seed fissato.
 
@@ -62,11 +62,11 @@ La configurazione del processor `SenseTime/deformable-detr` usa `shortest_edge=8
 
 Nella variante FAM, prima della concatenazione dei canali, la feature IR viene allineata a quella RGB a ciascuno dei tre livelli nativi della backbone:
 
-1. `offset_conv` riceve `Concat(RGB, IR)` e produce 27 canali: 18 offset $(dx,dy)$ per i nove punti di un kernel $3\times3$ e 9 mask di modulazione;
+1. `offset_conv` riceve `Concat(RGB, IR)` e produce 27 canali: 18 offset interlacciati $(dy,dx)$ per i nove punti di un kernel $3\times3$ e 9 mask di modulazione;
 2. una DCNv2 applica offset e mask alla sola feature IR, producendo $F'_{IR}$;
 3. il blocco di channel fusion riceve `Concat(RGB, IR_aligned)`.
 
-I pesi di `offset_conv` sono inizializzati a zero: il campo di offset parte nullo e la correzione geometrica viene appresa progressivamente. Questo non rende l'intero FAM un'identità: la DCNv2 mantiene i propri pesi convoluzionali.
+Il costruttore del FAM isolato azzera pesi e bias di `offset_conv`. Il detector completo esegue poi `post_init()` di Hugging Face: lo zero del costruttore non garantisce offset nulli dopo la costruzione completa o il caricamento dei pesi. Questo non rende l'intero FAM un'identità: la DCNv2 mantiene i propri pesi convoluzionali.
 
 ### Stochastic Spatial Jitter (SSJ)
 

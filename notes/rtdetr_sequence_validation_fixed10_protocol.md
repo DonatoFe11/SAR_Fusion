@@ -9,7 +9,7 @@ Campaign project: `RTDETR_FAM_SequenceVal_Fixed10_Protocol`
 
 ## Campaign completion and results
 
-All five runs completed ten epochs. Validation never stopped training; it only
+I completed all five runs for ten epochs each. Validation never stopped training; it only
 retained `best`, while `latest` is always epoch 10. The selected epochs were
 1, 4, 6, 1 and 1 for seeds 40--44. Thus the decline seen after early epochs
 was repeatable across seeds rather than a logging anomaly: decreasing training
@@ -40,9 +40,10 @@ new setup improves absolute accuracy over the historical campaign. Historical
 FAM `latest` was approximately `0.3780 +/- 0.0439` mAP@50; its nominal value
 is above the new `best` mean, but the comparison is not controlled because the
 old run optimized all 4,019 paired frames whereas this protocol optimizes
-3,123 and reserves an entire 896-frame video for validation. During development,
-new architectures must be compared against `0.3590 +/- 0.0416` under this same
-split and selector. After selection, the chosen architecture is retrained on all
+3,123 and reserves an entire 896-frame video for validation. During development, new architectures are compared on the held-out FHL
+validation against FAM `0.1646 +/- 0.0196` best validation mAP@50. The MtErie
+`0.3590 +/- 0.0416` figure describes this checkpoint audit and is not the
+Stage-A selection target. After selection, the chosen architecture is retrained on all
 4,019 paired frames. The older result remains a historical reference.
 
 The five W&B runtimes range from 2 h 38 min 59 s to 2 h 47 min 34 s, with a
@@ -68,10 +69,11 @@ The versioned compact table is
 The complete local JSON is marked `protocol_complete: true` and has SHA-256
 `1402142280d299d94bffc8628a756e6d15d42867c260425bcce6c27bfd80357e`.
 
-The thesis source is intentionally unchanged. Its later revision must report
-the 5/5 paired wins and confidence interval without calling MtErie a fresh
-blind test, and must keep the historical `0.3780` result separate because the
-training split and checkpoint rule differ.
+At the time of this audit, thesis integration was deferred. The thesis has
+since been completed; the current artifact catalog is
+[Thesis/results/README.md](Thesis/results/README.md). The 5/5 paired wins do
+not make MtErie a fresh blind test, and the historical `0.3780` result remains
+separate because the training split and checkpoint rule differ.
 
 ## Current position in the experimental plan
 
@@ -316,9 +318,10 @@ python main.py experiment \
   --start-from-run 1
 ```
 
-## Thesis changes to apply later
+## Notes for interpreting the protocol
 
-The thesis source is intentionally unchanged for now. The final revision must:
+At this stage I collected the following points before revising the thesis.
+They record the distinctions I needed to preserve between experiments:
 
 - describe the temporal-tail experiment as a retired pilot, including why it
   was rejected and the seed-40 `best`/`latest` diagnostic;

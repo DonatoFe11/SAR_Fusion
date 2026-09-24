@@ -204,12 +204,10 @@ its local evaluator CSV has SHA-256
 its compact versioned CSV has SHA-256
 `610b83758a52c2610b972a5544873756accf6e60683966c89f6c25a8e3f68a5c`.
 
-The thesis should report this as a post-selection paired sensor ablation of the
-current-code FAM baseline, distinct from the historical native-sensor tables
-that use different test populations. It should include all five seed deltas,
-the 5/5 fusion wins and the confidence interval. The `0.0215` condition must be
-named paired masked-IR/VIS-GT robustness rather than general IR-only
-performance. The post-hoc native-coordinate result may be used as a diagnostic
-showing that the IR branch did not collapse, but not as a direct competitor to
-VIS+IR or as a new selection result. MtErie must remain labelled as an
-already-used internal benchmark.
+I ran this paired sensor ablation after selecting the current-code FAM
+baseline. Fusion wins in 5/5 seeds; the paired deltas and their confidence
+interval are reported above. The `0.0215` result measures masked-IR robustness
+against VIS ground truth. The later native-coordinate diagnostic shows that
+the IR branch did not collapse, but uses different labels and cannot be
+compared directly with VIS+IR. I kept these results separate from the older
+native-sensor tables and treated MtErie as an already-used internal benchmark.

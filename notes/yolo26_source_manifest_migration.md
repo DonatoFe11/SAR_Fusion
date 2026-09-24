@@ -1,7 +1,8 @@
 # Manifest YOLO26 dopo la rinomina della tesi
 
-La migrazione da `notes/Search_and_Rescue` a `notes/Thesis` modifica alcuni
-sorgenti e i loro hash, senza introdurre nuovi risultati sperimentali.
+Dopo aver completato la tesi, ho rinominato `notes/Search_and_Rescue` in
+`notes/Thesis`. Ho aggiornato i percorsi nei sorgenti; di conseguenza sono
+cambiati anche alcuni hash. I risultati degli esperimenti sono gli stessi.
 
 ## Manifest degli esperimenti conclusi
 
@@ -27,8 +28,9 @@ Ogni revisione registra percorso e hash del manifest storico di origine e
 include quel file fra quelli verificati. La revisione repair registra inoltre
 percorso e hash della revisione operativa del pilota.
 
-Questi manifest descrivono i sorgenti aggiornati. Non attestano l'esecuzione di
-nuovi esperimenti. Gli audit di controllo storici conservano gli hash originali;
+Ho rigenerato queste revisioni anche dopo aver aggiornato le note
+`yolo26_fam_stage_a.md` e `yolo26_stage_a_repair_v1.md`, incluse nei manifest.
+Descrivono il checkout aggiornato; non corrispondono a nuovi esperimenti. Gli audit di controllo storici conservano gli hash originali;
 i controlli che richiedono un'identità esatta dei sorgenti continuano a rifiutare
 il loro riutilizzo per autorizzare un'esecuzione con una revisione diversa.
 
