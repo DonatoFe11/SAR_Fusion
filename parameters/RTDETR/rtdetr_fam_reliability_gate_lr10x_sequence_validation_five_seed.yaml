@@ -1,6 +1,4 @@
-# Five-seed Stage-A expansion of the gate-LR10x optimization ablation. Seed 40
-# was completed under the identical single-seed protocol and passed both frozen
-# performance and mechanism checks. Use --start-from-run 1 for seeds 41--44.
+# Reference training configuration for reliability gating (five seeds).
 
 experiment:
   name: RTDETR_FAM_ReliabilityGateLR10x_SequenceVal_Seed40

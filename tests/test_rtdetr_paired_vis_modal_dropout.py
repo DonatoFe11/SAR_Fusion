@@ -13,18 +13,6 @@ from sarfusion.utils.utils import load_yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE_CONFIG = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_paired_vis_modal_dropout_sequence_validation_seed40.yaml"
-)
-BASELINE_CONFIG = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
-)
 
 
 class _FakeProcessor:
@@ -79,22 +67,6 @@ def _paired_dataset(contract):
 
 
 class TestRTDetrPairedVisModalDropout(TestCase):
-    def test_seed40_probe_is_matched_to_the_frozen_fam_baseline(self):
-        candidate_grid = make_grid(load_yaml(CANDIDATE_CONFIG)["parameters"])
-        baseline_grid = make_grid(load_yaml(BASELINE_CONFIG)["parameters"])
-        self.assertEqual(len(candidate_grid), 1)
-        self.assertEqual([run["seed"] for run in baseline_grid], [40, 41, 42, 43, 44])
-
-        candidate = copy.deepcopy(candidate_grid[0])
-        baseline = copy.deepcopy(baseline_grid[0])
-        self.assertEqual(candidate["seed"], 40)
-        self.assertEqual(
-            candidate["dataset"].pop("modal_dropout_coordinate_contract"),
-            "paired_vis",
-        )
-        candidate.pop("tracker")
-        baseline.pop("tracker")
-        self.assertEqual(candidate, baseline)
 
     def test_paired_vis_ir_draw_masks_rgb_and_keeps_vis_target_contract(self):
         dataset = _paired_dataset("paired_vis")

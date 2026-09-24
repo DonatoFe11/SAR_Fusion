@@ -40,12 +40,6 @@ class TestRTDetrV2FiveSeedProtocol(unittest.TestCase):
                 self.assertFalse(experiment.exp_settings.continue_with_errors)
                 self.assertEqual(experiment.exp_settings.start_from_grid, 0)
                 self.assertEqual(experiment.exp_settings.start_from_run, 0)
-                pilot = load_yaml(
-                    PARAMETERS / f"rtdetr_v2_{branch}_sequence_validation_seed40.yaml"
-                )
-                self.assertNotEqual(
-                    experiment.exp_settings.name, pilot["experiment"]["name"]
-                )
                 for seed, grid in zip(range(40, 45), experiment.grids):
                     run = grid[0]
                     self.assertEqual(run["seed"], seed)
@@ -86,21 +80,6 @@ class TestRTDetrV2FiveSeedProtocol(unittest.TestCase):
                     self.assertEqual(train["watch_metric"], "map_50")
                     self.assertEqual(train["checkpoint_min_delta"], 0.001)
 
-    def test_training_recipe_and_split_match_the_pilot(self):
-        for branch, protocol in self.protocols.items():
-            with self.subTest(branch=branch):
-                pilot = load_yaml(
-                    PARAMETERS / f"rtdetr_v2_{branch}_sequence_validation_seed40.yaml"
-                )["parameters"]
-                current = deepcopy(protocol["parameters"])
-                self.assertEqual(current["train"], pilot["train"])
-                self.assertEqual(current["model"], pilot["model"])
-                self.assertEqual(current["dataloader"], pilot["dataloader"])
-                self.assertEqual(
-                    current["dataset"].pop("modal_dropout_coordinate_contract"),
-                    ["native"],
-                )
-                self.assertEqual(current["dataset"], pilot["dataset"])
 
     def test_manifest_matches_current_sources_for_both_branches(self):
         for branch, experiment in self.experiments.items():

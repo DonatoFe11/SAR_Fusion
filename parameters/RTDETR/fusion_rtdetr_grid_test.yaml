@@ -1,12 +1,15 @@
 experiment:
-  name: RTDETR_FAM_Eager_SpatialJitter_Evaluation_Grid
-  group: RTDETR_Investigation
+  name: RTDETR_FAM_Evaluation
+  group: RTDETR_Evaluation
   continue_with_errors: False
   search: grid
 
 parameters:
   seed: &seed [42]
   task: [detection]
+  run_test: [true]
+  test_checkpoint: [current]
+  strict_checkpoint_loading: [true]
 
   tracker:
     ignored_files: ["*.bin,*.safetensors"]
@@ -18,8 +21,10 @@ parameters:
     params:
       id2label:
         0: [person]
-      threshold: [0.01, 0.05, 0.1]
+      threshold: [0.01]
       use_fam: [true]
+      fam_variant: [current_dcnv2]
+      require_full_pretrained_match: [true]
       freeze_fam: [false]
       ir_dropout_rate: [0.0]
       spatial_jitter_std: [0.0] # Messo a 0 durante la valutazione

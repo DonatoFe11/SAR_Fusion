@@ -6,6 +6,7 @@ from scripts.run_rtdetr_carnation_stress_test import SCALAR_METRICS, stable_json
 from scripts.run_rtdetr_sequence_checkpoint_evaluation import (
     build_aggregate,
     load_protocol,
+    load_training_config,
 )
 
 
@@ -31,6 +32,15 @@ class TestRTDETRSequenceCheckpointEvaluation(unittest.TestCase):
         self.assertFalse(
             self.protocol["interpretation"]["model_selection_from_mterie_allowed"]
         )
+
+    def test_reference_template_resolves_every_checkpoint_seed(self):
+        for seed in self.protocol["seeds"]:
+            run = load_training_config(REPO_ROOT / self.protocol["training_config"], seed)
+            self.assertEqual(run["seed"], seed)
+            self.assertTrue(run["model"]["params"]["use_fam"])
+            self.assertEqual(run["model"]["params"]["fam_variant"], "current_dcnv2")
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            load_training_config(REPO_ROOT / self.protocol["training_config"], 99)
 
     def test_complete_aggregate_is_paired_by_seed(self):
         payloads = []

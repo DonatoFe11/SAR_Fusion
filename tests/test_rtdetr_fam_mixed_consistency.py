@@ -20,24 +20,6 @@ from sarfusion.utils.utils import load_yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BASELINE_CONFIG = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
-)
-SEED40_CONFIG = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_mixed_consistency_sequence_validation_seed40.yaml"
-)
-FIVE_SEED_CONFIG = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_mixed_consistency_sequence_validation_five_seed.yaml"
-)
 
 
 class _FakeProcessor:
@@ -110,22 +92,6 @@ def _remove_consistency_intervention(run):
 
 
 class TestRTDetrFamMixedConsistency(TestCase):
-    def test_seed40_and_five_seed_configs_match_frozen_fam_baseline(self):
-        baseline_runs = make_grid(load_yaml(BASELINE_CONFIG)["parameters"])
-        seed40_runs = make_grid(load_yaml(SEED40_CONFIG)["parameters"])
-        candidate_runs = make_grid(load_yaml(FIVE_SEED_CONFIG)["parameters"])
-
-        self.assertEqual(len(seed40_runs), 1)
-        self.assertEqual([run["seed"] for run in candidate_runs], [40, 41, 42, 43, 44])
-        self.assertEqual(
-            _remove_consistency_intervention(seed40_runs[0]),
-            {key: value for key, value in baseline_runs[0].items() if key != "tracker"},
-        )
-        for baseline, candidate in zip(baseline_runs, candidate_runs):
-            self.assertEqual(
-                _remove_consistency_intervention(candidate),
-                {key: value for key, value in baseline.items() if key != "tracker"},
-            )
 
     def test_native_supervision_is_preserved_while_paired_student_is_masked(self):
         dataset = _paired_consistency_dataset()

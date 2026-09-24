@@ -32,7 +32,7 @@ deformable_detr_fusion.py, yolo_fusion_fam.py).
 
 Usage (HF):
     python fam_alignment_check.py \
-        --config /path/to/fusion_rtdetr.yaml \
+        --config parameters/RTDETR/rtdetr_fam_stage_a_five_seed_v2.yaml \
         --checkpoint /path/to/tracking_dir/<run>/best/model.safetensors \
         --dataset-root /path/assoluto/a/dataset/WiSARD \
         --sample-idx 0 \

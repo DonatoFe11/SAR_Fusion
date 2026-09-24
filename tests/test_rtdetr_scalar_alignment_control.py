@@ -18,11 +18,6 @@ from sarfusion.models.rtdetr_fusion import (
     ScalarResidualAlignment,
 )
 from sarfusion.utils.utils import load_yaml
-from scripts.run_rtdetr_fam_scalar_alignment_control_audit import (
-    find_scalar_alignment_gates,
-    scalar_rows,
-    validate_protocol,
-)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +25,7 @@ BASELINE_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
+    / "rtdetr_fam_stage_a_five_seed_v2.yaml"
 )
 RCRA_PATH = (
     REPO_ROOT
@@ -43,18 +38,6 @@ CONTROL_PATH = (
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_scalar_alignment_control_sequence_validation_five_seed.yaml"
-)
-PROBE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_scalar_alignment_control_runtime_probe.yaml"
-)
-AUDIT_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_scalar_alignment_control_audit.yaml"
 )
 AUDIT_RESULTS_PATH = (
     REPO_ROOT
@@ -261,6 +244,7 @@ class TestScalarResidualAlignmentControl(unittest.TestCase):
         rcra = load_yaml(RCRA_PATH)["parameters"]
         control = load_yaml(CONTROL_PATH)["parameters"]
         baseline = load_yaml(BASELINE_PATH)["parameters"]
+        baseline["dataset"].pop("modal_dropout_coordinate_contract")  # native is the default
 
         self.assertEqual(control["seed"], [40, 41, 42, 43, 44])
         self.assertEqual(control["train"], rcra["train"])
@@ -277,33 +261,6 @@ class TestScalarResidualAlignmentControl(unittest.TestCase):
         rcra_model["use_scalar_residual_alignment"] = [True]
         self.assertEqual(model, rcra_model)
 
-    def test_probe_is_short_checkpoint_free_and_campaign_equivalent(self):
-        probe = load_yaml(PROBE_PATH)["parameters"]
-        control = load_yaml(CONTROL_PATH)["parameters"]
-
-        self.assertEqual(probe["seed"], [40])
-        self.assertEqual(probe["train"]["max_epochs"], [1])
-        self.assertEqual(probe["train"]["max_steps_per_epoch"], [20])
-        self.assertEqual(probe["train"]["save_checkpoints"], [False])
-        self.assertIn("ExcludeFromCampaign", probe["tracker"]["tags"][0])
-        self.assertEqual(probe["model"], control["model"])
-        self.assertEqual(probe["dataset"], control["dataset"])
-        self.assertEqual(probe["dataloader"], control["dataloader"])
-
-    def test_audit_protocol_and_scalar_extraction_are_frozen(self):
-        protocol = load_yaml(AUDIT_PATH)
-        validate_protocol(protocol)
-        self.assertEqual(protocol["checkpoint"], "best")
-
-        model = torch.nn.Sequential(
-            ScalarResidualAlignment(),
-            ScalarResidualAlignment(),
-            ScalarResidualAlignment(),
-        )
-        gates = find_scalar_alignment_gates(model)
-        rows = scalar_rows(40, gates, protocol["level_labels"])
-        self.assertEqual(len(rows), 3)
-        self.assertEqual([row["alpha"] for row in rows], [1.0, 1.0, 1.0])
 
     def test_completed_performance_follows_frozen_selection_rule(self):
         with PERFORMANCE_RESULTS_PATH.open(

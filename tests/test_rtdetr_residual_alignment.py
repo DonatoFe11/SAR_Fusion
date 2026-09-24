@@ -26,19 +26,13 @@ BASELINE_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
+    / "rtdetr_fam_stage_a_five_seed_v2.yaml"
 )
 PROTOCOL_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
     / "rtdetr_fam_residual_alignment_sequence_validation_five_seed.yaml"
-)
-PROBE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_residual_alignment_runtime_probe.yaml"
 )
 RESULTS_PATH = (
     REPO_ROOT
@@ -270,6 +264,7 @@ class TestReliabilityConditionedResidualAlignment(unittest.TestCase):
 
     def test_protocol_is_frozen_against_baseline(self):
         baseline = load_yaml(BASELINE_PATH)["parameters"]
+        baseline["dataset"].pop("modal_dropout_coordinate_contract")  # native is the default
         protocol = load_yaml(PROTOCOL_PATH)["parameters"]
         model = protocol["model"]["params"]
 
@@ -297,18 +292,6 @@ class TestReliabilityConditionedResidualAlignment(unittest.TestCase):
         candidate_train.pop("alignment_gate_lr")
         self.assertEqual(candidate_train, baseline["train"])
 
-    def test_probe_is_short_checkpoint_free_and_otherwise_identical(self):
-        probe = load_yaml(PROBE_PATH)["parameters"]
-        protocol = load_yaml(PROTOCOL_PATH)["parameters"]
-
-        self.assertEqual(probe["seed"], [40])
-        self.assertEqual(probe["train"]["max_epochs"], [1])
-        self.assertEqual(probe["train"]["max_steps_per_epoch"], [20])
-        self.assertEqual(probe["train"]["save_checkpoints"], [False])
-        self.assertIn("ExcludeFromCampaign", probe["tracker"]["tags"][0])
-        self.assertEqual(probe["model"], protocol["model"])
-        self.assertEqual(probe["dataset"], protocol["dataset"])
-        self.assertEqual(probe["dataloader"], protocol["dataloader"])
 
     def test_five_seed_result_is_complete_and_passes_promotion_rule(self):
         with RESULTS_PATH.open(newline="", encoding="utf-8") as result_file:

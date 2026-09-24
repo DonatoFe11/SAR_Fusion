@@ -26,7 +26,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from fam_alignment_check import load_fusion_model, load_run_config  # noqa: E402
+from fam_alignment_check import load_fusion_model  # noqa: E402
+from sarfusion.experiment.experiment import Experimenter  # noqa: E402
 from sarfusion.models.checkpoints import resolve_local_wandb_checkpoint  # noqa: E402
 from sarfusion.utils.utils import load_yaml  # noqa: E402
 from scripts.run_rtdetr_carnation_stress_test import (  # noqa: E402
@@ -243,6 +244,16 @@ def build_aggregate(payloads, protocol, protocol_hash, manifest, output_dir):
     return aggregate
 
 
+def load_training_config(config_path, seed):
+    """Select a seed across both the main grid and additional training grids."""
+    experiment = Experimenter()
+    experiment.calculate_runs(load_yaml(config_path))
+    matches = [run for grid in experiment.grids for run in grid if int(run["seed"]) == seed]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one training configuration for seed {seed}, got {len(matches)}")
+    return matches[0]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--protocol", default=DEFAULT_PROTOCOL)
@@ -309,11 +320,7 @@ def main():
     payloads = []
 
     for seed in seeds:
-        run_config = load_run_config(
-            REPO_ROOT / protocol["training_config"], run_index=seed - EXPECTED_SEEDS[0]
-        )
-        if int(run_config["seed"]) != seed:
-            raise RuntimeError(f"Training run_index does not map to seed {seed}")
+        run_config = load_training_config(REPO_ROOT / protocol["training_config"], seed)
         model_params = run_config["model"]
         model_params["params"]["threshold"] = float(protocol["confidence_threshold"])
         training_summary = load_training_summary(resolved[(seed, checkpoints[0])], seed)

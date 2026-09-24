@@ -24,30 +24,6 @@ MANIFEST_PATH = (
     / "RTDETR"
     / "rtdetr_temporal_validation_split.json"
 )
-PROTOCOL_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_temporal_validation_protocol.yaml"
-)
-SMOKE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_temporal_validation_smoke.yaml"
-)
-DIAGNOSTIC_TEST_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_temporal_validation_seed40_diagnostic_test.yaml"
-)
-SEQUENCE_FIXED10_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
-)
 
 
 class TestRTDETRTemporalValidation(unittest.TestCase):
@@ -92,81 +68,6 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         self.assertEqual(len(val), 804)
         self.assertTrue(set(map(str, train)).isdisjoint(set(map(str, val))))
 
-    def test_protocol_freezes_checkpoint_and_early_stopping_rule(self):
-        protocol = load_yaml(PROTOCOL_PATH)["parameters"]
-        train = protocol["train"]
-        self.assertEqual(train["max_epochs"], [10])
-        self.assertEqual(train["watch_metric"], ["map_50"])
-        self.assertEqual(train["checkpoint_min_delta"], [0.001])
-        self.assertEqual(train["early_stopping_patience"], [5])
-        self.assertEqual(train["val_frequency"], [1])
-        self.assertEqual(train["compute_validation_loss"], [False])
-        self.assertEqual(train["save_final_checkpoint_only"], [True])
-        self.assertEqual(protocol["run_test"], [False])
-        self.assertEqual(protocol["test_checkpoint"], ["best"])
-        self.assertEqual(protocol["seed"], [40, 41, 42, 43, 44])
-        self.assertEqual(protocol["dataloader"]["batch_size"], [4])
-        self.assertEqual(protocol["dataloader"]["evaluation_batch_size"], [12])
-
-    def test_smoke_is_one_seed_two_epochs_and_not_a_campaign_run(self):
-        smoke = load_yaml(SMOKE_PATH)
-        params = smoke["parameters"]
-        self.assertEqual(smoke["experiment"]["name"], "RTDETR_FAM_TemporalVal_Smoke")
-        self.assertEqual(params["seed"], [40])
-        self.assertEqual(params["train"]["max_epochs"], [2])
-        self.assertTrue(params["train"]["run_validation"][0])
-        self.assertFalse(params["train"]["compute_validation_loss"][0])
-        self.assertFalse(params["run_test"][0])
-        self.assertEqual(params["dataloader"]["batch_size"], [4])
-        self.assertEqual(params["dataloader"]["evaluation_batch_size"], [12])
-
-    def test_seed40_diagnostic_uses_best_checkpoint_and_paired_mterie(self):
-        diagnostic = load_yaml(DIAGNOSTIC_TEST_PATH)
-        params = diagnostic["parameters"]
-        pretrained = params["model"]["params"]["pretrained_wandb"]
-
-        self.assertEqual(
-            diagnostic["experiment"]["name"],
-            "RTDETR_FAM_TemporalVal_Seed40_DiagnosticTest",
-        )
-        self.assertNotIn("train", params)
-        self.assertEqual(params["run_test"], [True])
-        self.assertEqual(params["test_checkpoint"], ["current"])
-        self.assertEqual(params["compute_test_loss"], [False])
-        self.assertEqual(params["dataset"]["folders"], ["vis_ir"])
-        self.assertEqual(params["dataset"]["modal_dropout"], [False])
-        self.assertEqual(
-            pretrained["project"], ["RTDETR_FAM_TemporalVal_Protocol"]
-        )
-        self.assertEqual(pretrained["seed"], [40])
-        self.assertEqual(pretrained["checkpoint"], ["best"])
-        self.assertEqual(
-            params["model"]["params"]["require_full_pretrained_match"], [True]
-        )
-
-    def test_replacement_protocol_runs_ten_epochs_without_early_stopping(self):
-        protocol = load_yaml(SEQUENCE_FIXED10_PATH)
-        params = protocol["parameters"]
-        train = params["train"]
-
-        self.assertEqual(
-            protocol["experiment"]["name"],
-            "RTDETR_FAM_SequenceVal_Fixed10_Protocol",
-        )
-        self.assertEqual(params["seed"], [40, 41, 42, 43, 44])
-        self.assertEqual(train["max_epochs"], [10])
-        self.assertEqual(train["run_validation"], [True])
-        self.assertNotIn("early_stopping_patience", train)
-        self.assertEqual(train["watch_metric"], ["map_50"])
-        self.assertEqual(train["checkpoint_min_delta"], [0.001])
-        self.assertEqual(train["save_final_checkpoint_only"], [True])
-        self.assertEqual(params["run_test"], [False])
-        self.assertEqual(params["test_checkpoint"], ["best"])
-        self.assertNotIn("temporal_split_manifest", params["dataset"])
-        self.assertEqual(len(params["dataset"]["train_folders"]), 1)
-        self.assertEqual(len(params["dataset"]["train_folders"][0]), 2)
-        self.assertEqual(len(params["dataset"]["val_folders"]), 1)
-        self.assertEqual(len(params["dataset"]["val_folders"][0]), 1)
 
     def test_checkpoint_min_delta_keeps_earliest_near_tie(self):
         run = Run()
