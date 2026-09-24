@@ -37,9 +37,6 @@ FILES = (
     "parameters/YOLO26/yolo26s_fam_seed40_stage_a.yaml",
     "parameters/YOLO26/yolo26s_additive_seed40_stage_a_repair_v1.yaml",
     "parameters/YOLO26/yolo26s_fam_seed40_stage_a_repair_v1.yaml",
-    "notes/yolo26_fam_stage_a.md",
-    "notes/yolo26_stage_a_repair_v1.md",
-    "notes/Thesis/results/yolo26_additive_seed40_stage_a_v1.json",
 )
 
 

@@ -67,7 +67,7 @@ class BaseDetr(nn.Module, PyTorchModelHubMixin):
         )
         self.threshold = threshold
 
-    # FIX: Aggiunto pixel_mask e passato a self.model
+    # Passo pixel_mask al modello per distinguere i pixel validi dal padding.
     def forward(self, pixel_values, pixel_mask=None, labels=None, threshold=None):
         outputs = self.model(pixel_values, pixel_mask=pixel_mask, labels=labels)
         if not self.training:
@@ -96,7 +96,7 @@ class Detr(BaseDetr):
             threshold=threshold,
         )
 
-    # FIX: Aggiunto pixel_mask anche qui
+    # Stessa pixel_mask usata nel percorso di training.
     def forward(self, pixel_values, pixel_mask=None, labels=None):
         outputs = self.model(pixel_values, pixel_mask=pixel_mask, labels=labels)
 

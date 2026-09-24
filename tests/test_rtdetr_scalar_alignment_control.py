@@ -262,6 +262,7 @@ class TestScalarResidualAlignmentControl(unittest.TestCase):
         self.assertEqual(model, rcra_model)
 
 
+    @unittest.skipUnless(PERFORMANCE_RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_completed_performance_follows_frozen_selection_rule(self):
         with PERFORMANCE_RESULTS_PATH.open(
             newline="", encoding="utf-8"
@@ -289,6 +290,7 @@ class TestScalarResidualAlignmentControl(unittest.TestCase):
         self.assertEqual(sum(delta > 0.0 for delta in rcra_minus_fam), 4)
         self.assertEqual(sum(delta > 0.0 for delta in rcra_minus_scalar), 3)
 
+    @unittest.skipUnless(AUDIT_RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_completed_audit_has_three_active_bounded_scalars_per_seed(self):
         with AUDIT_RESULTS_PATH.open(
             newline="", encoding="utf-8"

@@ -1,0 +1,75 @@
+{
+  "archived_source_manifest": "parameters/YOLO26/stage_a_five_seed_v2_source_manifest.json",
+  "archived_source_manifest_sha256": "968726d18952f2ef3f0e61f1d95114590a618da8a12d2df4fd6ae1dc011ea56a",
+  "files": [
+    {
+      "bytes": 464,
+      "path": "requirements-yolo26.txt",
+      "sha256": "ae5069aeb96edeac0aec602ac471f3720d415d4e54ff242484140902e749d5e2"
+    },
+    {
+      "bytes": 18671,
+      "path": "scripts/run_yolo26_stage_a.py",
+      "sha256": "d7d48e4d58ff9db40151c8a8eaf91a4f4593c8c3828ce4cc1330c17d573c2206"
+    },
+    {
+      "bytes": 11907,
+      "path": "scripts/run_yolo26_stage_a_five_seed_v2.py",
+      "sha256": "6ff3c98b10f2eabbabb6c72e46f3ec83e0cd55058e69f898b11879124c7016c5"
+    },
+    {
+      "bytes": 1650,
+      "path": "scripts/run_stage_a_five_seed_v2.sh",
+      "sha256": "91c277b8e962d47aed7f13702dd18f5f2b31bd2b8f8e873bae92b58196c27461"
+    },
+    {
+      "bytes": 609,
+      "path": "parameters/YOLO26/stage_a_split.yaml",
+      "sha256": "ad1af76c6c2db03979697366a3c67cf90fe759733ff1a6c568e4f0c854215d4c"
+    },
+    {
+      "bytes": 2146,
+      "path": "parameters/YOLO26/yolo26s_additive_stage_a_five_seed_v2.yaml",
+      "sha256": "4a688653d77901f13018e254806f1f46e6d3a35ae1b3e3e21fa359eb7b1339b4"
+    },
+    {
+      "bytes": 2140,
+      "path": "parameters/YOLO26/yolo26s_fam_stage_a_five_seed_v2.yaml",
+      "sha256": "142f5e528547a47c25919ce4ef67320b5399a5c3e2f341a6f47f2a3371ea5a2c"
+    },
+    {
+      "bytes": 248,
+      "path": "sarfusion/yolo26/__init__.py",
+      "sha256": "2aea73bdac09d4eb418cfa10f4749409bb14a0fdc500878bca89ce23ca47429b"
+    },
+    {
+      "bytes": 19091,
+      "path": "sarfusion/yolo26/data.py",
+      "sha256": "1c17815a422935f4a30bf57727c1cf5cf20119fc331f148707aee8e1a6a0c348"
+    },
+    {
+      "bytes": 2050,
+      "path": "sarfusion/yolo26/fam.py",
+      "sha256": "1489634c44706055de20e3b9387ac18f64c4b3462a651d04ec214e0e1dc49388"
+    },
+    {
+      "bytes": 12449,
+      "path": "sarfusion/yolo26/model.py",
+      "sha256": "a1a75feb8222f3a1171a7a1bcee1ba54f85bfe676824674f267fdd013096c4f9"
+    },
+    {
+      "bytes": 3387,
+      "path": "sarfusion/yolo26/protocol.py",
+      "sha256": "083fdd53dde594aadc341e6bebe9fa2ab31e42f4ba92fb9c0edff02d99d3f387"
+    },
+    {
+      "bytes": 6356,
+      "path": "sarfusion/yolo26/trainer.py",
+      "sha256": "93e4a9ce97420da4ab5596e98f88b9f16423d4993f362c5d905137c5a5f620f2"
+    }
+  ],
+  "protocol_revision": "five_seed_stage_a_v2",
+  "schema": "sarfusion.yolo26.stage_a.five_seed_source.v2",
+  "source_revision": "comments_v1",
+  "ultralytics": "8.4.138"
+}

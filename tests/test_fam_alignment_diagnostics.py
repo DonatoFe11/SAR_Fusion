@@ -1,5 +1,6 @@
 import math
 import unittest
+from unittest.mock import Mock
 
 import torch
 from torch import nn
@@ -10,6 +11,7 @@ from fam_alignment_check import (
     net_offset_field,
     offset_statistics,
     offset_vectors,
+    plot_offset_field,
 )
 from sarfusion.models.rtdetr_fusion import (
     BoundedFeatureAlignmentModule,
@@ -61,8 +63,35 @@ class TestFAMAlignmentDiagnostics(unittest.TestCase):
 
         net = net_offset_field(offset, "dcnv2_3x3", mask=mask)
 
-        self.assertAlmostEqual(net[0, 0, 0].item(), 9.0, places=5)
-        self.assertAlmostEqual(net[1, 0, 0].item(), 0.0, places=5)
+        self.assertAlmostEqual(net[0, 0, 0].item(), 0.0, places=5)
+        self.assertAlmostEqual(net[1, 0, 0].item(), 9.0, places=5)
+
+    def test_dcnv2_coordinates_scale_with_the_correct_image_axis(self):
+        offset = torch.zeros(18, 2, 4)
+        offset[0::2] = 2.0  # dy
+        offset[1::2] = 3.0  # dx
+        stats = offset_statistics(
+            offset, "dcnv2_3x3", input_hw=(20, 80), mask=torch.ones(9, 2, 4)
+        )
+        self.assertEqual(stats["signed_coordinate_mean_feature_px"], [3.0, 2.0])
+        self.assertAlmostEqual(
+            stats["net_vector_magnitude_input_px"]["mean"],
+            math.hypot(3 * 20, 2 * 10), places=4,
+        )
+
+    def test_quiver_keeps_positive_dy_on_the_downward_image_axis(self):
+        for kind, channels in (("dcnv2_3x3", 18), ("grid_sample", 2)):
+            with self.subTest(kind=kind):
+                offset = torch.zeros(channels, 2, 4)
+                offset[0::2] = 2.0 if kind == "dcnv2_3x3" else 3.0
+                offset[1::2] = 3.0 if kind == "dcnv2_3x3" else 2.0
+                axes = Mock()
+                mask = torch.ones(9, 2, 4) if channels == 18 else None
+                plot_offset_field(axes, offset, mask, offset_kind=kind, stride=1)
+                _, _, dx, dy = axes.quiver.call_args.args
+                self.assertTrue((dx == 3.0).all())
+                self.assertTrue((dy == 2.0).all())
+                axes.set_ylim.assert_called_once_with(2, 0)
 
     def test_capture_supports_grid_sample_variant(self):
         model = nn.Sequential(GridSampleFeatureAlignmentModule())

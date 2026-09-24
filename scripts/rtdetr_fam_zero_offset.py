@@ -1,10 +1,8 @@
-"""Opt-in offset-only initialization; the historical training sources stay intact.
+"""Initialize FAM offsets to zero after loading the pretrained detector.
 
-Register this factory explicitly before using build_model. It builds the ordinary
-pretrained RT-DETR FAM first, then zeros ONLY predictor rows 0:18. No reset is
-performed during forward or checkpoint loading. Rows 18:27 (mask logits), DCNv2
-filters, parameter identities and random-number-generator state are preserved.
-"""
+Register the factory before build_model. It resets predictor rows 0:18;
+mask rows 18:27, DCN filters and RNG state are preserved. Forward and
+checkpoint loading do not repeat the reset."""
 
 from __future__ import annotations
 

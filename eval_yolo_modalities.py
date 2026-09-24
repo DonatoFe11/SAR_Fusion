@@ -1,47 +1,17 @@
-"""
-eval_yolo_modalities.py
-------------------------
-Valuta un checkpoint YOLOv10FusionFAM (.pt ultralytics) su un dataset a
-scelta (vis, ir, vis_ir).
+"""Evaluate YOLOv10FusionFAM checkpoints in VIS, IR and VIS+IR modes.
 
-Motivazione (padding a 4ch): YOLOv10FusionFAM.predict() instrada un input
-3ch al forward standard single-backbone, bypassando completamente FAM e
-backbone IR; un input 1ch non e' gestito affatto. WiSARDDataset (pipeline
-HF, usata da RT-DETR) padda gia' nativamente a 4ch le immagini mono-modali
-(vedi RGB_ITEM/IR_ITEM in sarfusion/data/wisard.py); WiSARDYOLODataset no.
-Per mantenere il contratto di input a 4 canali anche in valutazione
-mono-modale, qui si usa PaddedWiSARDYOLODataset. La modalità viene passata
-esplicitamente al modello: RGB-only usa soltanto il backbone RGB, IR-only
-soltanto il backbone IR (con FAM bypassato), mentre vis_ir mantiene FAM e
-fusione additiva.
+PaddedWiSARDYOLODataset keeps four-channel inputs for single-modality
+samples. An explicit mask selects the available backbone; FAM applies
+to samples with both modalities present.
 
-Motivazione (metrica standalone invece di DetectionEvaluator): le label di
-WiSARDYOLODataset (xywh normalizzato relativo all'immagine letterboxed) e
-le predizioni v10 post-processate (xyxy in coordinate del tensore di
-inferenza) non condividono lo stesso sistema di coordinate usato dalla
-pipeline HF di DetectionEvaluator in sarfusion/utils/metrics.py. Per
-evitare di mescolare implicitamente sistemi di coordinate diversi, qui la
-conversione a spazio-immagine nativo e' esplicita, replicando fedelmente
-_prepare_batch/_prepare_pred di ultralytics.models.yolo.detect.val
-.DetectionValidator (verificato dal sorgente installato). La metrica
-finale (torchmetrics.MeanAveragePrecision) e' la stessa libreria usata
-sotto DetectionEvaluator, quindi il numero resta calcolato con la stessa
-formula e comparabile a RT-DETR/DefDETR/DINO, anche se il codice di
-bridging e' scritto ad-hoc per il formato dati YOLO.
+Boxes and predictions are mapped back to the original image coordinates
+using the Ultralytics validator's preprocessing. Metrics are computed
+with torchmetrics.MeanAveragePrecision.
 
-Uso:
-    python eval_yolo_modalities.py \
-        --config parameters/YOLO/30.yolov10-fam.yaml \
-        --run-index 0 \
-        --checkpoint SarYOLO/YOLOv10-FAM-Grid8/weights/best.pt \
-        --data-yaml wisards_vis.yaml \
-        --modality auto \
-        --split test \
-        --batch-size 8
-
-Per testare le 3 modalita' su tutti i 6 checkpoint, ripetere variando
---data-yaml (wisards_vis.yaml / wisards_ir.yaml / wisards_vis_ir.yaml) e
---checkpoint / --run-index in base alla tabella grid8..grid13.
+Example:
+    python eval_yolo_modalities.py --config parameters/YOLO/30.yolov10-fam.yaml
+        --run-index 0 --checkpoint SarYOLO/YOLOv10-FAM-Grid8/weights/best.pt
+        --data-yaml wisards_vis.yaml --modality auto --split test --batch-size 8
 """
 
 import argparse
@@ -63,7 +33,7 @@ from sarfusion.utils.grid import make_grid
 
 
 # ---------------------------------------------------------------------------
-# 0. Config della run (formato flat, stesso pattern di fam_alignment_check.py)
+# 0. Run configuration (flat format, as in fam_alignment_check.py)
 # ---------------------------------------------------------------------------
 
 def load_yolo_run_config(config_path, run_index=0):
@@ -84,7 +54,7 @@ def load_yolo_run_config(config_path, run_index=0):
 
 
 # ---------------------------------------------------------------------------
-# 1. Caricamento modello (identico a fam_alignment_check.py: istanza pickled)
+# 1. Model loading (pickled instance, as in fam_alignment_check.py)
 # ---------------------------------------------------------------------------
 
 def load_yolo_model(checkpoint_path, device):
@@ -98,26 +68,24 @@ def load_yolo_model(checkpoint_path, device):
 
 
 # ---------------------------------------------------------------------------
-# 2. Dataset con padding a 4ch per il caso mono-modale (vis-only, ir-only)
+# 2. Four-channel padding for single-modality inputs (VIS-only, IR-only)
 # ---------------------------------------------------------------------------
 
 class PaddedWiSARDYOLODataset(WiSARDYOLODataset):
-    """
-    Sottoclasse di sola valutazione: fa esattamente cio' che WiSARDDataset
-    (pipeline HF) gia' fa nativamente per RGB_ITEM/IR_ITEM in wisard.py --
-    padda a 4 canali con l'altra modalita' azzerata -- ma senza toccare
-    WiSARDYOLODataset/wisard.py, che restano invariati per il training live.
-    Per il caso vis_ir (gia' 4ch nativamente, coppie sincronizzate) non
-    interviene: il branch if/elif sotto scatta solo per c==3 o c==1.
+    """Evaluation dataset with zero padding for the missing modality.
+
+    VIS-only and IR-only samples use four channels, matching the RGB_ITEM
+    and IR_ITEM handling in the Hugging Face WiSARDDataset pipeline.
+    Paired VIS+IR samples already have four channels and remain unchanged.
     """
 
     def load_image(self, i, rect_mode=True):
         im, hw0, hw = super().load_image(i, rect_mode=rect_mode)
         c = im.shape[2] if im.ndim == 3 else 1
-        if c == 3:  # VIS-only: pad canale IR con zeri
+        if c == 3:  # VIS-only: pad the IR channel with zeros
             pad = np.zeros((*im.shape[:2], 1), dtype=im.dtype)
             im = np.concatenate([im, pad], axis=2)
-        elif c == 1:  # IR-only: pad canali RGB con zeri
+        elif c == 1:  # IR-only: pad the RGB channels with zeros
             if im.ndim == 2:
                 im = im[:, :, None]
             pad = np.zeros((*im.shape[:2], 3), dtype=im.dtype)
@@ -141,12 +109,12 @@ def build_dataloader(data_yaml, run_config, split, batch_size, workers):
         batch_size=batch_size,
         augment=False,
         hyp=cfg,
-        rect=True,  # allineato a WisardTrainer.final_eval(): il test loader ufficiale e' costruito
-                    # con mode="val" (vedi yolo.py), che imposta rect=True anche in valutazione sul test set
+        rect=True,  # Match WisardTrainer.final_eval(): the test loader uses
+                    # mode="val" in yolo.py, which sets rect=True for test evaluation too.
         cache=cfg.cache or None,
         single_cls=cfg.single_cls or False,
         stride=32,
-        pad=0.5,  # stesso valore usato da build_yolo_dataset in produzione per mode != "train"
+        pad=0.5,  # Match build_yolo_dataset when mode != "train".
         prefix=colorstr(f"{split}: "),
         task=cfg.task,
         classes=cfg.classes,
@@ -165,24 +133,22 @@ def build_dataloader(data_yaml, run_config, split, batch_size, workers):
 
 
 # ---------------------------------------------------------------------------
-# 3. Post-processing v10 (NMS-free), replicato da
+# 3. NMS-free v10 postprocessing, following
 #    ultralytics.models.yolov10.val.YOLOv10DetectionValidator.postprocess
 # ---------------------------------------------------------------------------
 
 def postprocess_v10(preds, max_det, nc):
-    """
-    Replica fedele (non reimplementazione a memoria) del postprocess usato
-    da WisardValidator in produzione, per garantire la stessa logica di
-    selezione dei box usata per calcolare i numeri di mAP gia' visti su
-    wandb. Fonte: ultralytics/models/yolov10/val.py (verificato dal
-    sorgente installato nell'ambiente, v. commento originale sotto).
+    """Apply the YOLOv10 postprocessing used by WisardValidator.
+
+    Box selection follows ultralytics/models/yolov10/val.py in the project
+    environment, matching the evaluation used for the W&B metrics.
     """
     if isinstance(preds, dict):
         preds = preds["one2one"]
     if isinstance(preds, (list, tuple)):
         preds = preds[0]
 
-    # Acknowledgement: Thanks to sanha9999 in #190 and #181! (commento originale ultralytics)
+    # Acknowledgement: Thanks to sanha9999 in #190 and #181! (original Ultralytics comment)
     if preds.shape[-1] == 6:
         return preds
     preds = preds.transpose(-1, -2)
@@ -192,20 +158,12 @@ def postprocess_v10(preds, max_det, nc):
 
 
 # ---------------------------------------------------------------------------
-# 4. Loop di valutazione
+# 4. Evaluation loop
 # ---------------------------------------------------------------------------
 
 def evaluate(model, loader, device, modality, max_det=300):
-    # NOTA: model.nc (attributo top-level) NON e' affidabile come fonte del
-    # numero di classi reale della testa di detection. Ultralytics lo
-    # sovrascrive dopo la costruzione del modello con trainer.data["nc"]
-    # (preso dal dataset yaml, es. 3 per via delle pose stands/rests/
-    # not_defined) per puro bookkeeping/logging, indipendentemente da quanti
-    # canali di output abbia realmente self.full_model[-1] (che riflette
-    # single_cls e l'eventuale fix esplicito di nc in run.py). Usare qui
-    # model.nc rischierebbe un mismatch di shape silenzioso in
-    # ops.v10postprocess su modelli allenati con nc forzato a 1. La fonte
-    # affidabile e' l'head stessa, che ultralytics non tocca mai post-hoc.
+    # Read nc from the detection head: the trainer can overwrite model.nc
+    # with the dataset value even when the detector was built for a single class.
     nc = model.full_model[-1].nc
     metric = MeanAveragePrecision(box_format="xyxy", class_metrics=True)
 
@@ -225,15 +183,15 @@ def evaluate(model, loader, device, modality, max_det=300):
             }
             modality_mask = img.new_tensor(masks[modality]).expand(img.shape[0], -1)
             raw_preds = model(img, modality_mask=modality_mask)
-            preds = postprocess_v10(raw_preds, max_det=max_det, nc=nc)  # (B, max_det, 6) in coordinate imgsz
+            preds = postprocess_v10(raw_preds, max_det=max_det, nc=nc)  # (B, max_det, 6) in inference-image coordinates
 
-            imgsz = img.shape[2:]  # (H, W) del tensore di inferenza (letterboxed)
+            imgsz = img.shape[2:]  # (H, W) of the letterboxed inference tensor
             batch_size = img.shape[0]
 
             for si in range(batch_size):
                 n_images += 1
 
-                # --- target: stesso schema di _prepare_batch ---
+                # --- Targets: follow _prepare_batch ---
                 idx = batch["batch_idx"] == si
                 cls = batch["cls"][idx].squeeze(-1)
                 bbox = batch["bboxes"][idx]
@@ -250,7 +208,7 @@ def evaluate(model, loader, device, modality, max_det=300):
                     "labels": cls.to(device).long() if len(cls) else torch.zeros((0,), dtype=torch.long, device=device),
                 }
 
-                # --- predizioni: stesso schema di _prepare_pred ---
+                # --- Predictions: follow _prepare_pred ---
                 predn = preds[si].clone()
                 ops.scale_boxes(imgsz, predn[:, :4], ori_shape, ratio_pad=ratio_pad)
                 n_pred_boxes += predn.shape[0]

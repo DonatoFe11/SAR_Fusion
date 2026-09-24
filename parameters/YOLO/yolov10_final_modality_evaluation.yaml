@@ -1,6 +1,5 @@
 # Frozen post-training evaluation of the final YOLOv10 last.pt checkpoints.
-# Commit this file, the runner, its tests, and the protocol note before running
-# the complete inference campaign.
+# Checkpoint and modality settings were fixed before the evaluation campaign.
 
 protocol:
   id: yolov10_final_modality_evaluation_v1

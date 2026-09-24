@@ -1,4 +1,4 @@
-"""The follow-up always allocates five seeds, never a seed-40 screen."""
+"""Check the five-seed Stage A grids, training contracts and launcher."""
 from contextlib import redirect_stdout
 from copy import deepcopy
 from io import StringIO

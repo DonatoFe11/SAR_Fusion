@@ -285,6 +285,7 @@ class TestReliabilityGatedFusion(unittest.TestCase):
                     self.assertTrue(first_ids.isdisjoint(second_ids))
 
 
+    @unittest.skipUnless(GATE_LR10X_RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_lr10x_five_seed_results_are_complete_and_do_not_beat_fam(self):
         with GATE_LR10X_RESULTS_PATH.open(newline="", encoding="utf-8") as file:
             rows = list(csv.DictReader(file))

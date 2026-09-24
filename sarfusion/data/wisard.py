@@ -336,7 +336,7 @@ def build_box_alignment_targets(
     than ``max_distance``.
 
     Rows follow ``[vis_x, vis_y, flow_y, flow_x]``, with
-    ``flow = adapted_ir_center - vis_center``. The function deliberately
+    ``flow = adapted_ir_center - vis_center``. The function
     returns an empty ``(0, 4)`` tensor when either modality has no boxes.
     """
     try:
@@ -740,11 +740,13 @@ class WiSARDDataset(Dataset):
                     new_x_min = x_min - x_off
                     new_y_min = y_min - y_off
                     
-                    # Clippiamo le box ai bordi del tile
+                    # Clip both corners before computing the visible box size.
+                    new_x_max = min(tile_size, new_x_min + bbox_width)
+                    new_y_max = min(tile_size, new_y_min + bbox_height)
                     new_x_min = max(0, new_x_min)
                     new_y_min = max(0, new_y_min)
-                    new_bbox_width = min(bbox_width, tile_size - new_x_min)
-                    new_bbox_height = min(bbox_height, tile_size - new_y_min)
+                    new_bbox_width = max(0, new_x_max - new_x_min)
+                    new_bbox_height = max(0, new_y_max - new_y_min)
                     
                     new_ann = ann.copy()
                     new_ann["bbox"] = [new_x_min, new_y_min, new_bbox_width, new_bbox_height]
@@ -776,7 +778,7 @@ class WiSARDDataset(Dataset):
             img_path, annotation_path = item
             img_pil = self._load_rgb(img_path)
             
-            # IMPORTANTE: Resize a 640x640 PRIMA del tiling per coordinate corrette
+            # Porto immagine e box a 640x640 prima di suddividerli in tile.
             if self.use_tiling:
                 img_pil = img_pil.resize((640, 640))
             
@@ -804,7 +806,7 @@ class WiSARDDataset(Dataset):
             img_path, annotation_path = item
             img_pil = self._load_ir(img_path)
             
-            # IMPORTANTE: Resize a 640x640 PRIMA del tiling per coordinate corrette
+            # Porto immagine e box a 640x640 prima di suddividerli in tile.
             if self.use_tiling:
                 img_pil = img_pil.resize((640, 640))
             
@@ -832,7 +834,7 @@ class WiSARDDataset(Dataset):
             img_vis_pil = self._load_rgb(img_path_vis)
             img_ir_pil = self._load_ir(img_path_ir)
 
-            # IMPORTANTE: Resize a 640x640 PRIMA del tiling per coordinate corrette
+            # Porto immagine e box a 640x640 prima di suddividerli in tile.
             if self.use_tiling:
                 img_vis_pil = img_vis_pil.resize((640, 640))
                 img_ir_pil = img_ir_pil.resize((640, 640))
@@ -948,7 +950,7 @@ class WiSARDDataset(Dataset):
             data_dict.tile_size = self.image_size // 2  # 640//2 = 320
             # Aggiungi le GT complete dell'immagine originale per l'evaluation
             if targets_full is not None and img_full_for_labels is not None:
-                # Trasforma le GT usando l'immagine ORIGINALE (non dummy!) per normalizzare correttamente
+                # Normalizzo le GT rispetto alle dimensioni dell'immagine originale.
                 inputs_full = self.transform(img_full_for_labels, annotations=targets_full, return_tensors="pt")
                 # Converti BatchFeature a dict normale per evitare problemi
                 labels_full_raw = inputs_full['labels'][0]

@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from sarfusion.data import get_train_val_test_params
 from sarfusion.data.wisard import build_wisard_items
@@ -39,6 +40,7 @@ class TestWiSARDPhaseParameters(unittest.TestCase):
         # Splitting phase parameters must not mutate the shared YAML values.
         self.assertTrue(dataset_params["modal_dropout"])
 
+    @unittest.skipUnless(Path("dataset/WiSARD").is_dir(), "Requires the local WiSARD dataset")
     def test_explicit_whole_sequence_overrides_bypass_default_phase_filter(self):
         train_folders = [
             ["210924_FHL_Enterprise_VIS_0405", "210924_FHL_Enterprise_IR_0406"],

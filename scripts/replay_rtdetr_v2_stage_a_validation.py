@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Replay the frozen RT-DETRv2 Stage-A best checkpoints on validation.
+"""Replay RT-DETRv2 Stage A best checkpoints on validation.
 
-The public mode evaluates the matched Additive and FAM runs in isolated child
-processes, then writes the final allocation-gate report.  No test split is
-evaluated and no W&B run is created or modified.
-"""
+Additive and FAM run in separate processes. The report applies the Stage A
+promotion rule without evaluating test data or modifying W&B runs."""
 
 from __future__ import annotations
 

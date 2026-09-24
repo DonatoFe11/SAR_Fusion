@@ -26,7 +26,8 @@ MANIFEST_PATH = (
 )
 
 
-class TestRTDETRTemporalValidation(unittest.TestCase):
+@unittest.skipUnless(DATASET_ROOT.is_dir(), "Requires the local WiSARD dataset")
+class TestRTDETRTemporalSplitInventory(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.manifest, cls.inventory = load_temporal_split_manifest(
@@ -69,6 +70,7 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         self.assertTrue(set(map(str, train)).isdisjoint(set(map(str, val))))
 
 
+class TestRTDETRTemporalValidation(unittest.TestCase):
     def test_checkpoint_min_delta_keeps_earliest_near_tie(self):
         run = Run()
         run.train_params = {"checkpoint_min_delta": 0.001}
@@ -191,7 +193,7 @@ class TestRTDETRTemporalValidation(unittest.TestCase):
         }
         run.model = Mock()
         # Hugging Face ModelOutput omits optional keys entirely when their
-        # value is None, so this deliberately has no `loss` attribute.
+        # value is None, so the fixture has no `loss` attribute.
         model_output = SimpleNamespace(predictions=[], logits="logits")
         run.model.return_value = model_output
         run.val_evaluator = Mock()

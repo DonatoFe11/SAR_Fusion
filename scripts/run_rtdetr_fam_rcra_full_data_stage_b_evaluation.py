@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Evaluate matched full-data FAM/RCRA epoch-10 checkpoints on MtErie.
+"""Compare FAM and RCRA epoch-10 checkpoints on MtErie.
 
-The protocol, training recipes and engineering decision rule are frozen before
-Stage-B training.  This runner rejects mismatched local runs, evaluates the ten
-`latest` checkpoints on one fixed 708-pair VIS+IR loader, caches raw metrics and
-writes the paired RCRA-minus-FAM result.  MtErie is an already-used internal
-benchmark and is not described as a newly blind test set.
-"""
+Check the matched training recipes, evaluate the ten latest checkpoints
+on the same 708 pairs, and save metrics and paired RCRA-minus-FAM results.
+MtErie is the internal benchmark already used during the study."""
 
 from __future__ import annotations
 

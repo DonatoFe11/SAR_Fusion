@@ -47,6 +47,9 @@ class TestRTDETRFAMFullDataPairedModalityEvaluation(unittest.TestCase):
         )
 
     def test_versioned_stage_b_result_still_selects_fam(self):
+        result_path = REPO_ROOT / self.protocol["selection_source"]["result_csv"]
+        if not result_path.is_file():
+            self.skipTest("Requires local Stage B results in notes/")
         audit, stage_b_protocol = verify_closed_selection(self.protocol)
         self.assertEqual(audit["decision"]["status"], "fail_retain_fam")
         self.assertEqual(audit["decision"]["selected_architecture"], "fam")
@@ -94,6 +97,7 @@ class TestRTDETRFAMFullDataPairedModalityEvaluation(unittest.TestCase):
         self.assertAlmostEqual(fusion_delta["summary"]["mean"], 0.05)
         self.assertEqual(fusion_delta["positive_seed_count"], 5)
 
+    @unittest.skipUnless(RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_versioned_result_has_five_paired_fusion_wins(self):
         with RESULTS_PATH.open(newline="", encoding="utf-8") as input_file:
             rows = list(csv.DictReader(input_file))

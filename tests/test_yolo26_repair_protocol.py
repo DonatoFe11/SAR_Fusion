@@ -83,7 +83,10 @@ def test_repair_optimizer_and_vitality_gates():
 )
 def test_archived_manifests_match_published_experiments(manifest_name, result_name):
     manifest = REPOSITORY / "parameters/YOLO26" / manifest_name
-    result = json.loads((REPOSITORY / "notes/Thesis/results" / result_name).read_text())
+    result_path = REPOSITORY / "notes/Thesis/results" / result_name
+    if not result_path.is_file():
+        pytest.skip("Requires local thesis results in notes/")
+    result = json.loads(result_path.read_text())
     assert hashlib.sha256(manifest.read_bytes()).hexdigest() == result["source_manifest_sha256"]
 
 
@@ -101,6 +104,7 @@ def test_operational_configs_use_valid_revised_manifests(config_name):
     assert manifest_path.name.endswith("_thesis_paths_v1.json")
     manifest = verify_source_manifest(REPOSITORY, manifest_path)
     assert manifest["source_revision"] == "thesis_paths_v1"
+    assert all(not item["path"].startswith("notes/") for item in manifest["files"])
     archive = REPOSITORY / manifest["archived_source_manifest"]
     assert archive != manifest_path
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == manifest["archived_source_manifest_sha256"]

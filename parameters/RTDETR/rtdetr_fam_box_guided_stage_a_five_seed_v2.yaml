@@ -1,7 +1,4 @@
 # Stage A v2: five fresh seeds, no seed-40 performance screen.
-# Complete all 10 epochs for every seed. Best validation mAP50 is primary;
-# latest is diagnostic. Stage B is conditional on the aggregate decision.
-# See notes/stage_a_b_five_seed_v2.md. Do not mix archived pilot runs here.
 
 experiment:
   name: RTDETR_FAM_BoxGuided_StageA_FiveSeed_V2
@@ -25,7 +22,7 @@ parameters:
     warn_only: [false]
     trace: [true]
     training_source_manifest_id: [rtdetr_box_guided_training_source_v1]
-    training_source_manifest_sha256: [3320b24d060aaacec316290c114933db1dce8d71eaaf455f1ccb6448183f76e5]
+    training_source_manifest_sha256: [d621aef9e8628565631ea4372bed5530dc7ee632e724c08cfe725950b404acc2]
     data_seed: *seed40
     model_seed: *seed40
     training_seed: *seed40

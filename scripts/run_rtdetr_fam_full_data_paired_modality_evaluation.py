@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Characterize the selected current-code FAM on paired sensor interventions.
+"""Evaluate the five Stage B FAM checkpoints with channel masking.
 
-Stage B has already closed architecture selection. This runner audits the five
-matched FAM runs, reuses one frozen 708-frame VIS+IR loader and measures VIS+IR,
-VIS-only and IR-only by channel masking with unchanged VIS ground truth.
-"""
+VIS+IR, VIS-only and IR-only share the same 708 paired frames and VIS
+annotations. Architecture selection is recorded in the Stage B result."""
 
 from __future__ import annotations
 

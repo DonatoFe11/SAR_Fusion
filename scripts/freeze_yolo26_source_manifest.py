@@ -29,7 +29,6 @@ FILES = (
     "parameters/YOLO26/stage_a_split.yaml",
     "parameters/YOLO26/yolo26s_additive_seed40_stage_a.yaml",
     "parameters/YOLO26/yolo26s_fam_seed40_stage_a.yaml",
-    "notes/yolo26_fam_stage_a.md",
 )
 
 

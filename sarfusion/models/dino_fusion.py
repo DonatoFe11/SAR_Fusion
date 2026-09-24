@@ -478,7 +478,7 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
       • mixed query selection (encoder anchors + learned query content);
       • look-forward-twice (LFT) with iterative box refinement.
 
-    Extra constructor parameters (all have sensible defaults):
+    Extra constructor parameters:
       num_dn_groups    : int   = 5     number of CDN groups
       label_noise_prob : float = 0.5   DINO label-noise ratio
       box_noise_scale  : float = 1.0   scale of the positive/negative box perturbations
@@ -777,9 +777,7 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
         # MQS replaces the one-stage learned queries only on the positional
         # side: its decoder content is still a learned query table.  Warm-start
         # that table from the content half of the pretrained Deformable-DETR
-        # queries instead of discarding it and starting all 300 queries from
-        # random values.  This is essential when converting a one-stage
-        # checkpoint on a relatively small downstream dataset.
+        # queries to retain the pretrained content initialization.
         pretrained_queries = base_model.model.query_position_embeddings.weight
         _, pretrained_query_content = torch.split(
             pretrained_queries, model.config.d_model, dim=1
@@ -789,8 +787,7 @@ class DINOFusionForObjectDetection(DeformableDetrFusionForObjectDetection):
 
         # The two-stage encoder transform does not exist in the one-stage
         # checkpoint.  An identity warm start preserves the already useful
-        # encoder representation; a random projection destroyed it before the
-        # newly initialized proposal heads could learn to rank anchors.
+        # encoder representation while the proposal heads learn to rank anchors.
         nn.init.eye_(model.model.enc_output.weight)
         nn.init.zeros_(model.model.enc_output.bias)
 

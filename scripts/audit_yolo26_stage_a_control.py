@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Fail-closed post-training audit for the YOLO26 Additive seed-40 control.
+"""Check the YOLO26 Additive seed-40 control after training.
 
-The resulting ``control_audit.json`` is the only artifact that may unlock the
-matched FAM candidate.  This audit intentionally does not score any test set.
-"""
+The FAM runner requires a passing control_audit.json. The audit checks
+training and checkpoint consistency without evaluating the test set."""
 
 from __future__ import annotations
 

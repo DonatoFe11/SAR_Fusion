@@ -1,4 +1,4 @@
-# Stage-A RT-DETR + FAM + P2 ablation. This file intentionally contains one
+# Stage-A RT-DETR + FAM + P2 ablation. This reference configuration contains one
 # complete seed only. It uses the same whole-video development split and the
 # same fixed ten-epoch checkpoint rule as the RT-DETR + FAM baseline.
 #

@@ -30,7 +30,7 @@ parameters:
       pretrained_path: [checkpoints/fusiondetr_all_tepn3c4l.safetensors]
       
 
-  dataset: # parameters depending on the class you defined for the dataset
+  dataset: # dataset-specific parameters
     name: [wisard] 
     root: [dataset/WiSARD]
     preprocessor:

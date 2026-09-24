@@ -59,6 +59,7 @@ class TestRTDetrFAMHighResolution(unittest.TestCase):
         self.assertNotIn("early_stopping_patience", highres["train"])
 
 
+    @unittest.skipUnless(RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_five_seed_results_are_complete_and_fail_promotion_rule(self):
         with RESULTS_PATH.open(newline="", encoding="utf-8") as file:
             rows = list(csv.DictReader(file))

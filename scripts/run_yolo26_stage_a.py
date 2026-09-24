@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Run one frozen YOLO26 RGB+IR Stage A arm.
+"""Run one YOLO26 RGB+IR Stage A arm.
 
-The command performs source/data/weight checks and a candidate-safe GPU
-forward/backward probe before starting the scientific run.  It never evaluates
-the test split.
-"""
+Check source, dataset and weight hashes, then run a GPU forward/backward
+probe with FAM before training. Evaluation uses the validation split."""
 
 from __future__ import annotations
 
@@ -374,7 +372,7 @@ def main() -> int:
     training["project"] = str((repository / config["training"]["project"]).resolve())
     SETTINGS.update({"wandb": False})
 
-    # Our GPU preflight exercises the actual 4-channel FAM model in FP16.
+    # The GPU preflight uses the 4-channel FAM model in FP16.
     # The upstream generic AMP check would instead download/test YOLO26n RGB.
     import ultralytics.engine.trainer as trainer_module
 

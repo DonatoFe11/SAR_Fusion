@@ -1,10 +1,6 @@
-"""
-RT-DETR Hybrid Model (FAM + CMX + Positional Encoding)
-Logica: 
-1) Allinea spazialmente (FAM Deformable Convolutions).
-2) Calibra sensori per eliminare il rumore (CM-FRM).
-3) Fonde i segnali usando Attenzione 2D (FFM) con Bypass protettivo P3 per i target SAR.
-"""
+"""RT-DETR con FAM, rettifica CMX e cross-attention posizionale.
+
+Su P3 uso il fallback convoluzionale per limitare il costo in memoria."""
 
 import copy
 import math
@@ -23,7 +19,7 @@ from transformers.models.rt_detr.modeling_rt_detr import (
 # 1. POSITIONAL ENCODING
 # ---------------------------------------------------------
 class SinePositionalEncoding2D(nn.Module):
-    """Genera i token posizionali 2D per dare cognizione spaziale alla Cross-Attention"""
+    """Codifica le coordinate 2D per la cross-attention."""
     def __init__(self, temperature=10000):
         super().__init__()
         self.temperature = temperature
@@ -64,7 +60,7 @@ class FeatureAlignmentModule(nn.Module):
         self.offset_conv = nn.Conv2d(in_channels * 2, 27, kernel_size=3, padding=1)
         self.deform_conv = DeformConv2d(in_channels, in_channels, kernel_size=3, padding=1)
         
-        # Inizializza a 0 (All'inizio l'operazione fa passare i dati identici)
+        # Offset iniziali nulli e mask sigmoid(0)=0.5; il filtro DCN resta appreso.
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
         
@@ -151,8 +147,7 @@ class FFM(nn.Module):
         ir = torch.nan_to_num(ir, nan=0.0, posinf=1e4, neginf=-1e4)
         b, c, h, w = rgb.shape
         
-        # Bypass P3 OOM: Se i target sono >1600 usa solo convoluzione 
-        # (Ora funziona stupendamente perchè il FAM prima ha allineato le feature!)
+        # Oltre 1600 posizioni uso la fusione convoluzionale per limitare la memoria.
         if h * w > 1600:
             out = self.out_conv(torch.cat([rgb, ir], dim=1))
             return torch.nan_to_num(out, nan=0.0, posinf=1e4, neginf=-1e4)
@@ -163,7 +158,7 @@ class FFM(nn.Module):
         ir_pos = self.k_norm(ir + pos)
         ir_val = self.v_norm(ir)
 
-        # Q (Cerca) basate su RGB+pos. K (Offrono chiave) basate su IR+pos. V (Offrono dati) basate su IR.
+        # Query da RGB + posizione, key da IR + posizione, value da IR.
         q = self.q_proj(rgb_pos).view(b, self.num_heads, self.head_dim, -1).transpose(2, 3)
         k = self.k_proj(ir_pos).view(b, self.num_heads, self.head_dim, -1).transpose(2, 3)
         v = self.v_proj(ir_val).view(b, self.num_heads, self.head_dim, -1).transpose(2, 3)
@@ -224,13 +219,13 @@ class RTDetrCMXHybridBackbone(nn.Module):
             r_f = torch.nan_to_num(r_f, nan=0.0, posinf=1e4, neginf=-1e4)
             i_f = torch.nan_to_num(i_f, nan=0.0, posinf=1e4, neginf=-1e4)
             
-            # 1. Trazione e allineamento (Supera la Parallasse)
+            # 1. Allineamento delle feature IR tramite FAM
             i_aligned = self.aligners[i](r_f, i_f)
             
-            # 2. Rettifica con pixel ora sovrapponibili (Evita interferenza distruttiva)
+            # 2. Rettifica delle feature RGB e IR
             r_rect, i_rect = self.rectifiers[i](r_f, i_aligned)
             
-            # 3. Fusione via Positional Cross-Attention (Evita Ghosting) & Convolutional Fallback P3 (Evita OOM)
+            # 3. Cross-attention posizionale, con fallback convoluzionale su P3
             f_feat = self.fusers[i](r_rect, i_rect)
             f_feat = torch.nan_to_num(f_feat, nan=0.0, posinf=1e4, neginf=-1e4)
             

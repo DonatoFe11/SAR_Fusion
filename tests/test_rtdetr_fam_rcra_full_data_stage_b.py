@@ -184,6 +184,7 @@ class TestRTDETRFAMRCRAFullDataStageB(unittest.TestCase):
                 (output_dir / "rtdetr_fam_rcra_full_data_stage_b_evaluation.csv").is_file()
             )
 
+    @unittest.skipUnless(RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_versioned_results_reproduce_frozen_failed_confirmation(self):
         with RESULTS_PATH.open(newline="", encoding="utf-8") as input_file:
             rows = list(csv.DictReader(input_file))

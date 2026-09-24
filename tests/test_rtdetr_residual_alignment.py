@@ -293,6 +293,7 @@ class TestReliabilityConditionedResidualAlignment(unittest.TestCase):
         self.assertEqual(candidate_train, baseline["train"])
 
 
+    @unittest.skipUnless(RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_five_seed_result_is_complete_and_passes_promotion_rule(self):
         with RESULTS_PATH.open(newline="", encoding="utf-8") as result_file:
             rows = list(csv.DictReader(result_file))

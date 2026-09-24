@@ -16,7 +16,7 @@ from transformers.models.rt_detr.modeling_rt_detr import (
 # 1. FEATURE ALIGNMENT MODULE (FAM)
 #   - RGB guides spatial offset prediction for IR
 #   - Deformable Conv on IR for explicit alignment
-#   - Solves RGB-IR misalignment issue
+#   - Learned alignment before additive fusion
 # ============================================================
 class FeatureAlignmentModule(nn.Module):
     """
@@ -31,7 +31,7 @@ class FeatureAlignmentModule(nn.Module):
         # RGB features → offset prediction
         self.offset_conv = nn.Conv2d(
             in_channels * 2,  # RGB + IR concatenated
-            27,  # 3x3 kernel: 2 offset (x,y) * 9 points + 9 mask
+            27,  # 3x3 kernel: 9 pairs of (dy, dx) offsets and 9 mask logits
             kernel_size=3,
             padding=1
         )
@@ -44,12 +44,12 @@ class FeatureAlignmentModule(nn.Module):
             padding=1
         )
         
-        # Initialize offset to zero so that the deformable conv starts as a standard conv
+        # Constructor initialization: zero offsets and sigmoid masks of 0.5.
+        # Hugging Face post_init can reinitialize this predictor later.
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
 
-        # Se freeze=True, replichiamo formalmente l'effetto "regolarizzatore"
-        # congelando i pesi e impedendo l'aggiornamento dei gradienti.
+        # Con freeze=True i parametri FAM non ricevono gradienti.
         if freeze:
             for param in self.parameters():
                 param.requires_grad = False
@@ -71,7 +71,7 @@ class FeatureAlignmentModule(nn.Module):
         # Predict offset and modulation scalars
         out = self.offset_conv(concat)  # [B, 27, H, W]
         
-        # Split: 18 channels for offsets (x,y for 9 points), 9 for mask
+        # 18 offset channels, interleaved (dy, dx), followed by 9 mask logits
         offset = self.transform_offset(out[:, :18, :, :])  # [B, 18, H, W]
         mask = torch.sigmoid(out[:, 18:, :, :])  # [B, 9, H, W]
         
@@ -262,7 +262,7 @@ class BoxGuidedCommonOffsetFeatureAlignmentModule(FeatureAlignmentModule):
     literal image registration.
 
     Guidance is bounded to four feature cells, but the total DCNv2 offset is
-    deliberately not bounded: the previous bounded-total-offset ablation was
+    not bounded: the previous bounded-total-offset ablation was
     already negative.  The branch is suppressed sample-wise when either input
     modality is absent under Modal Dropout.
     """
@@ -889,7 +889,7 @@ class ReliabilityConditionedResidualAlignment(nn.Module):
 class ScalarResidualAlignment(nn.Module):
     """Per-level scalar control for the RCRA residual formulation.
 
-    This deliberately removes every image-, modality- and location-dependent
+    This removes every image-, modality- and location-dependent
     descriptor from RCRA. One scalar logit is learned for each feature level,
     allowing the experiment to distinguish conditional spatial selection from
     simple calibration of the FAM residual. The parameterization and exact
@@ -1023,7 +1023,7 @@ class RTDetrFusionBackbone(nn.Module):
             fam_modules = []
             for level_index, channels in enumerate(feature_channels):
                 # Box-derived displacement is reliable at the high-resolution
-                # P3 map.  P4/P5 targets would be sub-cell and are deliberately
+                # P3 map. P4/P5 targets would be sub-cell and are
                 # left as the historical FAM rather than adding unsupervised
                 # copies of the new branch.
                 level_variant = self.fam_variant
@@ -1187,7 +1187,7 @@ class RTDetrFusionBackbone(nn.Module):
 
 
 # ============================================================
-# 3. RT-DETR MODEL (NO forward override!)
+# 3. RT-DETR MODEL (inherited forward)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
     def __init__(
@@ -1263,7 +1263,7 @@ class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
         residual_alignment_hidden_channels: int = 16,
         use_scalar_residual_alignment: bool = False,
     ):
-        # Trick: initialize as standard RGB model
+        # Initialize the RGB detector before replacing its backbone.
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
         super().__init__(tmp_cfg)
