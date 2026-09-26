@@ -1,10 +1,7 @@
-"""Dual-backbone RGB/IR fusion for Hugging Face RT-DETRv2.
+"""RGB/IR fusion with separate backbones for Hugging Face RT-DETRv2.
 
-This module deliberately mirrors the established RT-DETR fusion path while
-replacing only the detector implementation.  It lives in a separate module so
-the historical Transformers 4.43 environment can still import ``sarfusion``;
-callers import it lazily only in the dedicated RT-DETRv2 environment.
-"""
+Imported lazily so the RT-DETR v1 environment with Transformers 4.43
+can still load the rest of sarfusion."""
 
 from __future__ import annotations
 
@@ -190,9 +187,8 @@ class RTDetrV2FusionModel(RTDetrV2Model):
         # The established RT-DETR v1 FAM calls Hugging Face ``post_init`` after
         # constructing the backbone.  For ``current_dcnv2`` this replaces the
         # raw module's zero offset predictor with the HF random convolution
-        # initialization.  Stage A intentionally reproduces that effective
-        # historical behavior; it must not be silently changed to the raw
-        # constructor's zero initialization.  Variants with an explicit reset
+        # initialization. Stage A uses this initialization for comparison
+        # with v1. Variants with an explicit reset
         # contract still restore their defining initialization below.
         if self.backbone.fam_modules is not None:
             for fam_module in self.backbone.fam_modules:
@@ -240,7 +236,7 @@ class RTDetrV2FusionForObjectDetection(RTDetrV2ForObjectDetection):
         self.model.decoder.class_embed = class_embed
         self.model.decoder.bbox_embed = bbox_embed
         self.config = config
-        # PreTrainedModel infers the loss from the concrete class name.  Our
+        # PreTrainedModel infers the loss from the concrete class name. The
         # ``Fusion`` infix would otherwise fall back to the generic DETR loss,
         # whose config contract is incompatible with RT-DETR(v2).  Bind the
         # exact upstream loss mapping explicitly.

@@ -1,9 +1,7 @@
-"""Isolated Ultralytics YOLO26 RGB+IR integration.
+"""RGB+IR integration for Ultralytics YOLO26 8.4.138.
 
-This package intentionally does not import :mod:`sarfusion.models` or
-:mod:`sarfusion.data`: those packages depend on the historical THU-MIG
-YOLOv10 fork, whereas this integration targets upstream Ultralytics 8.4.138.
-"""
+Keep imports independent of sarfusion.models and sarfusion.data, which
+use the THU-MIG YOLOv10 fork."""
 
 from .model import YOLO26FusionDetectionModel
 

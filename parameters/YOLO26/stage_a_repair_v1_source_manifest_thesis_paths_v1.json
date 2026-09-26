@@ -1,0 +1,128 @@
+{
+  "archived_source_manifest": "parameters/YOLO26/stage_a_repair_v1_source_manifest.json",
+  "archived_source_manifest_sha256": "f6ef8616ce45b834cdb8bb7a777ecb6c89c545f7fa028580366d053fc981e48f",
+  "files": [
+    {
+      "bytes": 4641,
+      "path": "parameters/YOLO26/stage_a_repair_v1_source_manifest.json",
+      "sha256": "f6ef8616ce45b834cdb8bb7a777ecb6c89c545f7fa028580366d053fc981e48f"
+    },
+    {
+      "bytes": 464,
+      "path": "requirements-yolo26.txt",
+      "sha256": "ae5069aeb96edeac0aec602ac471f3720d415d4e54ff242484140902e749d5e2"
+    },
+    {
+      "bytes": 248,
+      "path": "sarfusion/yolo26/__init__.py",
+      "sha256": "2aea73bdac09d4eb418cfa10f4749409bb14a0fdc500878bca89ce23ca47429b"
+    },
+    {
+      "bytes": 2050,
+      "path": "sarfusion/yolo26/fam.py",
+      "sha256": "1489634c44706055de20e3b9387ac18f64c4b3462a651d04ec214e0e1dc49388"
+    },
+    {
+      "bytes": 12449,
+      "path": "sarfusion/yolo26/model.py",
+      "sha256": "a1a75feb8222f3a1171a7a1bcee1ba54f85bfe676824674f267fdd013096c4f9"
+    },
+    {
+      "bytes": 19091,
+      "path": "sarfusion/yolo26/data.py",
+      "sha256": "1c17815a422935f4a30bf57727c1cf5cf20119fc331f148707aee8e1a6a0c348"
+    },
+    {
+      "bytes": 6356,
+      "path": "sarfusion/yolo26/trainer.py",
+      "sha256": "93e4a9ce97420da4ab5596e98f88b9f16423d4993f362c5d905137c5a5f620f2"
+    },
+    {
+      "bytes": 3387,
+      "path": "sarfusion/yolo26/protocol.py",
+      "sha256": "083fdd53dde594aadc341e6bebe9fa2ab31e42f4ba92fb9c0edff02d99d3f387"
+    },
+    {
+      "bytes": 18671,
+      "path": "scripts/run_yolo26_stage_a.py",
+      "sha256": "d7d48e4d58ff9db40151c8a8eaf91a4f4593c8c3828ce4cc1330c17d573c2206"
+    },
+    {
+      "bytes": 4986,
+      "path": "scripts/run_yolo26_stage_a_repair.py",
+      "sha256": "78a99aea780767875ad8a99cdfb0ad4148c6f6ea0aefbf92e2c9e0ee99333fa1"
+    },
+    {
+      "bytes": 9088,
+      "path": "scripts/audit_yolo26_integration.py",
+      "sha256": "207074927151c76cb5c75c3c90c2ba9de7beb3704751173730e04d57eee6efb9"
+    },
+    {
+      "bytes": 20534,
+      "path": "scripts/audit_yolo26_stage_a_control.py",
+      "sha256": "3f1b5d91bbadb89f8ec6e043eca4fac303d11c40c172bf90e161852249830967"
+    },
+    {
+      "bytes": 5241,
+      "path": "scripts/audit_yolo26_stage_a_repair.py",
+      "sha256": "f7e99f5c57de3cb3ebba08b78a8c82819f9b7cc8921546fa9f623c53124493fd"
+    },
+    {
+      "bytes": 2279,
+      "path": "scripts/freeze_yolo26_source_manifest.py",
+      "sha256": "16ef5798eabb8b96b8ba63e8bd8442a59712cd43470754e9d48c03165653c977"
+    },
+    {
+      "bytes": 2883,
+      "path": "scripts/freeze_yolo26_stage_a_repair_manifest.py",
+      "sha256": "267b7ec8d36d9b6be3f06f75d0ec73c787ec4b0ea871c5537ecac2628e7cca4d"
+    },
+    {
+      "bytes": 5169,
+      "path": "tests/test_yolo26.py",
+      "sha256": "5189bd9ceadfe0867e0068be74454ccb23a1e4f272718640ef590077a961238b"
+    },
+    {
+      "bytes": 4292,
+      "path": "tests/test_yolo26_repair_protocol.py",
+      "sha256": "533f2eebe713fc4b5fc18e87a7167a10bd66ae47c80c4b74aa1c2027aa841bac"
+    },
+    {
+      "bytes": 609,
+      "path": "parameters/YOLO26/stage_a_split.yaml",
+      "sha256": "ad1af76c6c2db03979697366a3c67cf90fe759733ff1a6c568e4f0c854215d4c"
+    },
+    {
+      "bytes": 3082,
+      "path": "parameters/YOLO26/stage_a_source_manifest_thesis_paths_v1.json",
+      "sha256": "367c9201e6d9148ee11ddfb7e119bb9aaacfaf2af6b396248cd8c72083fc04b0"
+    },
+    {
+      "bytes": 2168,
+      "path": "parameters/YOLO26/yolo26s_additive_seed40_stage_a.yaml",
+      "sha256": "14b7599d544cf56479c637e68e86da9351b96cf1eb47321a86f95bf3d683ee88"
+    },
+    {
+      "bytes": 2137,
+      "path": "parameters/YOLO26/yolo26s_fam_seed40_stage_a.yaml",
+      "sha256": "4af29228ea24c4f1f7f3008f9d08a87b351bab47e8c108a9024ec84a57cb45b7"
+    },
+    {
+      "bytes": 2193,
+      "path": "parameters/YOLO26/yolo26s_additive_seed40_stage_a_repair_v1.yaml",
+      "sha256": "505692d74b2f98b33b3cf9c081a6d42e47a83a7ce171d17d0123730c3c257112"
+    },
+    {
+      "bytes": 2278,
+      "path": "parameters/YOLO26/yolo26s_fam_seed40_stage_a_repair_v1.yaml",
+      "sha256": "fc18b69f4e87fdc56861df62dc5de64d0a30106dc5bceeb850f1ebd596066ef1"
+    }
+  ],
+  "parent_source_manifest": "parameters/YOLO26/stage_a_source_manifest_thesis_paths_v1.json",
+  "parent_source_manifest_sha256": "367c9201e6d9148ee11ddfb7e119bb9aaacfaf2af6b396248cd8c72083fc04b0",
+  "protocol_revision": "warmup_bias_repair_v1",
+  "schema": "sarfusion.yolo26.stage_a.repair_source.v1",
+  "source_revision": "thesis_paths_v1",
+  "ultralytics": "8.4.138",
+  "ultralytics_tag_commit": "dad7bb4534c95021bc14969ab25d77b77c4efdc3"
+}

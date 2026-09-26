@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the five portrait-native figures used by the Search and Rescue thesis.
+"""Generate thesis figures with Cairo.
 
-The script intentionally depends only on pycairo, which is already available in
-the project environment. Text remains vector text in the four PDF outputs; the
-P5 diagnostic is a high-resolution raster assembled from saved experiment data.
-"""
+The four PDF outputs retain vector text; the P5 diagnostic combines
+saved raster plots. Previews are written outside the repository."""
 
 from __future__ import annotations
 
@@ -16,7 +14,7 @@ import cairo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "notes" / "Search_and_Rescue" / "images"
+OUT = ROOT / "notes" / "Thesis" / "images"
 PREVIEW_OUT = Path("/tmp/thesis_figure_previews")
 
 FONT = "DejaVu Sans"
@@ -620,8 +618,7 @@ def generate_p5_collapse():
         (20, 1360),
     ]
     # The original six-panel diagnostic uses equal 600 px columns.  Cropping
-    # below the legacy headings preserves the actual PCA maps while allowing
-    # scientifically precise labels and an A4-readable arrangement.
+    # below the headings preserves the PCA maps and leaves room for A4 labels.
     for index, ((panel_x, panel_y), panel_title) in enumerate(
         zip(panel_positions, panel_titles)
     ):

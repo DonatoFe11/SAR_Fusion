@@ -1,12 +1,8 @@
-"""Empirical recall versus false positives per image, with NumPy only.
+"""Compute empirical recall versus false positives per image with NumPy.
 
-Matching is performed within each image in descending confidence order. This
-differs deliberately from the historical error-analysis IoU-order matcher:
-lower-scoring predictions must not change the matches of predictions retained
-at a higher confidence threshold. The historical analysis remains unchanged.
-All equal-confidence predictions enter a curve together, so every returned
-point is attainable by applying ``score >= threshold``.
-"""
+Within each image, match detections in descending confidence order so
+low-confidence predictions cannot change earlier matches. Equal-confidence
+predictions enter the curve together: each point corresponds to score >= threshold."""
 
 from __future__ import annotations
 

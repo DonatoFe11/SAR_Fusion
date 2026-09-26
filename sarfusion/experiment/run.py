@@ -1380,7 +1380,7 @@ class Run:
         #     logger.info(f"DEBUG - GT boxes: {gt_boxes[:2] if gt_boxes is not None and len(gt_boxes) > 0 else 'empty or None'}")
         
         # Aggrega le predizioni
-        # Nota: IoU 0.5 è conservativo (alto recall) - preferibile per SAR dove perdere una persona è critico
+        # NMS con soglia IoU 0.5 per aggregare le predizioni dei tile.
         aggregated = aggregate_tile_predictions(tile_predictions, iou_threshold=0.5)
         
         # DEBUG logging commentato

@@ -8,7 +8,7 @@ study:
   promotion_delta: 0.010000
   future_seeds_on_pass: [41, 42, 43, 44]
   split_config: parameters/YOLO26/stage_a_split.yaml
-  source_manifest: parameters/YOLO26/stage_a_source_manifest.json
+  source_manifest: parameters/YOLO26/stage_a_source_manifest_thesis_paths_v1.json
 
 model:
   weights: yolo26s.pt

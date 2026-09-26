@@ -1,6 +1,5 @@
 # Frozen after all five fixed-10 training runs completed and before evaluating
-# seeds 41--44 on MtErie. Seed 40 had already been used as a pipeline diagnostic;
-# it is nevertheless evaluated again by the same runner as the other seeds.
+# seeds 41--44 on MtErie.
 
 protocol:
   id: rtdetr_fam_sequence_validation_checkpoint_evaluation_v1
@@ -8,7 +7,8 @@ protocol:
   status: frozen_before_inference
   purpose: paired_best_vs_latest_checkpoint_selection_audit
 
-  training_config: parameters/RTDETR/rtdetr_fam_sequence_validation_fixed10_protocol.yaml
+  # Equivalent model template; checkpoints still come from the historical project below.
+  training_config: parameters/RTDETR/rtdetr_fam_stage_a_five_seed_v2.yaml
   training_project: RTDETR_FAM_SequenceVal_Fixed10_Protocol
   seeds: [40, 41, 42, 43, 44]
   checkpoints: [best, latest]

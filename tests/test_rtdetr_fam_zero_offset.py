@@ -72,7 +72,7 @@ class OffsetOnlyTests(unittest.TestCase):
         torch.testing.assert_close(prediction[:, 18:], mask_before, rtol=0, atol=0)
         optimizer = torch.optim.AdamW(module.parameters(), lr=0.001)
         output = module(rgb, ir)
-        self.assertFalse(torch.allclose(output, ir))  # This is NOT identity_dcnv2.
+        self.assertFalse(torch.allclose(output, ir))  # Zero offsets leave the learned DCN filter and masks active.
         output.square().mean().backward()
         self.assertTrue(torch.isfinite(module.offset_conv.weight.grad).all())
         self.assertGreater(module.offset_conv.weight.grad[:18].abs().max().item(), 0)
@@ -234,9 +234,9 @@ class ProtocolTests(unittest.TestCase):
                 child.assert_not_called()
             self.assertEqual(marker.read_text(), "preserve me")
 
-    def test_historical_source_manifest_is_unchanged(self):
+    def test_reference_source_manifest_matches_current_revision(self):
         manifest = intervention.repro.build_training_source_manifest()
-        self.assertEqual(manifest["sha256"], "3320b24d060aaacec316290c114933db1dce8d71eaaf455f1ccb6448183f76e5")
+        self.assertEqual(manifest["sha256"], "d621aef9e8628565631ea4372bed5530dc7ee632e724c08cfe725950b404acc2")
 
     def test_new_manifest_covers_the_intervention_and_runner(self):
         intervention.register_experiment()

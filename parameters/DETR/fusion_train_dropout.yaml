@@ -36,7 +36,7 @@ parameters:
       threshold: [0.7]
       
 
-  dataset: # parameters depending on the class you defined for the dataset
+  dataset: # dataset-specific parameters
     name: [wisard] 
     root: [dataset/WiSARD]
     preprocessor:

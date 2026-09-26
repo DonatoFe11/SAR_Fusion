@@ -10,7 +10,7 @@ study:
   primary_metric: best_val_map50
   promotion_delta: 0.010000
   split_config: parameters/YOLO26/stage_a_split.yaml
-  source_manifest: parameters/YOLO26/stage_a_five_seed_v2_source_manifest.json
+  source_manifest: parameters/YOLO26/stage_a_five_seed_v2_source_manifest_comments_v1.json
 
 model:
   weights: yolo26s.pt

@@ -1,57 +1,15 @@
-"""
-fam_alignment_check.py
------------------------
-Validates FAM (Feature Alignment Module) alignment through PCA
-visualization of feature maps, in the style of DINOv2/DINOv3.
+"""Visualize RGB, IR and aligned IR features with a shared PCA projection.
 
-Supports two model families:
-  --model-type hf    (default) RT-DETR / Deformable DETR / DINO fusion,
-                      loaded from .safetensors + an HF grid-search YAML config.
-  --model-type yolo  YOLOv10FusionFAM, loaded from an Ultralytics .pt checkpoint
-                      (the complete model instance is pickled in the checkpoint,
-                      so build_model()+load_state_dict() is not needed).
-
-For a fusion model with use_fam=True, forward hooks capture RGB/IR features
-immediately before and after every FeatureAlignmentModule in the backbone.
-The features are projected to RGB with PCA (three principal components ->
-R, G, B channels), with optional foreground isolation based on the first
-component (the same technique used in DINOv2/v3 visualizations).
-
-For each feature-pyramid level, the script produces a figure containing:
-  (a) PCA(feature RGB)
-  (b) PCA(feature IR)              -- pre-FAM
-  (c) PCA(feature FAM(IR))         -- post-FAM, the actual decoder/neck input
-  (d) RGB+IR overlay                -- alpha blend, shows pre-alignment differences
-  (e) RGB+FAM(IR) overlay           -- alpha blend after alignment
-  (f) FAM offset field              -- additional diagnostic quiver plot
-
-Hooks are registered by CLASS NAME (FeatureAlignmentModule), rather than by a
-fixed path. The script is therefore compatible, without modification, with any
-architecture that reuses this class (rtdetr_fusion.py,
-deformable_detr_fusion.py, yolo_fusion_fam.py).
+Supports Hugging Face fusion models (.safetensors) and YOLOv10FusionFAM
+(.pt). Forward hooks capture features and FAM sampling offsets at each
+pyramid level. Output panels show the three PCA maps, overlays and a
+quiver summary of the learned sampling field.
 
 Usage (HF):
-    python fam_alignment_check.py \
-        --config /path/to/fusion_rtdetr.yaml \
-        --checkpoint /path/to/tracking_dir/<run>/best/model.safetensors \
-        --dataset-root /path/assoluto/a/dataset/WiSARD \
-        --sample-idx 0 \
-        --split val \
-        --out-dir ./fam_alignment_vis
+    python fam_alignment_check.py         --config parameters/RTDETR/rtdetr_fam_stage_a_five_seed_v2.yaml         --checkpoint /path/to/tracking_dir/<run>/best/model.safetensors         --dataset-root /path/assoluto/a/dataset/WiSARD         --sample-idx 0         --split val         --out-dir ./fam_alignment_vis
 
 Usage (YOLO):
-    python fam_alignment_check.py \
-        --model-type yolo \
-        --config parameters/YOLO/30.yolov10-fam.yaml \
-        --run-index 2 \
-        --checkpoint SarYOLO/YOLOv10-FAM-Grid2/weights/best.pt \
-        --data-yaml wisards_vis_ir.yaml \
-        --sample-idx 0 1 2 \
-        --split val \
-        --out-dir ./fam_alignment_vis_yolo
-
-Additional dependencies beyond the sarfusion environment: scikit-learn, matplotlib
-    pip install scikit-learn matplotlib --break-system-packages
+    python fam_alignment_check.py         --model-type yolo         --config parameters/YOLO/30.yolov10-fam.yaml         --run-index 2         --checkpoint SarYOLO/YOLOv10-FAM-Grid2/weights/best.pt         --data-yaml wisards_vis_ir.yaml         --sample-idx 0 1 2         --split val         --out-dir ./fam_alignment_vis_yolo
 """
 
 import argparse
@@ -333,7 +291,7 @@ def fit_pca_projector(feats, isolate_foreground=True, fg_percentile=50):
     three-component projection) on the pooled pixels of all feature maps so
     that colors are directly comparable across panels.
 
-    IMPORTANT: independently fitting PCA for each feature map gives bases
+    Independent PCA fits for each feature map give bases
     with arbitrary component sign and rotation. Therefore, "blue" in one map
     need not represent the same structure as "blue" in another. With a shared
     basis, the same color in two panels denotes the same feature-space direction.
@@ -409,14 +367,14 @@ def overlay(img_a, img_b, alpha=0.5):
 # ---------------------------------------------------------------------------
 
 def offset_vectors(offset, offset_kind):
-    """Return offsets as ``(points, 2, H, W)`` in feature-map pixels."""
+    """Return ``(dx, dy)`` offsets as ``(points, 2, H, W)`` in feature-map pixels."""
     if offset_kind == "dcnv2_3x3":
         if offset.ndim != 3 or offset.shape[0] != 18:
             raise ValueError(
                 "DCNv2 offsets must have shape (18, H, W), got "
                 f"{tuple(offset.shape)}"
             )
-        return offset.reshape(9, 2, *offset.shape[-2:])
+        return offset.reshape(9, 2, *offset.shape[-2:]).flip(1)
     if offset_kind == "grid_sample":
         if offset.ndim != 3 or offset.shape[0] != 2:
             raise ValueError(
@@ -597,7 +555,7 @@ def plot_offset_field(ax, offset, mask=None, offset_kind="dcnv2_3x3", stride=4):
     ys, xs = np.mgrid[0:H:stride, 0:W:stride]
     ax.quiver(
         xs, ys,
-        mean_dx[::stride, ::stride], -mean_dy[::stride, ::stride],
+        mean_dx[::stride, ::stride], mean_dy[::stride, ::stride],
         color="red", angles="xy", scale_units="xy", scale=0.3, width=0.003,
     )
     ax.set_xlim(0, W)
@@ -612,7 +570,7 @@ def plot_offset_field(ax, offset, mask=None, offset_kind="dcnv2_3x3", stride=4):
 
 def offset_spatial_uniformity(offset, offset_kind="dcnv2_3x3"):
     """
-    offset: (18, H, W) - 9 kernel points x (dx, dy), in feature-map pixels.
+    offset: (18, H, W) - 9 kernel points x (dy, dx), in feature-map pixels.
 
     Measures whether the predicted offset is nearly CONSTANT over all output
     cells (a uniform shift/bias rather than a content-adaptive correction), or

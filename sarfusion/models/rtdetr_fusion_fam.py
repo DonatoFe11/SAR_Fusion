@@ -15,7 +15,7 @@ from transformers.models.rt_detr.modeling_rt_detr import (
 # 1. FEATURE ALIGNMENT MODULE (FAM)
 #    - RGB guida la predizione degli offset spaziali
 #    - Deformable Conv su IR per allineamento esplicito
-#    - Risolve il problema del misalignment RGB-IR
+#    - Allineamento appreso prima della fusione additiva
 # ============================================================
 class FeatureAlignmentModule(nn.Module):
     """
@@ -29,7 +29,7 @@ class FeatureAlignmentModule(nn.Module):
         # RGB features → offset prediction
         self.offset_conv = nn.Conv2d(
             in_channels * 2,  # RGB + IR concatenati
-            27,  # 3x3 kernel: 2 offset (x,y) * 9 punti + 9 mask
+            27,  # Kernel 3x3: 9 coppie di offset (dy, dx) e 9 logit per la mask
             kernel_size=3,
             padding=1
         )
@@ -42,7 +42,8 @@ class FeatureAlignmentModule(nn.Module):
             padding=1
         )
         
-        # Initialize offset to zero so that the deformable conv starts as a standard conv
+        # Constructor initialization: zero offsets and sigmoid masks of 0.5.
+        # Hugging Face post_init can reinitialize this predictor later.
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
         
@@ -61,7 +62,7 @@ class FeatureAlignmentModule(nn.Module):
         # Predici offset e modulation scalars
         out = self.offset_conv(concat)  # [B, 27, H, W]
         
-        # Split: 18 channels for offsets (x,y for 9 points), 9 for mask
+        # 18 offset channels, interleaved (dy, dx), followed by 9 mask logits
         offset = out[:, :18, :, :]  # [B, 18, H, W]
         mask = torch.sigmoid(out[:, 18:, :, :])  # [B, 9, H, W]
         
@@ -153,7 +154,7 @@ class RTDetrFusionBackbone(nn.Module):
 
 
 # ============================================================
-# 2. RT-DETR MODEL (NO forward override!)
+# 2. RT-DETR MODEL (forward ereditato)
 # ============================================================
 class RTDetrFusionModel(RTDetrModel):
     def __init__(self, config: RTDetrConfig):
@@ -167,7 +168,7 @@ class RTDetrFusionModel(RTDetrModel):
 # ============================================================
 class RTDetrFusionForObjectDetection(RTDetrForObjectDetection):
     def __init__(self, config: RTDetrConfig):
-        # Trick: inizializziamo come RGB standard
+        # Inizializzo il detector RGB prima di sostituire il backbone.
         tmp_cfg = copy.deepcopy(config)
         tmp_cfg.num_channels = 3
         super().__init__(tmp_cfg)

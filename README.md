@@ -109,3 +109,57 @@ Ater moving the trained checkpoint to the `checkpoints` folder, ensuring that th
 ```bash
 python main.py experiment --parameters "parameters/DETR/fusion_test.yaml"
 ```
+## RT-DETR environments and configurations
+
+See [the RT-DETR configuration guide](parameters/RTDETR/README.md) for the
+reference experiments and setup commands for `sarfusion` and
+`sarfusion-rtdetrv2`. YOLO26 uses a separate `sarfusion-yolo26` environment,
+created by cloning `sarfusion` and installing `requirements-yolo26.txt`.
+
+## Local data and thesis materials
+
+`dataset/`, checkpoints, W&B runs and `notes/` are local files excluded from Git.
+A fresh clone contains the implementations and reference configurations.
+Replaying completed experiments requires their original data and checkpoints;
+reports that compare against thesis results also require the relevant CSV/JSON
+files under `notes/Thesis/results/`.
+
+Tests of those local datasets and historical results are skipped when the files
+are absent. Model, loss, configuration and metric tests still run. Operational
+YOLO26 source manifests cover repository files and do not require local notes.
+Archived manifests retain the hashes recorded for the completed experiments.
+
+## Tests
+
+Run from the repository root in the corresponding environments. The historical
+YOLOv10 fork and current YOLO26 package require separate environments.
+
+```bash
+conda activate sarfusion
+python - <<'PY'
+from pathlib import Path
+import unittest
+
+suite = unittest.TestSuite()
+for path in sorted(Path("tests").glob("test_*.py")):
+    if not path.name.startswith("test_yolo26"):
+        suite.addTests(unittest.defaultTestLoader.discover("tests", pattern=path.name))
+result = unittest.TextTestRunner(verbosity=1).run(suite)
+raise SystemExit(not result.wasSuccessful())
+PY
+
+conda run -n sarfusion-rtdetrv2 python -m unittest discover -s tests -p 'test_rtdetr_v2*.py'
+conda run -n sarfusion-yolo26 python -m pytest -q tests/test_yolo26.py tests/test_yolo26_repair_protocol.py tests/test_yolo26_five_seed_v2.py
+```
+
+## Post-thesis maintenance
+
+The final review corrected box clipping at the left/top tile boundaries and the
+DCNv2 `(dy, dx)` interpretation in FAM diagnostic plots. Re-running tiled
+experiments or generating diagnostic plots uses these corrections. Existing
+thesis results and figures have not been regenerated. The pre-correction
+implementation is available at commit `bb6be50`.
+
+Training source hashes include comments and docstrings. Any edit to a covered
+file requires updating the operational hash before starting a new run; archived
+experiment manifests continue to identify their original sources.

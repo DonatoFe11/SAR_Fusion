@@ -28,7 +28,7 @@ parameters:
     warn_only: [false]
     trace: [true]
     training_source_manifest_id: [rtdetr_v2_fam_training_source_v1]
-    training_source_manifest_sha256: [e63ac26308d3a9e7651d216901f093492815dfe3c787c994b63482130a61d9bd]
+    training_source_manifest_sha256: [712f61f53cabc9c18a8f56146fb9075f466e7a9da1b37e667e6df5e2bfe81b0f]
     data_seed: *seed40
     model_seed: *seed40
     training_seed: *seed40

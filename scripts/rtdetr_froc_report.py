@@ -258,13 +258,13 @@ def _markdown(report, summary_rows):
         "Il CSV per seed riporta anche FPPI effettivamente raggiunta, soglia,",
         "TP e FP del punto empirico: la soglia descrive quel checkpoint su",
         "quell'acquisizione e non è una soglia ottimizzata per il deployment.",
-        "", f"- [Curve PDF](Search_and_Rescue/images/{STEM}.pdf)",
-        f"- [Curve PNG](Search_and_Rescue/images/{STEM}.png)",
-        f"- [Riepilogo CSV](Search_and_Rescue/results/{STEM}_summary.csv)",
-        f"- [Budget per seed](Search_and_Rescue/results/{STEM}_budgets.csv)",
-        f"- [Delta appaiati](Search_and_Rescue/results/{STEM}_paired.csv)",
-        f"- [Griglia aggregata](Search_and_Rescue/results/{STEM}_grid.csv)",
-        f"- [Metadati JSON](Search_and_Rescue/results/{STEM}.json)",
+        "", f"- [Curve PDF](Thesis/images/{STEM}.pdf)",
+        f"- [Curve PNG](Thesis/images/{STEM}.png)",
+        f"- [Riepilogo CSV](Thesis/results/{STEM}_summary.csv)",
+        f"- [Budget per seed](Thesis/results/{STEM}_budgets.csv)",
+        f"- [Delta appaiati](Thesis/results/{STEM}_paired.csv)",
+        f"- [Griglia aggregata](Thesis/results/{STEM}_grid.csv)",
+        f"- [Metadati JSON](Thesis/results/{STEM}.json)",
         "", "## Riproduzione", "",
         "Dalla root del repository, nell'ambiente `sarfusion`:",
         "", "```bash", "python scripts/run_rtdetr_recall_fppi.py --device cuda", "```", "",
@@ -421,8 +421,8 @@ def write_report(records, protocol, output_dir, publish=False):
     json_path = output_dir / f"{STEM}.json"
     json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
     if publish:
-        results_dir = REPO_ROOT / "notes" / "Search_and_Rescue" / "results"
-        images_dir = REPO_ROOT / "notes" / "Search_and_Rescue" / "images"
+        results_dir = REPO_ROOT / "notes" / "Thesis" / "results"
+        images_dir = REPO_ROOT / "notes" / "Thesis" / "images"
         results_dir.mkdir(parents=True, exist_ok=True)
         images_dir.mkdir(parents=True, exist_ok=True)
         for path in csv_paths + [json_path]:

@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Run one seed of the new complete-five-seed YOLO26 Stage A.
+"""Run one seed of the five-seed YOLO26 Stage A protocol.
 
-No performance/vitality screen authorizes another seed or the FAM arm.
-Archived v1 helpers supply the unchanged construction and GPU integrity probe.
-Source, data, initialization, full-budget and checkpoint-replay checks remain.
-"""
+Reuse v1 model construction and GPU checks. Each arm completes all five
+seeds; per-seed performance does not gate subsequent runs."""
 from __future__ import annotations
 
 import argparse
@@ -179,7 +177,7 @@ def main() -> int:
     training["project"] = str((repository / config["training"]["project"]).resolve())
     SETTINGS.update({"wandb": False})
 
-    # Our GPU preflight exercises the actual 4-channel FAM model in FP16.
+    # The GPU preflight uses the 4-channel FAM model in FP16.
     # The upstream generic AMP check would instead download/test YOLO26n RGB.
     import ultralytics.engine.trainer as trainer_module
 

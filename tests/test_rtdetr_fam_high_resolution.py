@@ -12,7 +12,7 @@ BASELINE_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
+    / "rtdetr_fam_stage_a_five_seed_v2.yaml"
 )
 HIGHRES_PATH = (
     REPO_ROOT
@@ -20,16 +20,10 @@ HIGHRES_PATH = (
     / "RTDETR"
     / "rtdetr_fam_800_sequence_validation_five_seed.yaml"
 )
-PROBE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_800_runtime_probe.yaml"
-)
 RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_800_stage_a_validation.csv"
 )
@@ -64,19 +58,8 @@ class TestRTDetrFAMHighResolution(unittest.TestCase):
         self.assertEqual(highres["train"]["max_epochs"], [10])
         self.assertNotIn("early_stopping_patience", highres["train"])
 
-    def test_probe_is_short_checkpoint_free_and_campaign_equivalent(self):
-        probe = load_yaml(PROBE_PATH)["parameters"]
-        campaign = load_yaml(HIGHRES_PATH)["parameters"]
 
-        self.assertEqual(probe["seed"], [40])
-        self.assertEqual(probe["train"]["max_epochs"], [1])
-        self.assertEqual(probe["train"]["max_steps_per_epoch"], [20])
-        self.assertEqual(probe["train"]["save_checkpoints"], [False])
-        self.assertIn("ExcludeFromCampaign", probe["tracker"]["tags"][0])
-        self.assertEqual(probe["model"], campaign["model"])
-        self.assertEqual(probe["dataset"], campaign["dataset"])
-        self.assertEqual(probe["dataloader"], campaign["dataloader"])
-
+    @unittest.skipUnless(RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_five_seed_results_are_complete_and_fail_promotion_rule(self):
         with RESULTS_PATH.open(newline="", encoding="utf-8") as file:
             rows = list(csv.DictReader(file))

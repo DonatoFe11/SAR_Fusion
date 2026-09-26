@@ -79,7 +79,7 @@ def check_nan(model, input_dict, output, loss, step, train_params):
     if torch.isnan(loss) or loss.detach() in [torch.inf, -torch.inf]:
         if (
             train_params["check_nan"] == 1
-        ):  # Makes sense only if we are checking every step
+        ):  # The check runs at each step in this branch.
             state_dict = {
                 "model": model.state_dict(),
                 "input_dict": input_dict,

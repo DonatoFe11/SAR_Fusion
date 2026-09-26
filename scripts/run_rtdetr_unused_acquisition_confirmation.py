@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Run the frozen RT-DETR confirmation on two unused WiSARD acquisitions.
+"""Evaluate RT-DETR on two additional WiSARD acquisitions.
 
-The runner is deliberately fail-closed. It verifies content-addressed source
-inventories, exact checkpoint hashes, the already-closed Stage-B decision and
-the author's consultation attestation before loading a model. All conditions
-reuse paired inputs and VIS ground truth; VIS-only is a channel intervention.
-"""
+Before loading a model, check dataset hashes, checkpoints, the Stage B
+decision and the recorded consultation attestation. All conditions use
+paired inputs and VIS annotations; VIS-only masks the IR channel."""
 
 from __future__ import annotations
 

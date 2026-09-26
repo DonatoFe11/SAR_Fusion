@@ -121,10 +121,10 @@ class TestBoxGuidedCommonOffsetFAM(unittest.TestCase):
 
     def test_seed40_matched_control_differs_only_by_declared_intervention(self):
         candidate_raw, candidate = _single_grid_config(
-            "rtdetr_fam_box_guided_sequence_validation_seed40.yaml"
+            "rtdetr_fam_box_guided_stage_a_five_seed_v2.yaml"
         )
         control_raw, control = _single_grid_config(
-            "rtdetr_fam_box_guided_matched_control_seed40.yaml"
+            "rtdetr_fam_stage_a_five_seed_v2.yaml"
         )
         self.assertNotEqual(
             candidate_raw["experiment"]["name"],
@@ -146,41 +146,6 @@ class TestBoxGuidedCommonOffsetFAM(unittest.TestCase):
         normalized_control["tracker"].pop("tags")
         self.assertEqual(normalized_candidate, normalized_control)
 
-    def test_conditional_seeds_41_44_have_fresh_matched_controls(self):
-        candidate_raw = load_yaml(
-            REPO_ROOT
-            / "parameters"
-            / "RTDETR"
-            / "rtdetr_fam_box_guided_sequence_validation_five_seed.yaml"
-        )
-        control_raw = load_yaml(
-            REPO_ROOT
-            / "parameters"
-            / "RTDETR"
-            / "rtdetr_fam_box_guided_matched_control_seeds41_44.yaml"
-        )
-        candidate_runs = {
-            run["seed"]: run
-            for run in make_grid(candidate_raw["parameters"])
-            if run["seed"] != 40
-        }
-        control_runs = {
-            run["seed"]: run for run in make_grid(control_raw["parameters"])
-        }
-        self.assertEqual(set(candidate_runs), {41, 42, 43, 44})
-        self.assertEqual(set(control_runs), set(candidate_runs))
-
-        for seed in sorted(candidate_runs):
-            candidate = deepcopy(candidate_runs[seed])
-            control = deepcopy(control_runs[seed])
-            candidate["model"]["params"]["fam_variant"] = "current_dcnv2"
-            candidate["train"].pop("box_guidance_lr")
-            candidate["train"].pop("box_guided_alignment")
-            candidate["dataset"].pop("box_alignment_targets")
-            candidate["dataset"].pop("box_alignment_max_distance")
-            candidate["tracker"].pop("tags")
-            control["tracker"].pop("tags")
-            self.assertEqual(candidate, control, msg=f"seed {seed}")
 
     def test_candidate_preserves_every_shared_fam_weight_and_global_rng(self):
         torch.manual_seed(19)

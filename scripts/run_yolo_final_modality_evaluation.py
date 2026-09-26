@@ -257,9 +257,8 @@ def build_aggregates(payloads, protocol, protocol_hash, output_dir, complete):
         and maximum_sanity_difference <= float(protocol["vis_ir_sanity_tolerance"])
     )
     # Completion records whether every frozen inference unit exists. The
-    # cross-evaluator sanity check is deliberately reported separately: a
-    # failed tolerance must remain visible, but it does not erase completed
-    # raw evaluations or invite them to be repeated until they agree.
+    # cross-evaluator tolerance check is reported separately from completion.
+    # A failed check keeps its recorded metrics for inspection.
     protocol_complete = complete and actual_keys == expected_keys
 
     combined = {

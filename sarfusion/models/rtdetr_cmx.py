@@ -1,8 +1,4 @@
-"""
-RT-DETR CMX Model - State-of-the-Art RGB-T Fusion
-Logica: Rettifica (CM-FRM) + Cross-Attention (FFM) + Multi-scale (P3, P4, P5).
-Vantaggio: Calibra i sensori per eliminare il rumore e usa l'attention per il disallineamento.
-"""
+"""RT-DETR con rettifica CM-FRM e fusione FFM sulle scale P3, P4 e P5."""
 
 import copy
 import torch
@@ -58,7 +54,7 @@ class CM_FRM(nn.Module):
         spatial_weights = self.spatial_conv(spatial_feat)
         ws_rgb, ws_ir = torch.split(spatial_weights, 1, dim=1)
         
-        # Output rettificato (informazione pulita)
+        # Feature dopo la rettifica
         return rgb + 0.5 * rgb_c + 0.5 * (rgb * ws_ir), ir + 0.5 * ir_c + 0.5 * (ir * ws_rgb)
 
 # ---------------------------------------------------------
@@ -138,8 +134,7 @@ class RTDetrCMXBackbone(nn.Module):
         else:
             raise ValueError(f"Canali non supportati: {num_ch}")
 
-        # 2. Passaggio OBBLIGATORIO attraverso i moduli CMX
-        # Ora i Rectifiers e i Fusers imparano a gestire anche i sensori mancanti
+        # 2. Applico CMX anche quando una modalità è assente e riempita con zeri.
         fused = []
         for i, ((r_f, r_m), (i_f, _)) in enumerate(zip(rgb_o, ir_o)):
             # Rettifica (Calibrazione reciproca)

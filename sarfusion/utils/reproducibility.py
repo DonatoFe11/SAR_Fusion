@@ -88,14 +88,10 @@ def build_training_source_manifest(
     *,
     repo_root: str | os.PathLike | None = None,
 ) -> dict:
-    """Hash the frozen local source surface for a declared training protocol.
+    """Hash the source files declared by a training protocol.
 
-    The manifest is deliberately an explicit, versioned list rather than a
-    recursive source-tree hash.  This keeps generated files and unrelated
-    experiments out of the identity while making every file that controls the
-    model, data stream, auxiliary loss, validation metric, and checkpoint
-    selection part of the scientific contract.
-    """
+    Each manifest defines explicit paths and optional globs. The digest covers
+    file contents, including comments, and is checked before training."""
     try:
         declared_files = TRAINING_SOURCE_FILES[manifest_id]
     except KeyError as error:

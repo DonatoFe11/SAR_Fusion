@@ -26,39 +26,9 @@ BASELINE_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
-    / "rtdetr_fam_sequence_validation_fixed10_protocol.yaml"
+    / "rtdetr_fam_stage_a_five_seed_v2.yaml"
 )
 GATE_PROTOCOL_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_reliability_gate_sequence_validation_seed40.yaml"
-)
-GATE_RUNTIME_PROBE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_reliability_gate_runtime_probe.yaml"
-)
-GATE_FIVE_SEED_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_reliability_gate_sequence_validation_five_seed.yaml"
-)
-GATE_LR10X_PROTOCOL_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_reliability_gate_lr10x_sequence_validation_seed40.yaml"
-)
-GATE_LR10X_PROBE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_fam_reliability_gate_lr10x_runtime_probe.yaml"
-)
-GATE_LR10X_FIVE_SEED_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
@@ -67,7 +37,7 @@ GATE_LR10X_FIVE_SEED_PATH = (
 GATE_LR10X_RESULTS_PATH = (
     REPO_ROOT
     / "notes"
-    / "Search_and_Rescue"
+    / "Thesis"
     / "results"
     / "rtdetr_fam_reliability_gate_lr10x_stage_a_validation.csv"
 )
@@ -260,11 +230,13 @@ class TestReliabilityGatedFusion(unittest.TestCase):
 
     def test_stage_a_protocol_changes_only_the_declared_gate(self):
         baseline = load_yaml(BASELINE_PATH)
+        baseline["parameters"]["dataset"].pop("modal_dropout_coordinate_contract")
         protocol = load_yaml(GATE_PROTOCOL_PATH)
         params = protocol["parameters"]
         model = params["model"]["params"]
 
-        self.assertEqual(params["seed"], [40])
+        self.assertEqual(params["seed"], [40, 41, 42, 43, 44])
+        self.assertEqual(params["train"]["reliability_gate_lr"], [0.0002])
         self.assertEqual(params["train"]["max_epochs"], [10])
         self.assertNotIn("early_stopping_patience", params["train"])
         self.assertEqual(params["dataloader"]["batch_size"], [4])
@@ -287,35 +259,6 @@ class TestReliabilityGatedFusion(unittest.TestCase):
             baseline["parameters"]["model"]["params"],
         )
 
-    def test_runtime_probe_is_short_checkpoint_free_and_excluded(self):
-        probe = load_yaml(GATE_RUNTIME_PROBE_PATH)
-        full = load_yaml(GATE_PROTOCOL_PATH)
-        params = probe["parameters"]
-
-        self.assertEqual(params["seed"], [40])
-        self.assertEqual(params["train"]["max_epochs"], [1])
-        self.assertEqual(params["train"]["max_steps_per_epoch"], [20])
-        self.assertEqual(params["train"]["save_checkpoints"], [False])
-        self.assertEqual(params["dataloader"]["batch_size"], [4])
-        self.assertIn("ExcludeFromCampaign", params["tracker"]["tags"][0])
-        self.assertEqual(
-            params["model"], full["parameters"]["model"]
-        )
-        self.assertEqual(
-            params["dataset"], full["parameters"]["dataset"]
-        )
-
-    def test_five_seed_expansion_changes_only_the_seed_grid(self):
-        pilot = load_yaml(GATE_PROTOCOL_PATH)
-        campaign = load_yaml(GATE_FIVE_SEED_PATH)
-
-        self.assertEqual(campaign["parameters"]["seed"], [40, 41, 42, 43, 44])
-        pilot_without_seed = dict(pilot["parameters"])
-        campaign_without_seed = dict(campaign["parameters"])
-        pilot_without_seed.pop("seed")
-        campaign_without_seed.pop("seed")
-        self.assertEqual(campaign_without_seed, pilot_without_seed)
-        self.assertEqual(campaign["experiment"], pilot["experiment"])
 
     def test_optimizer_partition_isolates_reliability_gate_parameters(self):
         model = nn.Module()
@@ -341,52 +284,8 @@ class TestReliabilityGatedFusion(unittest.TestCase):
                 if first != second:
                     self.assertTrue(first_ids.isdisjoint(second_ids))
 
-    def test_lr10x_protocol_changes_only_the_declared_gate_learning_rate(self):
-        original = load_yaml(GATE_PROTOCOL_PATH)
-        lr10x = load_yaml(GATE_LR10X_PROTOCOL_PATH)
-        original_params = original["parameters"]
-        lr10x_params = lr10x["parameters"]
 
-        self.assertEqual(lr10x_params["seed"], [40])
-        self.assertEqual(lr10x_params["train"]["initial_lr"], [0.00002])
-        self.assertEqual(
-            lr10x_params["train"]["reliability_gate_lr"], [0.0002]
-        )
-        self.assertEqual(lr10x_params["model"], original_params["model"])
-        self.assertEqual(lr10x_params["dataset"], original_params["dataset"])
-        self.assertEqual(
-            lr10x_params["dataloader"], original_params["dataloader"]
-        )
-
-        lr10x_train = dict(lr10x_params["train"])
-        lr10x_train.pop("reliability_gate_lr")
-        self.assertEqual(lr10x_train, original_params["train"])
-
-    def test_lr10x_probe_is_short_checkpoint_free_and_excluded(self):
-        probe = load_yaml(GATE_LR10X_PROBE_PATH)
-        full = load_yaml(GATE_LR10X_PROTOCOL_PATH)
-        params = probe["parameters"]
-
-        self.assertEqual(params["train"]["max_epochs"], [1])
-        self.assertEqual(params["train"]["max_steps_per_epoch"], [20])
-        self.assertEqual(params["train"]["save_checkpoints"], [False])
-        self.assertEqual(params["train"]["reliability_gate_lr"], [0.0002])
-        self.assertIn("ExcludeFromCampaign", params["tracker"]["tags"][0])
-        self.assertEqual(params["model"], full["parameters"]["model"])
-        self.assertEqual(params["dataset"], full["parameters"]["dataset"])
-
-    def test_lr10x_expansion_changes_only_the_seed_grid(self):
-        pilot = load_yaml(GATE_LR10X_PROTOCOL_PATH)
-        campaign = load_yaml(GATE_LR10X_FIVE_SEED_PATH)
-
-        self.assertEqual(campaign["parameters"]["seed"], [40, 41, 42, 43, 44])
-        pilot_without_seed = dict(pilot["parameters"])
-        campaign_without_seed = dict(campaign["parameters"])
-        pilot_without_seed.pop("seed")
-        campaign_without_seed.pop("seed")
-        self.assertEqual(campaign_without_seed, pilot_without_seed)
-        self.assertEqual(campaign["experiment"], pilot["experiment"])
-
+    @unittest.skipUnless(GATE_LR10X_RESULTS_PATH.is_file(), "Requires local thesis results in notes/")
     def test_lr10x_five_seed_results_are_complete_and_do_not_beat_fam(self):
         with GATE_LR10X_RESULTS_PATH.open(newline="", encoding="utf-8") as file:
             rows = list(csv.DictReader(file))

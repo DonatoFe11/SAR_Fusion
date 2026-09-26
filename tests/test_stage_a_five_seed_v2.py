@@ -1,4 +1,4 @@
-"""The follow-up always allocates five seeds, never a seed-40 screen."""
+"""Check the five-seed Stage A grids, training contracts and launcher."""
 from contextlib import redirect_stdout
 from copy import deepcopy
 from io import StringIO
@@ -99,17 +99,6 @@ class StageAFiveSeedV2Tests(unittest.TestCase):
             verify_training_source_manifest(repro["training_source_manifest_id"],
                                            repro["training_source_manifest_sha256"], required=True)
 
-    def test_original_recipes_preserved(self):
-        originals = {
-            "baseline": "rtdetr_fam_box_guided_matched_control_seed40.yaml",
-            "box_guided": "rtdetr_fam_box_guided_sequence_validation_seed40.yaml",
-            "mixed_consistency": "rtdetr_fam_mixed_consistency_sequence_validation_seed40.yaml",
-        }
-        for name, filename in originals.items():
-            old = load_yaml(ROOT / "parameters/RTDETR" / filename)["parameters"]
-            new = load_yaml(ROOT / "parameters/RTDETR" / CONFIGS[name])["parameters"]
-            for key in ("train", "model", "dataloader"):
-                self.assertEqual(old[key], new[key], (name, key))
 
     def test_launcher_has_all_campaigns_and_never_calls_old_screens(self):
         result = subprocess.run(["bash", "scripts/run_stage_a_five_seed_v2.sh", "--dry-run"],

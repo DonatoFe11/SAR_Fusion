@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -69,8 +71,44 @@ def test_repair_optimizer_and_vitality_gates():
     assert vitality["status"] == "failed"
 
 
-def test_archived_v1_manifest_remains_valid():
-    verify_source_manifest(
-        REPOSITORY,
-        REPOSITORY / "parameters/YOLO26/stage_a_source_manifest.json",
-    )
+@pytest.mark.parametrize(
+    "manifest_name,result_name",
+    [
+        ("stage_a_source_manifest.json", "yolo26_additive_seed40_stage_a_v1.json"),
+        (
+            "stage_a_repair_v1_source_manifest.json",
+            "yolo26_additive_seed40_stage_a_repair_v1.json",
+        ),
+    ],
+)
+def test_archived_manifests_match_published_experiments(manifest_name, result_name):
+    manifest = REPOSITORY / "parameters/YOLO26" / manifest_name
+    result_path = REPOSITORY / "notes/Thesis/results" / result_name
+    if not result_path.is_file():
+        pytest.skip("Requires local thesis results in notes/")
+    result = json.loads(result_path.read_text())
+    assert hashlib.sha256(manifest.read_bytes()).hexdigest() == result["source_manifest_sha256"]
+
+
+@pytest.mark.parametrize(
+    "config_name",
+    [
+        "yolo26s_additive_seed40_stage_a.yaml",
+        "yolo26s_fam_seed40_stage_a.yaml",
+        "yolo26s_additive_seed40_stage_a_repair_v1.yaml",
+        "yolo26s_fam_seed40_stage_a_repair_v1.yaml",
+    ],
+)
+def test_operational_configs_use_valid_revised_manifests(config_name):
+    manifest_path = REPOSITORY / _load(config_name)["study"]["source_manifest"]
+    assert manifest_path.name.endswith("_thesis_paths_v1.json")
+    manifest = verify_source_manifest(REPOSITORY, manifest_path)
+    assert manifest["source_revision"] == "thesis_paths_v1"
+    assert all(not item["path"].startswith("notes/") for item in manifest["files"])
+    archive = REPOSITORY / manifest["archived_source_manifest"]
+    assert archive != manifest_path
+    assert hashlib.sha256(archive.read_bytes()).hexdigest() == manifest["archived_source_manifest_sha256"]
+    if "parent_source_manifest" in manifest:
+        parent = REPOSITORY / manifest["parent_source_manifest"]
+        verify_source_manifest(REPOSITORY, parent)
+        assert hashlib.sha256(parent.read_bytes()).hexdigest() == manifest["parent_source_manifest_sha256"]

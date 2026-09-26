@@ -40,7 +40,7 @@ parameters:
           - seated
           - stands
 
-  dataset: # parameters depending on the class you defined for the dataset
+  dataset: # dataset-specific parameters
     name: [sard_pose] 
     root: [dataset/sard_pose]
     preprocessor:

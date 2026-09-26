@@ -12,7 +12,7 @@ study:
   promotion_delta: 0.010000
   future_seeds_on_pass: [41, 42, 43, 44]
   split_config: parameters/YOLO26/stage_a_split.yaml
-  source_manifest: parameters/YOLO26/stage_a_repair_v1_source_manifest.json
+  source_manifest: parameters/YOLO26/stage_a_repair_v1_source_manifest_thesis_paths_v1.json
   control_config: parameters/YOLO26/yolo26s_additive_seed40_stage_a_repair_v1.yaml
   requires_control_audit: runs/yolo26_stage_a_repair_v1/additive_seed40/control_audit.json
 

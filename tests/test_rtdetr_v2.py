@@ -31,19 +31,13 @@ CONTROL_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
-    / "rtdetr_v2_additive_sequence_validation_seed40.yaml"
+    / "rtdetr_v2_additive_sequence_validation_five_seed_v2.yaml"
 )
 CANDIDATE_PATH = (
     REPO_ROOT
     / "parameters"
     / "RTDETR"
-    / "rtdetr_v2_fam_sequence_validation_seed40.yaml"
-)
-PROBE_PATH = (
-    REPO_ROOT
-    / "parameters"
-    / "RTDETR"
-    / "rtdetr_v2_fam_runtime_probe.yaml"
+    / "rtdetr_v2_fam_sequence_validation_five_seed_v2.yaml"
 )
 CHECKPOINT = "PekingU/rtdetr_v2_r50vd"
 REVISION = "282494075698cab9faa1096ae26856890030c817"
@@ -224,14 +218,6 @@ class TestRTDetrV2StaticContract(unittest.TestCase):
             candidate_rest.pop(key)
         self.assertEqual(control_rest, candidate_rest)
 
-    def test_probe_is_two_runs_and_cannot_save_scientific_checkpoints(self):
-        probe = load_yaml(PROBE_PATH)
-        params = probe["parameters"]
-        self.assertEqual(params["model"]["params"]["use_fam"], [False, True])
-        self.assertEqual(params["train"]["max_steps_per_epoch"], [20])
-        self.assertEqual(params["train"]["max_epochs"], [1])
-        self.assertEqual(params["train"]["save_checkpoints"], [False])
-        self.assertIn("ExcludeFromCampaign", params["tracker"]["tags"][0])
 
     def test_v2_checkpoint_restore_requests_strict_key_matching(self):
         with tempfile.TemporaryDirectory() as directory:

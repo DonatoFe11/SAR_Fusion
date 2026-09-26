@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Five-seed offset-only Stage A; reuses pinned FAM controls, never launches B.
+"""Run five-seed Stage A with zero-initialized FAM offsets.
 
-The custom entry point registers an opt-in model factory in every fresh worker.
-It leaves main.py, the training loop and all historical source manifests intact.
-Training and best-checkpoint replay are separate processes. Re-running skips
-completed seeds and resumes a pending replay, never selects the best rerun.
-"""
+Each worker registers the model factory. Training and best-checkpoint replay
+run in separate processes. Completed seeds are skipped; pending replays
+resume without retraining. Stage B is launched separately."""
 
 from __future__ import annotations
 
